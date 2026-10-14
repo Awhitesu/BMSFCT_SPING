@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>力捷丰 SG400 下载器已有程序/工程读取业务流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>力捷丰 SG400 下载器已有程序/工程读取业务流程</h1>
+        <p>基于官方底层 DLL 驱动（OpteeQDLLx64.dll）的 getfilelist 与 OpteeQ_GetFile 机制，实现下载器内部工程文件的枚举、选择与本地回传提取</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    Start["起点: 操作员触发【读取下载器当前程序】"] --> CheckConn{"判断 SG400 是否已建立网络连接?"}
+
+    CheckConn -->|"未连接"| TryConnect["执行 OpteeQ_Connect(LAN:192.168.0.100:10023)"]
+    TryConnect --> ConnResult{"连接是否成功?"}
+    ConnResult -->|"失败"| ConnFail["提示错误: 下载器离线或 IP 不可达, 终止流程"]
+    ConnResult -->|"成功"| SendQuery
+    CheckConn -->|"已连接"| SendQuery["向 CH1 发送脚本: channel:getfilelist('proj')"]
+
+    SendQuery --> RecvReply["调用 OpteeQ_GetCommandReply 接收回复数据流"]
+    RecvReply --> CheckReply{"回复数据是否有效且非空?"}
+
+    CheckReply -->|"为空/失败"| EmptyList["提示: 下载器当前内部未存储任何脱机工程文件"]
+    CheckReply -->|"成功返回数据"| ParseData["解析按换行符分隔的文本流, 提取工程文件名列表 (如 test.opj)"]
+
+    ParseData --> ShowUI["在界面下拉框或列表中完整列出下载器内部全部已有程序"]
+    ShowUI --> ActionSelect{"操作员后续操作选择"}
+
+    ActionSelect -->|"仅在线选定直接运行"| SelectToRun["将选定工程名作为目标, 调用 channel:runproject('xxx.opj') 直接烧录"]
+    ActionSelect -->|"提取备份到本地电脑"| ChooseLocalPath["弹出目录选择框, 选定本地保存目录"]
+
+    ChooseLocalPath --> CallGetFile["调用底层 OpteeQ_GetFile: /home/s2g/proj/xxx.opj -> 本地绝对路径"]
+    CallGetFile --> GetFileResult{"回传下载是否成功?"}
+    GetFileResult -->|"成功"| SaveOK["通知: 下载器内部程序已完整导出并保存到本地!"]
+    GetFileResult -->|"失败"| SaveErr["弹出警告: 工程文件回传失败, 检查权限与存储状态"]
+
+    classDef start_end fill:#8b5cf6,stroke:#7c3aed,color:#ffffff,stroke-width:2px;
+    classDef condition fill:#eab308,stroke:#ca8a04,color:#000000,stroke-width:2px;
+    classDef process fill:#0284c7,stroke:#0369a1,color:#ffffff,stroke-width:2px;
+    classDef error_fail fill:#ef4444,stroke:#dc2626,color:#ffffff,stroke-width:2px;
+    classDef success_pass fill:#22c55e,stroke:#16a34a,color:#ffffff,stroke-width:2px;
+
+    class Start start_end;
+    class CheckConn condition;
+    class ConnResult condition;
+    class CheckReply condition;
+    class ActionSelect condition;
+    class GetFileResult condition;
+    class TryConnect process;
+    class SendQuery process;
+    class RecvReply process;
+    class ParseData process;
+    class ShowUI process;
+    class SelectToRun success_pass;
+    class ChooseLocalPath process;
+    class CallGetFile process;
+    class SaveOK success_pass;
+    class ConnFail error_fail;
+    class EmptyList error_fail;
+    class SaveErr error_fail;
+        </div>
+    </div>
+</body>
+</html>

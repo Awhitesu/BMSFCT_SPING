@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>配方下拉框选择与测试序列更新逻辑流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #1e1e2e;
+            color: #cdd6f4;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            color: #89b4fa;
+            text-align: center;
+        }
+        .mermaid {
+            background: #181825;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <h1>选择测试配方与测试序列树状流实时更新流程图</h1>
+    <div class="mermaid">
+    graph TD
+        Start["["用户在主界面选择测试配方下拉框 (combo_recipe)"]"] --> TriggerSignal["["触发 currentIndexChanged 信号 -> on_recipe_combo_changed"]"]
+        
+        TriggerSignal --> GetName["["获取 selectedData 或 selectedText 配方名称"]"]
+        GetName --> EnsureExt["["强校验扩展名：末尾自动追加 .json 扩展名"]"]
+        
+        EnsureExt --> CheckDBDir["["检索 DB 目录 (db_manager.get_recipe_dir()) 或本地 recipes/ 目录"]"]
+        CheckDBDir --> FileExists{["目标 .json 配方文件是否存在?"]}
+        
+        FileExists -- "是" --> ReadJSON["["读取 JSON 配方文件 (items & sub_steps)"]"]
+        ReadJSON --> UpdateModel["["更新产品型号卡片 (lbl_product_model)"]"]
+        UpdateModel --> ClearTree["["清空旧测试序列树 (step_tree.clear())"]"]
+        ClearTree --> BuildTree["["构建 7 列只读测试工步树节点 (序号/名称/下限/上限/测试值/单位/判定)"]"]
+        BuildTree --> End["["主界面测试序列更新完毕，准备好开始测试"]"]
+        
+        FileExists -- "否" --> Alert["["弹窗提示配方文件缺失或路径无效"]"]
+
+        classDef startEnd fill:#cba6f7,stroke:#94e2d5,stroke-width:2px,color:#11111b;
+        classDef condition fill:#f9e2af,stroke:#fab387,stroke-width:2px,color:#11111b;
+        classDef process fill:#89b4fa,stroke:#b4befe,stroke-width:2px,color:#11111b;
+        classDef alert fill:#f38ba8,stroke:#eba0ac,stroke-width:2px,color:#11111b;
+
+        class Start,End startEnd;
+        class FileExists condition;
+        class TriggerSignal,GetName,EnsureExt,CheckDBDir,ReadJSON,UpdateModel,ClearTree,BuildTree process;
+        class Alert alert;
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

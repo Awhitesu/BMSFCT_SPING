@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>配方配置界面布局优化逻辑流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #1e1e2e;
+            color: #cdd6f4;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            color: #89b4fa;
+            text-align: center;
+        }
+        .mermaid {
+            background: #181825;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <h1>配方配置界面 (ConfigTab) 布局重构与视觉解拥挤流程图</h1>
+    <div class="mermaid">
+    graph TD
+        Start["["进入配方配置页 (ConfigTab)"]"] --> HWGroup["["重构 配方硬件关联 QGroupBox"]"]
+        
+        HWGroup --> GridHW["["采用 QGridLayout 双行网格布局 (CAN卡/模式/波特率/PLC配方)"]"]
+        GridHW --> ClearHW["["设置控件内边距与横向间距，消除单行横向挤压"]"]
+        
+        ClearHW --> BatchTool["["融合 批量操作工具栏 至 step_tree 上方顶栏"]"]
+        BatchTool --> CombineHeader["["标题与 [屏蔽/复制/粘贴] 按钮水平同行放置"]"]
+        
+        CombineHeader --> StepTree["["渲染测试项目与工步流树状图 (ProportionalTreeWidget)"]"]
+        
+        StepTree --> BottomBtns["["优化底部操作按钮组布局"]"]
+        BottomBtns --> GroupBtns["["按 [节点操作] 与 [保存配方] 归类呈现精致按钮"]"]
+        
+        GroupBtns --> End["["界面清爽度与操作便捷度显著提升"]"]
+
+        classDef startEnd fill:#cba6f7,stroke:#94e2d5,stroke-width:2px,color:#11111b;
+        classDef process fill:#89b4fa,stroke:#b4befe,stroke-width:2px,color:#11111b;
+
+        class Start,End startEnd;
+        class HWGroup,GridHW,ClearHW,BatchTool,CombineHeader,StepTree,BottomBtns,GroupBtns process;
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

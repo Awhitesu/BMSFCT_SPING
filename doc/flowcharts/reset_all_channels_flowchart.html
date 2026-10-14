@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>重置大屏所有通道 - 业务逻辑流程图</title>
+    <!-- 引入 Mermaid 库 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+    </script>
+    <style>
+        body {
+            background-color: #0F172A;
+            color: #E2E8F0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        h1 {
+            color: #38BDF8;
+            margin-bottom: 5px;
+            font-size: 24px;
+        }
+        p {
+            color: #94A3B8;
+            margin-top: 0;
+            margin-bottom: 25px;
+            font-size: 14px;
+        }
+        .flowchart-container {
+            background-color: #1E293B;
+            border: 2px solid #334155;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+            width: 90%;
+            max-width: 1000px;
+            display: flex;
+            justify-content: center;
+        }
+        .mermaid {
+            width: 100%;
+        }
+        .footer {
+            margin-top: 30px;
+            color: #64748B;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🔄 重置大屏所有通道 - 业务逻辑流程图</h1>
+    <p>老化测试监控系统 (48通道批量异步重构流程)</p>
+
+    <div class="flowchart-container">
+        <pre class="mermaid">
+graph TD
+    classDef purple fill:#D1C4E9,stroke:#7E57C2,stroke-width:2px;
+    classDef yellow fill:#FFF9C4,stroke:#FBC02D,stroke-width:2px;
+    classDef blue fill:#E3F2FD,stroke:#2196F3,stroke-width:2px;
+    classDef red fill:#FFEBEE,stroke:#EF5350,stroke-width:2px;
+    classDef green fill:#E8F5E9,stroke:#4CAF50,stroke-width:2px;
+
+    Start["开始: 用户触发重置大屏所有通道操作"]
+    ConfirmCheck{"触发来源判断: 是否来自主控制总览 OverviewTab？"}
+    ShowDialog["显示防误触确认弹窗 QMessageBox"]
+    UserChoice{"用户决策: 用户是否确认重置？"}
+    Cancel["取消重置, 退出流程"]
+    
+    InitThread["后台交互: 创建并启动异步守护工作线程 Thread"]
+    LoopStart["遍历操作: 循环大屏通道号 1 至 48"]
+    CheckClient{"状态探测: API 客户端对象是否在线且可用？"}
+    LogErr["异常记录: 在本地控制台打印 API 离线警告"]
+    
+    PostReq["发送请求: 异步发送 HTTP POST 报文至大屏重置接口"]
+    CheckResp{"结果判定: 后端是否成功返回 HTTP 200 且 code 为 200？"}
+    CountSuccess["成功处理: 成功重置计数器 success_count 自增 1"]
+    LogSingle["结果上报: 在控制台或报文监控区实时打印重置状态"]
+    Delay["防瞬时高并发: 每次调用加入微延时 20ms"]
+    
+    EndLoop{"边界判定: 是否已全部遍历完 48 个通道？"}
+    finalNotify["语音及日志通知: 触发 TTS 语音播报及大屏重置完成的最终日志"]
+    End["流程结束: 成功恢复大屏所有通道状态至 idle"]
+
+    Start --> ConfirmCheck
+    ConfirmCheck -- "是" --> ShowDialog
+    ConfirmCheck -- "否 (来自 ApiTab)" --> InitThread
+    ShowDialog --> UserChoice
+    UserChoice -- "否" --> Cancel
+    UserChoice -- "试" --> InitThread
+    UserChoice -- "是" --> InitThread
+    InitThread --> LoopStart
+    LoopStart --> CheckClient
+    CheckClient -- "否" --> LogErr --> EndLoop
+    CheckClient -- "是" --> PostReq
+    PostReq --> CheckResp
+    CheckResp -- "是" --> CountSuccess
+    CheckResp -- "否" --> LogSingle
+    CountSuccess --> LogSingle
+    LogSingle --> Delay --> EndLoop
+    EndLoop -- "否" --> LoopStart
+    EndLoop -- "是" --> finalNotify --> End
+
+    class Start,Cancel,End purple;
+    class ConfirmCheck,UserChoice,CheckClient,CheckResp,EndLoop yellow;
+    class ShowDialog,InitThread,LoopStart,PostReq,LogSingle,Delay blue;
+    class LogErr red;
+    class CountSuccess,finalNotify green;
+        </pre>
+    </div>
+
+    <div class="footer">
+        &copy; 2026 AgingTest Monitoring System. All rights reserved.
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>测试次数文案更名流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body { background-color: #121212; color: #FFFFFF; font-family: sans-serif; padding: 20px; }
+        .mermaid { background-color: #1E1E1E; padding: 20px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h2>测试次数文案更名流程图</h2>
+    <div class="mermaid">
+    graph TD
+        classDef startEnd fill:#8A2BE2,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef condition fill:#FFD700,stroke:#333,stroke-width:2px,color:#000;
+        classDef process fill:#1E90FF,stroke:#fff,stroke-width:1px,color:#fff;
+        classDef success fill:#28A745,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef fail fill:#DC3545,stroke:#fff,stroke-width:2px,color:#fff;
+
+        Start["测试启动或完成"] ::: startEnd
+
+        subgraph LabelUpdate["右下角卡片文案更新"]
+            DBVal["读取 DB 历史测试计数 (initial_count / new_count)"] ::: process
+            UpdateText["更新卡片文本: ⚡ 测试次数: X 次"] ::: success
+        end
+
+        Start --> DBVal
+        DBVal --> UpdateText
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

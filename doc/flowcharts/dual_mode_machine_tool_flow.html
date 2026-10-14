@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>双模一体化机台互联工具设计流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>双模一体化机台互联工具 (Dual-Mode Connector) 设计架构</h1>
+        <p>同一个工具在机台端负责一键发布与环境配置，在开发端负责一键直连与心跳保活</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    Start["起点: 打开一体化机台互联工具"] --> ModeSelect{"选择当前电脑运行角色"}
+
+    ModeSelect -->|"机台电脑模式 (被控/硬件端)"| ServerMode["进入【机台端·一键发布与配置】页面"]
+    ServerMode --> S1["自动识别本机 IP / 计算机名 / 当前用户"]
+    S1 --> S2["用户选择工程文件夹并点击【一键配置并发布共享】"]
+    S2 --> S3["自动化执行: 建立 SMB 共享 + 开启 OpenSSH + 防火墙放行 + 硬件驱动检测"]
+    S3 --> S4["生成【机台连接凭据看板】(显示本机 IP、共享名、端口状态)"]
+
+    ModeSelect -->|"开发电脑模式 (主控/开发机)"| ClientMode["进入【开发端·一键直连与保活】页面"]
+    ClientMode --> C1["输入机台端看板显示的 IP / 账号 / 密码"]
+    C1 --> C2["用户点击【一键连接并保活】"]
+    C2 --> C3["自动化执行: 挂载 Z: 盘 + 启动后台心跳防掉线 + 状态指示灯全绿"]
+    C3 --> C4["提供快捷操作: 一键打开 Z: 盘 / 一键远程调试 / 断开连接"]
+
+    S4 --> Handshake{"双机局域网握手连通"}
+    C4 --> Handshake
+    Handshake --> SuccessEnd["终点: 零命令行配置, 双方一键自适应闭环"]
+
+    classDef startEnd fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff;
+    classDef condition fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff;
+    classDef process fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#ffffff;
+    classDef success fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff;
+
+    class Start startEnd;
+    class SuccessEnd success;
+    class ModeSelect condition;
+    class Handshake condition;
+    class ServerMode process;
+    class S1 process;
+    class S2 process;
+    class S3 process;
+    class S4 process;
+    class ClientMode process;
+    class C1 process;
+    class C2 process;
+    class C3 process;
+    class C4 process;
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+
+192.168.0.192:260529-113809 [not ]     root : TTY=unknown ; PWD=/ ; USER=root ; COMMAND=/etc/init.d/syslog stop
+192.168.0.192:260529-113809 [info] BusyBox v1.29.2
+192.168.0.192:260529-113809 [not ] klogd started: BusyBox v1.29.2 (2023-10-07 06:40:01 UTC)
+192.168.0.192:260529-113809 [info] syslog restart success

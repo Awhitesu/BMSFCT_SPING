@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>PLC 保持寄存器1 开始测试信号读取流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body { background-color: #121212; color: #FFFFFF; font-family: sans-serif; padding: 20px; }
+        .mermaid { background-color: #1E1E1E; padding: 20px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h2>PLC 保持寄存器1 开始测试信号读取流程图</h2>
+    <div class="mermaid">
+    graph TD
+        classDef startEnd fill:#8A2BE2,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef condition fill:#FFD700,stroke:#333,stroke-width:2px,color:#000;
+        classDef process fill:#1E90FF,stroke:#fff,stroke-width:1px,color:#fff;
+        classDef success fill:#28A745,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef fail fill:#DC3545,stroke:#fff,stroke-width:2px,color:#fff;
+
+        Start["500ms 定时器触发保持寄存器读取"]
+        
+        subgraph Modbus_FC03["Modbus FC03 保持寄存器读取 (read_holding_registers)"]
+            Try_1Based["尝试 1-based 物理地址: 1"]
+            Try_0Based["尝试 0-based 物理地址: 0"]
+            Try_Params["兼容尝试 slave / device_id 从站参数"]
+        end
+
+        CheckRes{"读取到有效 registers 数据?"}
+        UpdateUI["更新 UI: 🚩 开始测试信号 (保持寄存器1): [数值]"]
+        UpdateEmpty["保持: 🚩 开始测试信号 (保持寄存器1): 无信号 [0]"]
+
+        Start --> Try_1Based
+        Try_1Based --> Try_Params
+        Try_Params --> CheckRes
+        CheckRes -- "否" --> Try_0Based
+        Try_0Based --> CheckRes
+        CheckRes -- "是" --> UpdateUI
+        CheckRes -- "全失败" --> UpdateEmpty
+
+        class Start startEnd;
+        class CheckRes condition;
+        class Try_1Based,Try_0Based,Try_Params process;
+        class UpdateUI success;
+        class UpdateEmpty fail;
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

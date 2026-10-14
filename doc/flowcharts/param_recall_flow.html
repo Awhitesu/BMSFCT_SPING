@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>子工步参数回显与保存逻辑流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+    <style>
+        body {
+            background-color: #121214;
+            color: #e1e1e6;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #4ecca3;
+            margin-bottom: 20px;
+        }
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            background-color: #1a1a1e;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            border: 1px solid #2e2e38;
+        }
+        .mermaid {
+            background-color: #1a1a1e;
+            padding: 10px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>子工步参数回显与保存逻辑流程图</h1>
+    <div class="container">
+        <pre class="mermaid">
+flowchart TD
+    Start["开始：双击打开子工步编辑对话框"] --> Load["_load_data: 从配方读取原始参数 kv 字典"]
+    Load --> CheckArgs{"是否含有 ARGS 字段"}
+    
+    CheckArgs -- "是" --> ReadArgs["提取 ARGS 参数字符串"]
+    CheckArgs -- "否" --> InitDefault["初始化为空，复选框默认不勾选"]
+    
+    ReadArgs --> CallSplit["调用 _split_params(args_str)"]
+    CallSplit --> ReplaceSep["标准化替换：将中英文逗号、分号全部转换为 '/'"]
+    ReplaceSep --> SplitStr["使用 '/' 作为分隔符进行 split() 分割"]
+    SplitStr --> ParseKV["循环提取 KEY:VALUE 键值对，英文键名大写"]
+    
+    ParseKV --> CheckFixAdjacent{"判断是否含有键 FIX_ADJACENT"}
+    CheckFixAdjacent -- "是" --> SetFixAdjacent["检查值是否为 (1, true, ON)，若是则勾选，否则取消勾选"]
+    CheckFixAdjacent -- "否" --> ClearFixAdjacent["取消勾选 FIX_ADJACENT 复选框"]
+    
+    SetFixAdjacent --> CheckCompensate{"判断是否含有键 COMPENSATE"}
+    ClearFixAdjacent --> CheckCompensate
+    
+    CheckCompensate -- "是" --> SetCompensate["检查值是否为 (1, true, ON)，若是则勾选，否则取消勾选"]
+    CheckCompensate -- "否" --> ClearCompensate["取消勾选 COMPENSATE 复选框"]
+    
+    SetCompensate --> EditUI["用户编辑 UI：勾选/取消勾选，或手动修改附加参数文本"]
+    ClearCompensate --> EditUI
+    InitDefault --> EditUI
+    
+    EditUI --> Save["确认指令：触发保存逻辑"]
+    Save --> GetChecked["获取复选框当前勾选状态"]
+    GetChecked --> SyncArgs["同步到 args_kv：勾选则设为 1，未勾选则从 args_kv 中移除"]
+    SyncArgs --> JoinArgs["用英文逗号 ',' 将 args_kv 连接成 ARGS 字符串"]
+    JoinArgs --> SaveToRecipe["保存更新后的 ARGS 至配方文件，关闭对话框"]
+    SaveToRecipe --> End["结束"]
+
+    %% 集中样式声明
+    classDef purple fill:#8a2be2,stroke:#333,stroke-width:2px,color:#fff;
+    classDef yellow fill:#fff7c2,stroke:#333,stroke-width:2px,color:#000;
+    classDef blue fill:#d2e5ff,stroke:#333,stroke-width:2px,color:#000;
+    classDef red fill:#ffc2c2,stroke:#333,stroke-width:2px,color:#000;
+    classDef green fill:#c2ffd2,stroke:#333,stroke-width:2px,color:#000;
+
+    %% 样式绑定
+    class Start,End purple;
+    class CheckArgs,CheckFixAdjacent,CheckCompensate yellow;
+    class Load,ReadArgs,CallSplit,ReplaceSep,SplitStr,ParseKV,JoinArgs blue;
+    class InitDefault,ClearFixAdjacent,ClearCompensate red;
+    class SetFixAdjacent,SetCompensate,EditUI,Save,GetChecked,SyncArgs,SaveToRecipe green;
+        </pre>
+    </div>
+</body>
+</html>

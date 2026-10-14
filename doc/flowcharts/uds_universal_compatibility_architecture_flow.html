@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UDS 海量指令万能兼容架构流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0B1120;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header {
+            text-align: center;
+            max-width: 900px;
+            margin-bottom: 24px;
+        }
+        h1 {
+            color: #38BDF8;
+            margin-bottom: 8px;
+            font-size: 24px;
+        }
+        p {
+            color: #94A3B8;
+            font-size: 14px;
+            margin: 4px 0;
+        }
+        .diagram-card {
+            background: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            max-width: 1100px;
+            width: 100%;
+            overflow-x: auto;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>UDS 海量指令万能兼容与自适应解析架构</h1>
+        <p>支持任意协议格式、任意数据长度、外部字典导入与实机嗅探学习</p>
+    </div>
+
+    <div class="diagram-card">
+        <pre class="mermaid">
+flowchart TD
+    Start["海量 UDS 诊断指令输入 (成百上千条 DID)"] --> Router{"多维万能兼容引擎"}
+
+    Router -->|"支柱 1: 协议格式兼容"| ProtoSelect{"协议格式切换"}
+    ProtoSelect -->|"标准 ISO 14229"| StdUDS["自动跳过 SID+DID (偏移量=3)"]
+    ProtoSelect -->|"厂商私有协议 (含长度字节)"| VendorUDS["自动跳过 SID+DID+LEN (偏移量=4)"]
+    ProtoSelect -->|"自定义任意格式"| CustomUDS["支持鼠标拖拽或输入任意偏移量"]
+
+    Router -->|"支柱 2: 长度自适应兼容"| LenStrategy{"长度策略分流"}
+    LenStrategy -->|"严格定长模式 (数值量如总压/电流)"| FixedLen["严格指定字节数 (截取目标段, 屏蔽尾部 Padding 填充)"]
+    LenStrategy -->|"弹性自适应模式 (文本量如版本号/零件号)"| FlexLen["自适应截取有效文本, 遇 0x00 自动截断并清洗空白"]
+    LenStrategy -->|"连续多字节数组模式 (如96串电芯单体)"| ArraySlice["按步长 (如每2字节) 循环切片并自动映射到变量数组"]
+
+    Router -->|"支柱 3: DID 字典库可扩展兼容"| DictManager{"指令字典管理器"}
+    DictManager -->|"内置标准预设"| BuiltinLib["一键调取国标/通用 BMS 常用读取项"]
+    DictManager -->|"外部文件导入"| ImportLib["支持一键导入 Excel / CSV 协议字典表"]
+    DictManager -->|"现场自定义沉淀"| SaveLib["一键点击 [💾 保存为常用模板], 随用随取"]
+
+    Router -->|"支柱 4: 盲盒生僻指令实机嗅探"| SniffLearn["点击 [📡 在线嗅探], 实机真实回包直接切解成方块, 抓到即所得"]
+
+    StdUDS --> UnifiedExec["统一执行引擎 (ChannelWorker)"]
+    VendorUDS --> UnifiedExec
+    CustomUDS --> UnifiedExec
+    FixedLen --> UnifiedExec
+    FlexLen --> UnifiedExec
+    ArraySlice --> UnifiedExec
+    BuiltinLib --> UnifiedExec
+    ImportLib --> UnifiedExec
+    SaveLib --> UnifiedExec
+    SniffLearn --> UnifiedExec
+
+    UnifiedExec --> Done["100% 普适兼容: 无论指令多复杂多生僻, 零修改平滑运行"]
+
+    classDef purpleStyle fill:#6B21A8,stroke:#C084FC,stroke-width:2px,color:#FFFFFF;
+    classDef yellowStyle fill:#854D0E,stroke:#FDE047,stroke-width:2px,color:#FFFFFF;
+    classDef blueStyle fill:#1E40AF,stroke:#60A5FA,stroke-width:2px,color:#FFFFFF;
+    classDef greenStyle fill:#065F46,stroke:#34D399,stroke-width:2px,color:#FFFFFF;
+
+    class Start purpleStyle;
+    class Router,ProtoSelect,LenStrategy,DictManager yellowStyle;
+    class StdUDS,VendorUDS,CustomUDS,FixedLen,FlexLen,ArraySlice,BuiltinLib,ImportLib,SaveLib,SniffLearn,UnifiedExec blueStyle;
+    class Done greenStyle;
+        </pre>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            flowchart: {
+                curve: 'basis'
+            }
+        });
+    </script>
+</body>
+</html>

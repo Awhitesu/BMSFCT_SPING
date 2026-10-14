@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BMS 电池管理系统 UDS 数据解析与长度隔离架构图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0B1120;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header {
+            text-align: center;
+            max-width: 900px;
+            margin-bottom: 24px;
+        }
+        h1 {
+            color: #38BDF8;
+            margin-bottom: 8px;
+            font-size: 24px;
+        }
+        p {
+            color: #94A3B8;
+            font-size: 14px;
+            margin: 4px 0;
+        }
+        .diagram-card {
+            background: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            max-width: 1100px;
+            width: 100%;
+            overflow-x: auto;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>BMS 电池管理系统 UDS 长度自包含隔离与一键预设架构</h1>
+        <p>BMS 各项数据长度天然不同：工步独立配置、自包含防呆、绝不相互串扰</p>
+    </div>
+
+    <div class="diagram-card">
+        <pre class="mermaid">
+flowchart TD
+    Start["配置 BMS 测试工步"] --> SelectPreset{"选择 BMS 常用读取模板"}
+
+    SelectPreset -->|"总电压 (Pack Voltage)"| StepVolt["工步 A: 读总电压 (DID 0x0101)<br/>绑定规则: 偏移=3, 长度=2字节, 大端序, 比例=0.1V"]
+    SelectPreset -->|"总电流 (Current)"| StepCurr["工步 B: 读总电流 (DID 0x0102)<br/>绑定规则: 偏移=3, 长度=2字节, 有符号, 比例=0.1A"]
+    SelectPreset -->|"单体温度 (Temperature)"| StepTemp["工步 C: 读单体温度 (DID 0x0106)<br/>绑定规则: 偏移=3, 长度=1字节, 偏移量=-40℃"]
+    SelectPreset -->|"绝缘阻抗 (Insulation)"| StepIso["工步 D: 读绝缘阻抗 (DID 0x0107)<br/>绑定规则: 偏移=3, 长度=2字节, 比例=1kΩ"]
+    SelectPreset -->|"固件版本号 (Firmware Ver)"| StepVer["工步 E: 读软件版本 (DID 0xF189)<br/>绑定规则: 偏移=3, ASCII文本, 弹性自适应长度"]
+
+    StepVolt --> ExecEngine["执行引擎运行时 (独立工步隔离执行)"]
+    StepCurr --> ExecEngine
+    StepTemp --> ExecEngine
+    StepIso --> ExecEngine
+    StepVer --> ExecEngine
+
+    ExecEngine --> MatchA["工步 A 运行: 回包 62 01 01 0E 10 -> 严格取后2字节 (0E 10 = 360.0V) -> 独立防呆"]
+    ExecEngine --> MatchB["工步 B 运行: 回包 62 01 02 FF 38 -> 严格取后2字节 (-20.0A) -> 独立防呆"]
+    ExecEngine --> MatchC["工步 C 运行: 回包 62 01 06 41 -> 严格取后1字节 (0x41 - 40 = 25℃) -> 独立防呆"]
+
+    MatchA --> Success["完全隔离: 各工步长度互不相干, 绝无越界与冲突风险"]
+    MatchB --> Success
+    MatchC --> Success
+
+    classDef purpleStyle fill:#6B21A8,stroke:#C084FC,stroke-width:2px,color:#FFFFFF;
+    classDef yellowStyle fill:#854D0E,stroke:#FDE047,stroke-width:2px,color:#FFFFFF;
+    classDef blueStyle fill:#1E40AF,stroke:#60A5FA,stroke-width:2px,color:#FFFFFF;
+    classDef greenStyle fill:#065F46,stroke:#34D399,stroke-width:2px,color:#FFFFFF;
+
+    class Start purpleStyle;
+    class SelectPreset yellowStyle;
+    class StepVolt,StepCurr,StepTemp,StepIso,StepVer,ExecEngine,MatchA,MatchB,MatchC blueStyle;
+    class Success greenStyle;
+        </pre>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            flowchart: {
+                curve: 'basis'
+            }
+        });
+    </script>
+</body>
+</html>

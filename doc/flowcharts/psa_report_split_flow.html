@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>BMS本地报表拆分与合成业务逻辑流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+    <style>
+        body {
+            background-color: #0b0c10;
+            color: #c5c6c7;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #66fcf1;
+            margin-bottom: 5px;
+        }
+        .desc {
+            color: #8c8c8c;
+            margin-bottom: 20px;
+            font-size: 14px;
+            width: 80%;
+            text-align: center;
+        }
+        #canvas {
+            background-color: #1f2833;
+            border: 2px solid #45f3ff;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 4px 15px rgba(0, 255, 243, 0.2);
+            width: 90%;
+            max-width: 900px;
+            display: flex;
+            justify-content: center;
+        }
+        .legend {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            font-size: 13px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            border-radius: 3px;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>BMS 本地报表拆分与合成业务逻辑流程图</h1>
+    <div class="desc">
+        本图描述了测试结束后在本地生成报表的逻辑：首先保留原有的合并报表生成逻辑；随后根据测试配方文件中的 <code>target_board</code> 属性将测试结果拆分为主机、从机1、从机2、从机3四部分；最后根据 SN 条码与历史数据进行纵向汇总合并，自动完成 PASS/FAIL 命名转换和自锁，输出至 <code>reports/PSA/{板卡}/</code> 目录下。
+    </div>
+    
+    <div id="canvas">
+        <pre class="mermaid">
+graph TD
+    classDef start_end fill:#855CF8,stroke:#333,stroke-width:2px,color:#fff;
+    classDef normal fill:#3B82F6,stroke:#333,stroke-width:2px,color:#fff;
+    classDef condition fill:#F59E0B,stroke:#333,stroke-width:2px,color:#fff;
+    classDef success fill:#10B981,stroke:#333,stroke-width:2px,color:#fff;
+    classDef failed fill:#EF4444,stroke:#333,stroke-width:2px,color:#fff;
+
+    Start["开始生成报表"]
+    ReadDB["读取数据库 test_main 和 test_items_results"]
+    OldReport["生成原有合并报表 (reports/yyyy-mm-dd/CHxx/ 不变)"]
+    LoadRecipe["加载当前测试配方 JSON"]
+    BuildMap["建立 测试项 -> 目标板卡 映射表"]
+    GroupItems["按目标板卡对测试结果进行分组"]
+    LoopBoards["遍历 主机, 从机1, 从机2, 从机3"]
+    CheckActive["此板卡有测试项且条码存在?"]
+    CheckExist["本地是否存在该 SN 的汇总报表?"]
+    ReadHistory["提取首次开始时间并提取历史详细判定数据"]
+    DecideResult["本次是否含 FAIL 或历史已含 FAIL?"]
+    SaveFail["设定为 FAIL 状态并删除旧 PASS 报表"]
+    SavePass["设定为 PASS 状态"]
+    WriteCSV["写入/追加历史与本次数据到 reports/PSA/板卡/SN_状态.csv"]
+    End["完成报表生成"]
+
+    Start --> ReadDB
+    ReadDB --> OldReport
+    OldReport --> LoadRecipe
+    LoadRecipe --> BuildMap
+    BuildMap --> GroupItems
+    GroupItems --> LoopBoards
+    LoopBoards --> CheckActive
+    CheckActive -- "是" --> CheckExist
+    CheckActive -- "否" --> LoopBoards
+    CheckExist -- "是" --> ReadHistory --> DecideResult
+    CheckExist -- "否" --> DecideResult
+    DecideResult -- "是" --> SaveFail --> WriteCSV
+    DecideResult -- "否" --> SavePass --> WriteCSV
+    WriteCSV --> LoopBoards
+    LoopBoards -- "遍历结束" --> End
+
+    class Start start_end;
+    class End start_end;
+    class ReadDB normal;
+    class OldReport normal;
+    class LoadRecipe normal;
+    class BuildMap normal;
+    class GroupItems normal;
+    class ReadHistory normal;
+    class WriteCSV normal;
+    class CheckActive condition;
+    class CheckExist condition;
+    class DecideResult condition;
+    class SavePass success;
+    class SaveFail failed;
+        </pre>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="legend-color" style="background: #855CF8;"></div> 起点/终点 (紫色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #3B82F6;"></div> 常规执行 (蓝色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #F59E0B;"></div> 条件判断 (黄色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #10B981;"></div> 成功/PASS (绿色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #EF4444;"></div> 失败/自锁 (红色)</div>
+    </div>
+</body>
+</html>

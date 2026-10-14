@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>CSC批量读取前置操作重置时序流程图</title>
+    <!-- 引入 Mermaid.js 库进行渲染 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+    <style>
+        body {
+            background-color: #0b0c10;
+            color: #c5c6c7;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #66fcf1;
+            margin-bottom: 5px;
+        }
+        .desc {
+            color: #8c8c8c;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        #canvas {
+            background-color: #1f2833;
+            border: 2px solid #45f3ff;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 4px 15px rgba(0, 255, 243, 0.2);
+            width: 90%;
+            max-width: 900px;
+            display: flex;
+            justify-content: center;
+        }
+        .legend {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            font-size: 13px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            border-radius: 3px;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>0x07 CSC批量读取前置操作重置时序流程图</h1>
+    <div class="desc">此图展示了在进行192个电芯批量读取之前，对老化板继电器的断电、上电及节点数下发逻辑。可在外部浏览器中无限缩放。</div>
+    
+    <div id="canvas">
+        <pre class="mermaid">
+graph TD
+    classDef start_end fill:#855CF8,stroke:#333,stroke-width:2px,color:#fff;
+    classDef normal fill:#3B82F6,stroke:#333,stroke-width:2px,color:#fff;
+    classDef condition fill:#F59E0B,stroke:#333,stroke-width:2px,color:#fff;
+    classDef success fill:#10B981,stroke:#333,stroke-width:2px,color:#fff;
+    classDef failed fill:#EF4444,stroke:#333,stroke-width:2px,color:#fff;
+
+    Start["开始执行 CSC批量读取"]
+    DisconnectRelays["断开继电器 KL15 和 CAN1"]
+    Delay4s["延时等待 4 秒"]
+    ConnectRelays["闭合继电器 KL15 和 CAN1"]
+    Delay1s["等待 1 秒 (物理建连稳定)"]
+    SendConfigLoop["循环 5 次发送节点配置 (设置节点数=12)"]
+    ReadCellVoltages["依次读取 192 个单体电芯电压"]
+    CheckSuccess{"是否读取成功?"}
+    EndSuccess["成功: 缓存电芯电压数据并 PASS"]
+    EndFailed["失败: 报错并 FAIL"]
+
+    Start --> DisconnectRelays
+    DisconnectRelays --> Delay4s
+    Delay4s --> ConnectRelays
+    ConnectRelays --> Delay1s
+    Delay1s --> SendConfigLoop
+    SendConfigLoop --> ReadCellVoltages
+    ReadCellVoltages --> CheckSuccess
+    CheckSuccess -- "是" --> EndSuccess
+    CheckSuccess -- "否" --> EndFailed
+
+    class Start start_end;
+    class DisconnectRelays normal;
+    class Delay4s normal;
+    class ConnectRelays normal;
+    class Delay1s normal;
+    class SendConfigLoop normal;
+    class ReadCellVoltages normal;
+    class CheckSuccess condition;
+    class EndSuccess success;
+    class EndFailed failed;
+        </pre>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="legend-color" style="background: #855CF8;"></div> 起点/终点 (紫色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #3B82F6;"></div> 常规执行 (蓝色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #F59E0B;"></div> 条件判断 (黄色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #10B981;"></div> 成功/通过 (绿色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #EF4444;"></div> 异常/失败 (红色)</div>
+    </div>
+</body>
+</html>

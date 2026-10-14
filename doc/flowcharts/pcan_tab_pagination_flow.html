@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCAN Tab 报文交互分页显示优化流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>PCAN Tab 报文交互分页显示优化流程</h1>
+        <p>解决当前页面因垂直堆叠 UDS 诊断与报文发送导致监控表格空间被严重挤压、可视条数过少的问题</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    Start["起点: 用户反馈 PCAN Tab 报文交互显示的太少, 需要做分页显示"] --> Analysis["现状分析: 报文发送与 UDS 诊断占据大半屏幕, 报文表格被压缩至仅剩 1~2 行"]
+
+    Analysis --> OptionDecision{"方案选择: 用户需要的'分页'形式"}
+
+    OptionDecision -->|"方案 A (推荐): 子 Tab 页签解耦"| ArchTab["架构调整: PCAN Tab 内部引入 QTabWidget 子页签"]
+    ArchTab --> Tab1["子页 1: 📡 报文交互监控 (独占全屏高度, 20+ 行大视野)"]
+    ArchTab --> Tab2["子页 2: 🩺 UDS 诊断 (独立大面板与诊断日志)"]
+    ArchTab --> Tab3["子页 3: 📤 报文发送 (可选独立或融合至监控底部)"]
+
+    OptionDecision -->|"方案 B: 表格数据翻页器"| ArchPaging["表格改造: 增加上一页/下一页/每页50条翻页控件"]
+
+    OptionDecision -->|"方案 C (双重优化): 子 Tab 独占 + 表格翻页"| ArchCombine["结合架构: 子 Tab 释放高度 + 表格翻页器控制"]
+
+    Tab1 --> VerifyDisplay{"验证: 报文交互可视高度与流畅度"}
+    ArchPaging --> VerifyDisplay
+    ArchCombine --> VerifyDisplay
+
+    VerifyDisplay -->|"满足需求"| Success["终点: 报文监控大视野展现, 操作便捷"]
+
+    classDef startEnd fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff;
+    classDef condition fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff;
+    classDef process fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#ffffff;
+    classDef failure fill:#ef4444,stroke:#dc2626,stroke-width:2px,color:#ffffff;
+    classDef success fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff;
+
+    class Start startEnd;
+    class Success success;
+    class OptionDecision condition;
+    class VerifyDisplay condition;
+    class Analysis process;
+    class ArchTab process;
+    class Tab1 process;
+    class Tab2 process;
+    class Tab3 process;
+    class ArchPaging process;
+    class ArchCombine process;
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

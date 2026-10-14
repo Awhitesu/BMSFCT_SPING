@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>双机直连与配置管理软件设计流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>双机直连配置管理软件设计架构流程</h1>
+        <p>针对共享盘掉线与操作繁琐痛点，提供连接器守护工具与分布式 Client-Server 两种软件方案</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    Start["起点: 用户提出开发双机直连配置软件"] --> PainPoint["现状痛点: Windows SMB 经常超时断开, 每次重连繁琐"]
+    PainPoint --> SelectArch{"选择软件实现方案"}
+
+    SelectArch -->|"方案 1: 机台互联连接器工具 (推荐)"| ToolApp["独立桌面连接器 (PySide6 小工具)"]
+    ToolApp --> Feat1["功能: 界面配置多机台 IP / 账号 / 密码 / 挂载盘符"]
+    ToolApp --> Feat2["功能: 一键直连挂载 + 后台心跳保活 (彻底杜绝断线)"]
+    ToolApp --> Feat3["功能: 状态实时看板 (SMB/SSH/Python 就绪指示灯)"]
+    ToolApp --> Feat4["功能: 一键唤起远程运行与调试"]
+    ToolApp --> Benefit1["优点: 零侵入现有测试代码, 即开即用, 快速交付"]
+
+    SelectArch -->|"方案 2: 双机分布式 Client-Server 架构"| CsApp["分布式硬件服务架构"]
+    CsApp --> ServerDaemon["机台端: 运行硬件 RPC 守护服务 (监听端口)"]
+    CsApp --> ClientApp["本地端: 运行测试控制界面 (填 IP 直连)"]
+    CsApp --> Benefit2["优点: 彻底脱离 Windows 共享盘, 工业级长连接"]
+    CsApp --> Cost2["代价: 需重构 devices 层为网络 RPC 调用"]
+
+    Benefit1 --> UserConfirm{"方案选型确认"}
+    Benefit2 --> UserConfirm
+    UserConfirm --> SuccessEnd["终点: 用户确认选型后进入多步骤编码实现"]
+
+    classDef startEnd fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff;
+    classDef condition fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff;
+    classDef process fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#ffffff;
+    classDef success fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff;
+
+    class Start startEnd;
+    class SuccessEnd success;
+    class SelectArch condition;
+    class UserConfirm condition;
+    class PainPoint process;
+    class ToolApp process;
+    class Feat1 process;
+    class Feat2 process;
+    class Feat3 process;
+    class Feat4 process;
+    class Benefit1 process;
+    class CsApp process;
+    class ServerDaemon process;
+    class ClientApp process;
+    class Benefit2 process;
+    class Cost2 process;
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

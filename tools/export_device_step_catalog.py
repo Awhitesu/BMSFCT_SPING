@@ -1,0 +1,82 @@
+"""Export a reviewable step library; does not change the recipe database."""
+import json
+from pathlib import Path
+import sys
+
+ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT))
+from core.device_steps import DEVICES,ACTIONS,encode
+
+
+def main():
+    catalog={'description':'设备测试工步参考库；按实际工况填写参数和判定条件后加入配方。','devices':[]}
+    rows=['# 设备测试工步使用说明','',
+          '在“工步与配方配置”中新建或编辑测试步，选择“设备操作”，再选择设备类别、设备和动作。已有配方和已有动作继续使用原来的格式。',
+          '', '## 本次接入的工步', '', '| 类别 | 设备 | 动作 |','|---|---|---|']
+    for key,(category,label) in DEVICES.items():
+        specs=ACTIONS[key]
+        rows.append(f'| {category} | {label} | '+ '、'.join(s.label for s in specs)+' |')
+        entry={'category':category,'device':label,'steps':[]}
+        for spec in specs:
+            entry['steps'].append({'device':label,'action':spec.label,
+                'params':encode(key,spec.key,{}),'type':'读取仪表' if spec.read else '设置仪表',
+                'is_judgment':spec.read,'fail_strategy':'失败停止',
+                'name':f'{label}-{spec.label}',
+                'parameter_help':[{'label':f.label,'default':f.default,
+                                  'options':[label for label,_ in f.choices]} for f in spec.fields],
+                'help':spec.help})
+        catalog['devices'].append(entry)
+    rows += ['', '## 原有设备工步继续保留', '',
+        '| 设备 | 已有动作 |','|---|---|',
+        '| 电池模拟器 | 批量设压、限流、量程、输出与回读 |',
+        '| NGI 高压源 | 电压/限流/输出设置、回读、清除保护 |',
+        '| IT6722A | 电压/限流/输出设置与电压、电流回读 |',
+        '| EASY320 | 勾选通道吸合/释放、全部释放 |',
+        '| CA550 | 类型、量程、输出值设置及数据回读 |',
+        '| PCAN / ZLG | CAN发送、交互、指定ID接收；UDS列表请求/响应/解析 |',
+        '| SG400 | 连接、状态、烧录、独立回读校验 |',
+        '| 瑞萨 E2 | 连接、状态、工程烧录及已有校验选项 |',
+        '| APP 刷写 | 查找刷写程序、启动刷写 |',
+        '| MES | moveInCheck 过站校验 |',
+        '', '## 判定与回读', '',
+        '- 设置和控制动作成功返回 `PASS`；失败返回带原因的 `FAIL`，执行停止/忽略/重试策略。',
+        '- 测量动作返回数值及单位，可勾选“结果输出并参与最终判定”，在父测试项中填写上下限。一个测试项尽量只选一个测量结果参与判定。',
+        '- 电源电压单位V、电流A；电池模拟器限流填写A，电流回读单位mA；电阻回读Ω、频率Hz、时间s。示波器测量单位由仪器回读。',
+        '- 输出/继电器状态返回1（开启/吸合）或0（关闭/释放），不是电气触点实测反馈。',
+        '- 绝缘/电阻板回读的是设定阻值；需要验证真实阻值时，另加34461A电阻测量步。DMM Card是切换板，测量使用34461A，不把继电器状态当作测量值。',
+        '- 每个读取步可保存到指定变量，供后续变量读取或公式计算使用。',
+        '', '## 配置和编号', '',
+        '- 仪器使用硬件管理中心已保存的配置；未启用设备报错，不自动覆盖地址。',
+        '- 板卡使用板卡调试页已保存的IP、端口、Unit ID及启用状态。先按种类选板号，再选本板通道，不混用不同类型的板号。',
+        '- 电阻板6块×6通道，0–1.5MΩ，10Ω步进；绝缘板2块×单通道，按配置的5MΩ或30MΩ范围校验，1kΩ步进，0Ω代表断开。',
+        '- Relay Card为12路、HV Card为10路、HSD为每板15路、DMM为每板18路。',
+        '- 电池模拟器每台占固定24个全局编号；例如第4台本地CH6是全局CH78，缺少的通道不重新压缩编号。开启成功同时校验ON和实测电压±0.05V。',
+        '', '## 示波器工步', '',
+        '推荐顺序：连接检测 → 设置通道 → 设置时基与采集 → 设置触发 → 单次捕获并等待（或连续采集）→ 读取即时测量 → 读取波形并保存CSV。',
+        '',
+        '设置触发会记录请求值、仪器实际电平及允许偏差；超出偏差判失败。默认偏差0.02V，可按要求修改。实际值写入 `SCOPE_CH1_LEVEL`，欠幅使用 `SCOPE_CH1_LOWER/UPPER`；CH2同理。',
+        '',
+        '单次捕获超时或测试停止会停止采集并报错。波形读取沿用自动暂停/恢复逻辑；CSV位于 `logs/sequence_waveforms`，路径变量为 `SCOPE_CH1_WAVEFORM_FILE`，点数变量为 `SCOPE_CH1_WAVEFORM_POINTS`。CSV保存成功返回PASS；波形本身不作为一个数值判定，需另加测量步。',
+        '', '## 示例流程', '',
+        '| 设备 | 测试步顺序 |','|---|---|',
+        '| 电池模拟器 | 快捷批量配置 → 开启整套设备（电压校验） → 读取指定通道电压 → 关闭整套设备 |',
+        '| IT6722A / NGI高压源 | 设置参数（输出保持关闭）→ 开启输出 → 回读电压/电流 → 关闭输出 |',
+        '| IT6333B | 设置CH1参数 → 开启CH1 → 读取CH1电压/电流 → 关闭CH1；CH2/CH3分别添加 |',
+        '| DG2052 | 设置CH1波形 → 开启CH1 → 回读参数 → 示波器测量 → 关闭CH1 |',
+        '| 34461A | 连接检测 → 单次测量（功能及量程）→ 以数值上下限判定 |',
+        '| EASY320 / Relay / HV / HSD / DMM Card | 连接 → 指定通道吸合 → 回读状态 → 外部仪器测量 → 指定通道释放 |',
+        '| 电阻板 | 选板号/通道设置阻值 → 读取设定阻值 → 34461A测量真实阻值 |',
+        '| 绝缘板 | 选择板1或板2 → 设置阻值并开启 → 回读输出状态 → 被测物测量 → 关闭绝缘输出 |',
+        '| CA550 | 参数设置 → 被测物读取/万用表测量 → 输出关闭 |',
+        '| CAN / UDS | 发送/请求 → 等待指定物理通道响应 → 校验并解析 → 数值判定 |',
+        '| SG400 / E2 / APP | 执行原有下载步 → 外部供电设备按配方完成上下电 → 原有回读/启动验证步 |',
+        '| MES | moveInCheck校验 → 后续测试 |',
+        '', '仿真运行不会连接真实硬件。新增测量步的仿真数值为0，仅用于流程检查，不代表实测或自动通过上下限。',
+        '', '本次没有自动写入或替换现有生产配方。`设备测试工步清单.json`是各动作及默认参数的参考库，实际电压、通道、阻值和判定范围在编辑器中填写。']
+    folder=ROOT/'doc';folder.mkdir(exist_ok=True)
+    (folder/'设备测试工步清单.json').write_text(json.dumps(catalog,ensure_ascii=False,indent=2),encoding='utf-8')
+    (folder/'设备测试工步使用说明.md').write_text('\n'.join(rows)+'\n',encoding='utf-8')
+    print(f'{len(DEVICES)} device types; {sum(map(len,ACTIONS.values()))} actions exported')
+
+
+if __name__=='__main__':main()

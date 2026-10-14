@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多样本 AI 条码规则推导算法流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0F172A;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        h1 {
+            color: #38BDF8;
+            margin-bottom: 8px;
+        }
+        p {
+            color: #94A3B8;
+            margin-bottom: 24px;
+        }
+        .mermaid-container {
+            background-color: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            max-width: 95%;
+            width: 900px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 工业级多样本 AI 条码规则对比推导算法流程图</h1>
+    <p>多样本位置特征对比分析 (LCP / LCS / 动态字符集与长度范围提取)</p>
+
+    <div class="mermaid-container">
+        <pre class="mermaid">
+graph TD
+    Start["输入 N 个真实条码样本 (逗号/换行/空格分隔)"] --> ParseSamples["提取并清洗样本列表 (过滤空白项)"]
+    ParseSamples --> CountCheck{"样本数量校验"}
+    CountCheck -- "N = 1" --> SingleSample["采用单样本启发式规则推导 (给出多样本输入提示)"]
+    CountCheck -- "N >= 2" --> MultiCompare["启动多样本对比引擎 (Multi-Sample Engine)"]
+    
+    MultiCompare --> ExtractLCP["1. 计算最长公共前缀 (LCP) -> 提取固定前缀 (如 SCUx03XP)"]
+    ExtractLCP --> ExtractLCS["2. 计算最长公共后缀 (LCS) -> 提取固定后缀"]
+    ExtractLCS --> AnalyzeMid["3. 截取中间变化号段，分析字符集 (纯数字 / 大写字母数字 / 混合字符)"]
+    AnalyzeMid --> CalcLen["4. 计算号段长度或区间范围 ([min_len ~ max_len])"]
+    
+    SingleSample --> Synthesize["合成标准正则表达式 (例: ^SCUx03XP[A-Z0-9]{13}$)"]
+    CalcLen --> Synthesize
+    
+    Synthesize --> AutoRegression["自动针对所有输入样本执行全量回归匹配打分"]
+    AutoRegression --> ShowReport["填入配方规则输入框，输出 100% 打分回归报告弹窗"]
+    ShowReport --> Finish["完成配方条码 AI 规则设定并持久化保存"]
+
+    classDef startEnd fill:#8B5CF6,stroke:#7C3AED,color:#FFFFFF,font-weight:bold;
+    classDef process fill:#3B82F6,stroke:#2563EB,color:#FFFFFF;
+    classDef condition fill:#F59E0B,stroke:#D97706,color:#FFFFFF,font-weight:bold;
+    classDef success fill:#10B981,stroke:#059669,color:#FFFFFF,font-weight:bold;
+
+    class Start startEnd;
+    class ParseSamples process;
+    class CountCheck condition;
+    class SingleSample process;
+    class MultiCompare process;
+    class ExtractLCP process;
+    class ExtractLCS process;
+    class AnalyzeMid process;
+    class CalcLen process;
+    class Synthesize process;
+    class AutoRegression process;
+    class ShowReport process;
+    class Finish success;
+        </pre>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UDS 数据提取、ASCII转换与多字节算术公式计算方案流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0F172A;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header {
+            text-align: center;
+            max-width: 960px;
+            margin-bottom: 24px;
+        }
+        h1 {
+            color: #38BDF8;
+            margin-bottom: 8px;
+            font-size: 24px;
+        }
+        p {
+            color: #94A3B8;
+            font-size: 14px;
+            margin: 4px 0;
+        }
+        .diagram-card {
+            background: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 32px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            max-width: 1040px;
+            width: 100%;
+            overflow-x: auto;
+        }
+        .legend {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+        }
+        .color-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>UDS 数据提取、ASCII转换与多字节算术公式计算方案流程图</h1>
+        <p>支持 UDS 响应字节切片、ASCII 字符解码、多字节端序拼接与缩放偏移/公式计算全链路方案</p>
+    </div>
+
+    <div class="diagram-card">
+        <pre class="mermaid">
+graph TD
+    classDef startEnd fill:#8B5CF6,stroke:#7C3AED,stroke-width:2px,color:#FFFFFF;
+    classDef condition fill:#F59E0B,stroke:#D97706,stroke-width:2px,color:#FFFFFF;
+    classDef normal fill:#3B82F6,stroke:#1D4ED8,stroke-width:2px,color:#FFFFFF;
+    classDef fail fill:#EF4444,stroke:#B91C1C,stroke-width:2px,color:#FFFFFF;
+    classDef success fill:#10B981,stroke:#059669,stroke-width:2px,color:#FFFFFF;
+
+    StartNode["发送 UDS 诊断请求并接收响应字节流(Raw Bytes)"]
+    CheckPositive["校验肯定响应(SID+0x40)及前缀"]
+    RespFail["否定响应 NRC 或超时: 判定失败"]
+    CheckParserMode["判断用户配置的数据解析模式(Mode)"]
+    ModeNone["无数据提取: 仅执行常规响应前缀校验"]
+    ModeASCII["模式 A: 转换为 ASCII 文本(如 VIN/版本号)"]
+    ModeCalc["模式 B: 拼接字节并进行数值公式计算"]
+    
+    SliceASCII["按偏移量截取数据字节(如跳过前3字节)"]
+    DecodeASCII["执行 ASCII/UTF-8 解码并清洗非法字符"]
+    SaveASCIIVar["写回全局变量(如 VIN_CODE)并用于字符串判定"]
+
+    SliceBytes["按指定范围切片字节(如 Byte[3:5])"]
+    ParseEndian["按大小端(Big/Little)合成整数(无符号/有符号)"]
+    ApplyFormula["执行加减乘除计算(值 = 原始值 * 比例 + 偏移量 或 自定义公式)"]
+    SaveNumVar["写回全局变量(如 PACK_VOLT)并用于上下限范围判定"]
+
+    EndNode["工步执行完成, 输出最终数值/文本并在日志展示"]
+
+    StartNode --> CheckPositive
+    CheckPositive -->|失败| RespFail
+    CheckPositive -->|成功| CheckParserMode
+    CheckParserMode -->|无提取| ModeNone
+    CheckParserMode -->|ASCII模式| ModeASCII
+    CheckParserMode -->|数值计算模式| ModeCalc
+
+    ModeASCII --> SliceASCII
+    SliceASCII --> DecodeASCII
+    DecodeASCII --> SaveASCIIVar
+    SaveASCIIVar --> EndNode
+
+    ModeCalc --> SliceBytes
+    SliceBytes --> ParseEndian
+    ParseEndian --> ApplyFormula
+    ApplyFormula --> SaveNumVar
+    SaveNumVar --> EndNode
+
+    ModeNone --> EndNode
+
+    class StartNode,EndNode startEnd;
+    class CheckPositive,CheckParserMode condition;
+    class ModeNone,ModeASCII,ModeCalc,SliceASCII,DecodeASCII,SaveASCIIVar,SliceBytes,ParseEndian,ApplyFormula,SaveNumVar normal;
+    class RespFail fail;
+    class EndNode success;
+        </pre>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="color-dot" style="background:#8B5CF6;"></div> 起点/终点</div>
+        <div class="legend-item"><div class="color-dot" style="background:#F59E0B;"></div> 条件判定/模式分流</div>
+        <div class="legend-item"><div class="color-dot" style="background:#3B82F6;"></div> 处理与转换步骤</div>
+        <div class="legend-item"><div class="color-dot" style="background:#EF4444;"></div> 异常/失败分支</div>
+        <div class="legend-item"><div class="color-dot" style="background:#10B981;"></div> 完成与输出</div>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: false,
+                curve: 'basis'
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>移除分布式控制板功能 - 系统逻辑架构图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #121212;
+            color: #E0E0E0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #00E5FF;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #8888AA;
+            margin-bottom: 25px;
+            font-size: 14px;
+        }
+        .mermaid-container {
+            background-color: #1E1E2F;
+            border: 1px solid #3E3E5C;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            width: 90%;
+            max-width: 1200px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>移除分布式控制板功能 - 精简后的硬件调试架构图</h1>
+    <div class="subtitle">GX_APP BMS 老化与单通道测试系统物理归档</div>
+    <div class="mermaid-container">
+        <pre class="mermaid">
+graph TD
+    classDef startEnd fill:#8E24AA,stroke:#FFF,color:#FFF,stroke-width:2px;
+    classDef condition fill:#FBC02D,stroke:#333,color:#000,stroke-width:2px;
+    classDef process fill:#1E88E5,stroke:#FFF,color:#FFF,stroke-width:2px;
+
+    Start["单通道测试上位机启动"] :::startEnd
+    InitDev["初始化硬件设备 (CAN 盒 / AFE / 模拟器 / NGI高压源 / Easy320 / CA550)"] :::process
+    InitUI["初始化主界面 (加载精简硬件调试中心)"] :::process
+    
+    SubTab1["1. 电池模拟器控制 Tab"] :::process
+    SubTab2["2. NGI 高压源控制 Tab"] :::process
+    SubTab3["3. AFE 供电电源 Tab"] :::process
+    SubTab4["4. 被测物供电电源 Tab"] :::process
+    SubTab5["5. Easy320 / CA550 / RNCAN 调试 Tab"] :::process
+    
+    Start --> InitDev
+    InitDev --> InitUI
+    InitUI --> SubTab1
+    InitUI --> SubTab2
+    InitUI --> SubTab3
+    InitUI --> SubTab4
+    InitUI --> SubTab5
+
+    class Start startEnd;
+    class InitDev,InitUI,SubTab1,SubTab2,SubTab3,SubTab4,SubTab5 process;
+        </pre>
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

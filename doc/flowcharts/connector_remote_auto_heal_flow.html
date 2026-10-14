@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>机台互联工具远程智能自愈与零人工共享发布流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0F172A;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        h1 {
+            color: #38BDF8;
+            margin-bottom: 8px;
+        }
+        p {
+            color: #94A3B8;
+            margin-bottom: 24px;
+        }
+        .mermaid-container {
+            background-color: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            max-width: 95%;
+            width: 950px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 互联工具开发端远程智能自愈 (零人工干预)</h1>
+    <p>当检测到机台未创建共享或返回系统错误 67 时，自动通过远程 SSH 通道静默配置并发布机台共享并自动挂载</p>
+
+    <div class="mermaid-container">
+        <pre class="mermaid">
+graph TD
+    Start["开发端点击【一键连接并保活】"] --> TryMount["尝试执行本地 net use 挂载 Z: 盘"]
+    TryMount --> CheckMount{"挂载是否成功"}
+    CheckMount -- "成功" --> StartKeepAlive["启动 25 秒心跳保活守护线程"]
+    CheckMount -- "失败 (如错误 67 找不到网络名)" --> TriggerAutoHeal["触发软件内置【远程智能自愈模块】"]
+    
+    TriggerAutoHeal --> SSHConnect["利用配置的 IP/SSH端口/账密 建立远程 SSH 通道"]
+    SSHConnect --> CheckRemoteShare{"远程检查机台是否存在 GX_APP 共享"}
+    CheckRemoteShare -- "不存在" --> AutoLocate["远程检索机台工程目录 (如 D:\GX_APP刷写设备)"]
+    AutoLocate --> RemoteCreate["远程执行 New-SmbShare 静默发布共享"]
+    CheckRemoteShare -- "已存在" --> RetryMount["重新发起本地 net use 挂载"]
+    RemoteCreate --> RetryMount
+    
+    RetryMount --> VerifySuccess{"二次挂载校验"}
+    VerifySuccess -- "成功" --> StartKeepAlive
+    VerifySuccess -- "异常" --> ReportDetail["输出精准诊断与修复日志"]
+    StartKeepAlive --> Finish["终点: Z: 盘挂载成功并稳定心跳保活 (全程零人工干预)"]
+
+    classDef startEnd fill:#8B5CF6,stroke:#7C3AED,color:#FFFFFF,font-weight:bold;
+    classDef process fill:#3B82F6,stroke:#2563EB,color:#FFFFFF;
+    classDef condition fill:#F59E0B,stroke:#D97706,color:#FFFFFF,font-weight:bold;
+    classDef success fill:#10B981,stroke:#059669,color:#FFFFFF,font-weight:bold;
+    classDef error fill:#EF4444,stroke:#DC2626,color:#FFFFFF,font-weight:bold;
+
+    class Start startEnd;
+    class TryMount process;
+    class CheckMount condition;
+    class TriggerAutoHeal process;
+    class SSHConnect process;
+    class CheckRemoteShare condition;
+    class AutoLocate process;
+    class RemoteCreate process;
+    class RetryMount process;
+    class VerifySuccess condition;
+    class StartKeepAlive process;
+    class ReportDetail error;
+    class Finish success;
+        </pre>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true
+            }
+        });
+    </script>
+</body>
+</html>

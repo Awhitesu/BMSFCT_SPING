@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>移除 PLC 寄存器配置项并将配方号固定写入地址 0 流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>移除 PLC 寄存器配置项并将配方号固定写入地址 0 流程</h1>
+        <p>在配方编辑页中删除多余的【PLC寄存器】输入框，固定将【PLC配方号】写入保持寄存器地址 0</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    Start["起点: 用户要求删除 PLC 寄存器输入项, 将 PLC 配方号固定写入保持寄存器地址 0"] --> Analysis["现状分析: 当前界面存在【PLC配方号】与【PLC寄存器】两项, 且默认下发至地址 2"]
+
+    Analysis --> Plan["重构方案: UI 瘦身 + 逻辑固定"]
+
+    Plan --> UIChange["UI 修改: 在 config_tab.py 中删除 self.recipe_plc_register 控件与'PLC寄存器:'标签"]
+    Plan --> LogicChange["下发逻辑固定: 在 overview_tab.py 中将 register 写死为 0, 下发时固定 plc.write_register(0, recipe_number)"]
+    Plan --> JSONSync["数据模型兼容: 配方 JSON 保存时固定 plc_recipe_register 为 0, 加载时不再渲染该字段"]
+
+    UIChange --> Verify["验证: 检查配方编辑页仅保留【PLC配方号】, 测试启动时向地址 0 下发配方数据"]
+    LogicChange --> Verify
+    JSONSync --> Verify
+
+    Verify -->|"验证通过"| Success["终点: 界面极简舒展, 配方号稳定下发至 PLC 保持寄存器地址 0"]
+
+    classDef startEnd fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff;
+    classDef condition fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff;
+    classDef process fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#ffffff;
+    classDef failure fill:#ef4444,stroke:#dc2626,stroke-width:2px,color:#ffffff;
+    classDef success fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff;
+
+    class Start startEnd;
+    class Success success;
+    class Verify condition;
+    class Analysis process;
+    class Plan process;
+    class UIChange process;
+    class LogicChange process;
+    class JSONSync process;
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

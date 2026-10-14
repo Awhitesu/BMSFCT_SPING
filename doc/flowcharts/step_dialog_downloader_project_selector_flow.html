@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工步弹窗力捷丰SG400烧录工程读取与下拉选择业务逻辑流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0F172A;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #38BDF8;
+            font-size: 22px;
+            margin-bottom: 8px;
+        }
+        p.subtitle {
+            color: #94A3B8;
+            font-size: 14px;
+            margin-top: 0;
+            margin-bottom: 24px;
+        }
+        .flowchart-container {
+            background-color: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            max-width: 95%;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>工步弹窗力捷丰SG400烧录工程在线读取与智能选择流程</h1>
+    <p class="subtitle">物理归档：实现从物理下载器/缓存拉取已有脱机工程清单，杜绝纯手工路径输入的低效与失误</p>
+
+    <div class="flowchart-container">
+        <pre class="mermaid">
+flowchart TD
+    Start["打开编辑指令弹窗 (StepDialog)"] --> CheckDevice{"控制设备是否为力捷丰 SG400 ?"}
+    
+    CheckDevice -- "否" --> OtherDevice["渲染其他常规设备页面"]
+    CheckDevice -- "是" --> CheckAction{"功能动作是否为执行烧录工程 ?"}
+    
+    CheckAction -- "否 (连接检测/查询状态)" --> ShowEmpty["显示 Page 14 (无需额外参数)"]
+    CheckAction -- "是" --> ShowOpteeqPage["显示 Page 11 (力捷丰烧录配置)"]
+    
+    ShowOpteeqPage --> InitProjectSelector["初始化工程选择器 (可编辑下拉框 combo_project)"]
+    InitProjectSelector --> CheckDeviceMgr{"DeviceManager/下载器连接是否就绪 ?"}
+    
+    CheckDeviceMgr -- "已连接/就绪" --> QueryRemote["自动拉取下载器工程列表 (/home/s2g/proj/)"]
+    CheckDeviceMgr -- "未连接/离线" --> ScanLocalCache["扫描本地工程缓存目录 (cache/projects)"]
+    
+    QueryRemote --> PopulateCombo["工程列表填充至下拉选择框"]
+    ScanLocalCache --> PopulateCombo
+    
+    PopulateCombo --> UserInteraction{"用户交互方式"}
+    
+    UserInteraction -- "点击下拉框直接选择" --> SelectFromList["选中下载器已有脱机工程 (如 UnlockHSMCode.opj)"]
+    UserInteraction -- "点击 [🔄 读取下载器工程]" --> ManualFetch["触发在线实时读取指令 (channel:getfilelist)"]
+    UserInteraction -- "点击 [📂 本地文件]" --> SelectLocalFile["调起 Windows 文件对话框选择本地 .opj/.oprj"]
+    UserInteraction -- "直接输入" --> CustomInput["输入自定义工程名称"]
+    
+    ManualFetch --> CheckFetchResult{"读取下载器工程是否成功 ?"}
+    CheckFetchResult -- "成功" --> UpdateComboSuccess["刷新并高亮展示全部脱机工程"]
+    CheckFetchResult -- "失败/超时" --> FallbackCache["告警提示并回退保留本地缓存清单"]
+    
+    SelectFromList --> ConfirmParam["设定完成超时时间 (SpinBox)"]
+    UpdateComboSuccess --> ConfirmParam
+    FallbackCache --> ConfirmParam
+    SelectLocalFile --> ConfirmParam
+    CustomInput --> ConfirmParam
+    
+    ConfirmParam --> ClickOK["点击 [确认指令]"]
+    ClickOK --> GetData["get_data() 拦截并提取 PROJECT 与 TIMEOUT"]
+    GetData --> OutputRecipe["输出测试工步数据 (params: PROJECT:xxx / TIMEOUT:yyy)"]
+    OutputRecipe --> End["成功保存工步并更新测试树"]
+
+    classDef startEnd fill:#7C3AED,stroke:#A78BFA,stroke-width:2px,color:#FFFFFF;
+    classDef condition fill:#D97706,stroke:#FBBF24,stroke-width:2px,color:#FFFFFF;
+    classDef process fill:#2563EB,stroke:#60A5FA,stroke-width:2px,color:#FFFFFF;
+    classDef success fill:#059669,stroke:#34D399,stroke-width:2px,color:#FFFFFF;
+    classDef fail fill:#DC2626,stroke:#F87171,stroke-width:2px,color:#FFFFFF;
+
+    class Start startEnd;
+    class End startEnd;
+    class CheckDevice condition;
+    class CheckAction condition;
+    class CheckDeviceMgr condition;
+    class UserInteraction condition;
+    class CheckFetchResult condition;
+    class OtherDevice process;
+    class ShowEmpty process;
+    class ShowOpteeqPage process;
+    class InitProjectSelector process;
+    class QueryRemote process;
+    class ScanLocalCache process;
+    class PopulateCombo process;
+    class SelectFromList process;
+    class ManualFetch process;
+    class SelectLocalFile process;
+    class CustomInput process;
+    class ConfirmParam process;
+    class ClickOK process;
+    class GetData process;
+    class UpdateComboSuccess success;
+    class OutputRecipe success;
+    class FallbackCache fail;
+        </pre>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>上位机顶部居中大标题重构流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body { background-color: #121212; color: #FFFFFF; font-family: sans-serif; padding: 20px; }
+        .mermaid { background-color: #1E1E1E; padding: 20px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h2>上位机顶部居中大标题重构流程图</h2>
+    <div class="mermaid">
+    graph TD
+        classDef startEnd fill:#8A2BE2,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef condition fill:#FFD700,stroke:#333,stroke-width:2px,color:#000;
+        classDef process fill:#1E90FF,stroke:#fff,stroke-width:1px,color:#fff;
+        classDef success fill:#28A745,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef fail fill:#DC3545,stroke:#fff,stroke-width:2px,color:#fff;
+
+        Start["启动 MainWindow UI"] ::: startEnd
+
+        subgraph WindowHeader["MainWindow 最顶层 Header 布局"]
+            CenterTitle["居中显示 APP刷写系统 大标题 (Font 24px Bold Center)"] ::: success
+            UserBtn["右侧: 用户账户卡片"] ::: process
+            AgingCounter["右侧: 老化执行次数卡片"] ::: process
+        end
+
+        subgraph SubTabHeader["OverviewTab 顶层工具栏"]
+            RecipeCombo["配方选择下拉框 (🎯 选择测试配方)"] ::: process
+            ReportBtn["报表文件夹按钮 (📂 报表)"] ::: process
+        end
+
+        Start --> WindowHeader
+        WindowHeader --> SubTabHeader
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

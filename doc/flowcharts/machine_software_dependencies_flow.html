@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>机台电脑软件与驱动依赖清单流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>机台电脑软件与硬件驱动全量依赖图谱</h1>
+        <p>详细列出机台电脑运行 AgingTest BMS 老化系统所需的基础环境、Python 库及硬件驱动</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    Start["机台电脑环境准备"] --> Layer1["1. 基础解释器环境"]
+    Start --> Layer2["2. Python 核心依赖库"]
+    Start --> Layer3["3. 物理硬件驱动程序"]
+    Start --> Layer4["4. 开发调试工具 (可选)"]
+
+    Layer1 --> Python311["Python 3.11.x (64-bit) 必须勾选 Add to PATH"]
+    
+    Layer2 --> PipPkgs["执行 pip install -r requirements.txt"]
+    PipPkgs --> Pkg1["PySide6 (Qt 图形界面框架)"]
+    PipPkgs --> Pkg2["python-can (PCAN-FD 底层通讯)"]
+    PipPkgs --> Pkg3["pyserial (串口 RS232/RS485 通讯)"]
+    PipPkgs --> Pkg4["pymodbus (Easy320 PLC 继电器控制)"]
+    PipPkgs --> Pkg5["requests (HTTP/AI 接口调用)"]
+
+    Layer3 --> DriverPcan["PEAK PCAN-USB / PCAN-FD 官方驱动 (生成 PCANBasic.dll)"]
+    Layer3 --> DriverSerial["USB转串口驱动 (CH340 / FTDI / CP210x, 识别物理 COM 口)"]
+
+    Layer4 --> ToolVSCode["VS Code (安装 Python 扩展)"]
+    Layer4 --> ToolSSH["OpenSSH Server (用于局域网远程连接)"]
+
+    Python311 --> ReadyCheck{"运行环境自检验证"}
+    Pkg1 --> ReadyCheck
+    Pkg2 --> ReadyCheck
+    Pkg3 --> ReadyCheck
+    Pkg4 --> ReadyCheck
+    DriverPcan --> ReadyCheck
+    DriverSerial --> ReadyCheck
+
+    ReadyCheck -->|"全项就绪"| SuccessEnd["终点: 机台程序原生驱动硬件完美运行"]
+
+    classDef startEnd fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff;
+    classDef condition fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff;
+    classDef process fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#ffffff;
+    classDef success fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff;
+
+    class Start startEnd;
+    class SuccessEnd success;
+    class ReadyCheck condition;
+    class Layer1 process;
+    class Layer2 process;
+    class Layer3 process;
+    class Layer4 process;
+    class Python311 process;
+    class PipPkgs process;
+    class Pkg1 process;
+    class Pkg2 process;
+    class Pkg3 process;
+    class Pkg4 process;
+    class Pkg5 process;
+    class DriverPcan process;
+    class DriverSerial process;
+    class ToolVSCode process;
+    class ToolSSH process;
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>上位机路径支持文件选择与路径解析优化流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>上位机路径支持文件选择与相对路径解析优化</h1>
+        <p>将原有单一文件夹选择器升级为支持选择上位机文件 (QFileDialog.getOpenFileName)，并自适应解析基准目录以精准拼接 ..\config.ini、..\Flash 固件目录及 Record.txt</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    StartNode["起点: 操作员在 AppFlashTab 点击选择上位机路径"] --> SelectType{"选择路径方式"}
+
+    SelectType -->|"点击 📄 浏览文件"| OpenFileDlg["弹窗: QFileDialog.getOpenFileName (可执行程序/所有文件)"]
+    SelectType -->|"点击 📂 浏览目录"| OpenDirDlg["弹窗: QFileDialog.getExistingDirectory (文件夹)"]
+    SelectType -->|"手动输入"| ManualInput["直接在 edit_base_path 输入框输入路径"]
+
+    OpenFileDlg --> UpdateInput["更新上位机路径输入框 (保存文件绝对路径)"]
+    OpenDirDlg --> UpdateInput
+    ManualInput --> UpdateInput
+
+    UpdateInput --> ParsePath["调用 _get_abs_path(rel_path) 解析目标物理路径"]
+    ParsePath --> CheckIsFile{"判断输入路径是文件还是目录?"}
+
+    CheckIsFile -->|"是文件 (os.path.isfile 或带扩展名)"| ExtractDir["以文件所在目录 os.path.dirname 作为基准"]
+    CheckIsFile -->|"是文件夹"| UseSelfDir["以自身作为基准"]
+
+    ExtractDir --> JoinRel["结合相对路径 (..\\config.ini / ..\\Flash) 进行 os.path.join 并 normpath"]
+    UseSelfDir --> JoinRel
+
+    JoinRel --> EndNode["终点: 精准定位 config.ini、Flash 固件与 Record.txt"]
+
+    classDef startEnd fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff;
+    classDef condition fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff;
+    classDef process fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#ffffff;
+    classDef failure fill:#ef4444,stroke:#dc2626,stroke-width:2px,color:#ffffff;
+    classDef success fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff;
+
+    class StartNode startEnd;
+    class EndNode success;
+    class SelectType condition;
+    class CheckIsFile condition;
+    class OpenFileDlg process;
+    class OpenDirDlg process;
+    class ManualInput process;
+    class UpdateInput process;
+    class ParsePath process;
+    class ExtractDir process;
+    class UseSelfDir process;
+    class JoinRel success;
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

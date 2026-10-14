@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>串口设备自动搜索与下拉选择逻辑流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #1e1e2e;
+            color: #cdd6f4;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            color: #89b4fa;
+            text-align: center;
+        }
+        .mermaid {
+            background: #181825;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <h1>串口设备自动搜索与动态下拉选择业务逻辑流程图</h1>
+    <div class="mermaid">
+    graph TD
+        Start["["进入硬件设备配置界面 (HardwareConfigTab)"]"] --> ScanPorts["["调用 serial.tools.list_ports 动态检测物理串口"]"]
+        ScanPorts --> CheckSpecs["["遍历 DEVICE_SPECS 设备规格配置列表"]"]
+        
+        CheckSpecs --> IsSerial{["是否为串口通讯设备? (RS232 / 串口)"]}
+        
+        IsSerial -- "是" --> CreateCombo["["创建或配置 QComboBox 下拉选择控件 (支持可编辑/搜索)"]"]
+        CreateCombo --> PopulatePorts["["填入检测到的串口列表 (例 COM1, COM3, COM92...)"]"]
+        PopulatePorts --> MatchConfig["["对比保存的配置端口号，匹配并高亮选中目标串口"]"]
+        MatchConfig --> SetCellWidget["["使用 table.setCellWidget 挂载 QComboBox 到 IP/USB/串口 列"]"]
+        
+        IsSerial -- "否 (TCP / Modbus / PCAN)" --> CreateItem["["使用标准 QTableWidgetItem 文本单元格"]"]
+        CreateItem --> FillText["["填入 IP 地址或 PCAN 通道号"]"]
+        
+        SetCellWidget --> UserAction["["用户选择下拉串口 / 手动输入新串口号"]"]
+        FillText --> UserAction
+        
+        UserAction --> ClickSave["["点击 保存设备配置 按钮"]"]
+        ClickSave --> SaveDB["["提取 QComboBox 文本或 QTableWidgetItem 文本保存至 DB/配置文件"]"]
+        SaveDB --> RefreshDev["["断开已有连接并重新初始化设备管理器参数"]"]
+        RefreshDev --> End["["配置保存完毕 & 界面状态更新"]"]
+
+        classDef startEnd fill:#cba6f7,stroke:#94e2d5,stroke-width:2px,color:#11111b;
+        classDef condition fill:#f9e2af,stroke:#fab387,stroke-width:2px,color:#11111b;
+        classDef process fill:#89b4fa,stroke:#b4befe,stroke-width:2px,color:#11111b;
+        classDef success fill:#a6e3a1,stroke:#94e2d5,stroke-width:2px,color:#11111b;
+
+        class Start,End startEnd;
+        class IsSerial condition;
+        class ScanPorts,CheckSpecs,CreateCombo,PopulatePorts,MatchConfig,SetCellWidget,CreateItem,FillText,UserAction,ClickSave,SaveDB,RefreshDev process;
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>烧录工程下拉框全称完整显示与自适应展开业务流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0F172A;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header {
+            text-align: center;
+            max-width: 960px;
+            margin-bottom: 24px;
+        }
+        h1 {
+            color: #38BDF8;
+            margin-bottom: 8px;
+            font-size: 24px;
+        }
+        p {
+            color: #94A3B8;
+            font-size: 14px;
+            margin: 4px 0;
+        }
+        .diagram-card {
+            background: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 32px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            max-width: 1000px;
+            width: 100%;
+            overflow-x: auto;
+        }
+        .legend {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+        }
+        .color-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>烧录工程下拉框全称完整显示与自适应展开业务流程图</h1>
+        <p>解决长工程文件名被 ... 截断无法辨识的缺陷，提供布局解耦、下拉自适应宽度与悬浮气泡全景解决方案</p>
+    </div>
+
+    <div class="diagram-card">
+        <pre class="mermaid">
+graph TD
+    classDef startEnd fill:#8B5CF6,stroke:#7C3AED,stroke-width:2px,color:#FFFFFF;
+    classDef condition fill:#F59E0B,stroke:#D97706,stroke-width:2px,color:#FFFFFF;
+    classDef normal fill:#3B82F6,stroke:#1D4ED8,stroke-width:2px,color:#FFFFFF;
+    classDef success fill:#10B981,stroke:#059669,stroke-width:2px,color:#FFFFFF;
+
+    StartNode["打开工步配置弹窗(StepDialog)"]
+    SelectOpteeq["切换至【力捷丰 SG400 -> 执行烧录工程】"]
+    LayoutSplit["排布解耦: 烧录工程下拉框独占整行(~500px)"]
+    BtnRow["操作按钮下移单列:【读取下载器】与【本地文件】"]
+    LoadProjects["在线读取/预加载脱机工程列表"]
+    CalcTextWidth["字体度量(fontMetrics)计算最长工程名像素宽度"]
+    SetPopupWidth["动态自适应设置下拉弹出视图宽度(min 560px~最长宽度)"]
+    SetTooltips["为每个工程条目注入全息提示气泡(ToolTipRole)"]
+    UserClickPopup["用户点击下拉箭头展开工程菜单"]
+    CheckWidth["检测是否超过默认控件宽度"]
+    AutoExpandPopup["弹出窗口自适应向右舒展展开(绝无省略号截断)"]
+    HoverBubble["鼠标悬停条目即时浮现完整文件全称提示"]
+    SelectTarget["用户 100% 精准核对版本号并确认选中"]
+    EndNode["保存工步配方参数"]
+
+    StartNode --> SelectOpteeq
+    SelectOpteeq --> LayoutSplit
+    LayoutSplit --> BtnRow
+    BtnRow --> LoadProjects
+    LoadProjects --> CalcTextWidth
+    CalcTextWidth --> SetPopupWidth
+    SetPopupWidth --> SetTooltips
+    SetTooltips --> UserClickPopup
+    UserClickPopup --> CheckWidth
+    CheckWidth --> AutoExpandPopup
+    AutoExpandPopup --> HoverBubble
+    HoverBubble --> SelectTarget
+    SelectTarget --> EndNode
+
+    class StartNode,EndNode startEnd;
+    class CheckWidth condition;
+    class SelectOpteeq,LayoutSplit,BtnRow,LoadProjects,CalcTextWidth,SetPopupWidth,SetTooltips,UserClickPopup,AutoExpandPopup,HoverBubble normal;
+    class SelectTarget success;
+        </pre>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="color-dot" style="background:#8B5CF6;"></div> 起点/终点</div>
+        <div class="legend-item"><div class="color-dot" style="background:#F59E0B;"></div> 条件判断/检测</div>
+        <div class="legend-item"><div class="color-dot" style="background:#3B82F6;"></div> 常规执行节点</div>
+        <div class="legend-item"><div class="color-dot" style="background:#10B981;"></div> 成功/精准选择</div>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: false,
+                curve: 'basis'
+            }
+        });
+    </script>
+</body>
+</html>

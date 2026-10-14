@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>新增主 Tab 数据报表与工具栏精简流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body { background-color: #121212; color: #FFFFFF; font-family: sans-serif; padding: 20px; }
+        .mermaid { background-color: #1E1E1E; padding: 20px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h2>新增主 Tab 数据报表与工具栏精简流程图</h2>
+    <div class="mermaid">
+    graph TD
+        classDef startEnd fill:#8A2BE2,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef condition fill:#FFD700,stroke:#333,stroke-width:2px,color:#000;
+        classDef process fill:#1E90FF,stroke:#fff,stroke-width:1px,color:#fff;
+        classDef success fill:#28A745,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef fail fill:#DC3545,stroke:#fff,stroke-width:2px,color:#fff;
+
+        Start["系统启动初始化 Tab 页面"] ::: startEnd
+
+        subgraph MainTabs["主导航 Tab 栏"]
+            T1["单通道测试与序列编辑"] ::: process
+            T2["工步与配方配置"] ::: process
+            T3["硬件管理中心"] ::: process
+            T4["单通道/硬件独立调试"] ::: process
+            T5["数据报表 (新)"] ::: success
+        end
+
+        subgraph ReportPage["ReportTab 页面功能"]
+            OpenDir["📂 打开报表文件夹"] ::: process
+            RefreshList["🔄 刷新报表列表"] ::: process
+            DoubleOpen["双击文件名快速打开报表文件"] ::: process
+        end
+
+        Start --> MainTabs
+        T5 --> ReportPage
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

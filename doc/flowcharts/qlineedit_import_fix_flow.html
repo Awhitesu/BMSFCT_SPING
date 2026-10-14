@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QLineEdit 模块导入补全与初始化链路流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0F172A;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        h1 {
+            color: #38BDF8;
+            margin-bottom: 8px;
+        }
+        p {
+            color: #94A3B8;
+            margin-bottom: 24px;
+        }
+        .mermaid-container {
+            background-color: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            max-width: 95%;
+            width: 900px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 ConfigTab 模块导入补全与主界面无缝进入流程</h1>
+    <p>补全 QLineEdit 依赖，打通全流程 Tab 页面实例化与大屏渲染链路</p>
+
+    <div class="mermaid-container">
+        <pre class="mermaid">
+graph TD
+    Start["主窗口 (MainWindow) 启动初始化"] --> LoadOverview["加载 OverviewTab (单通道测试页)"]
+    LoadOverview --> LoadConfig["加载 ConfigTab (工步与配方配置页)"]
+    LoadConfig --> ImportCheck["读取 config_tab.py 顶部依赖"]
+    ImportCheck --> InstantiateEdit["实例化 self.edit_master_sn_regex = QLineEdit(...)"]
+    InstantiateEdit --> LoadHWTab["加载 HardwareConfigTab (硬件管理中心)"]
+    LoadHWTab --> LoadDebugTab["加载 DebugTab (独立调试中心)"]
+    LoadDebugTab --> FinishMain["MainWindow._init_ui() 100% 顺利构建完成"]
+    FinishMain --> ShowWindow["成功从自检界面跳入上位机主界面"]
+
+    classDef startEnd fill:#8B5CF6,stroke:#7C3AED,color:#FFFFFF,font-weight:bold;
+    classDef process fill:#3B82F6,stroke:#2563EB,color:#FFFFFF;
+    classDef success fill:#10B981,stroke:#059669,color:#FFFFFF,font-weight:bold;
+
+    class Start startEnd;
+    class LoadOverview process;
+    class LoadConfig process;
+    class ImportCheck process;
+    class InstantiateEdit process;
+    class LoadHWTab process;
+    class LoadDebugTab process;
+    class FinishMain process;
+    class ShowWindow success;
+        </pre>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>从零开始两台电脑双机互联标准化SOP流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>从零开始两台电脑双机互联与驱动硬件标准化 SOP 流程</h1>
+        <p>详细规定机台电脑（服务端）与开发电脑（客户端）从白屏到一键稳定直连的极简操作路径</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    Start["起点: 两台从零开始的全新电脑 (连入同一局域网)"] --> StepMachine["【机台电脑 A】配置 (被控/硬件端)"]
+    Start --> StepLocal["【开发电脑 B】配置 (主控/客户端)"]
+
+    StepMachine --> M1["A-1. 查机台 IP 与账号密码 (ipconfig)"]
+    M1 --> M2["A-2. 一键开启 SMB 共享文件夹 (New-SmbShare)"]
+    M2 --> M3["A-3. 一键启用 Windows OpenSSH 服务 (sshd)"]
+    M3 --> M4["A-4. 安装 Python 3.11 + 依赖 + 硬件驱动 (PCAN/COM)"]
+
+    StepLocal --> L1["B-1. 安装 Python 3.11 并安装 PySide6"]
+    L1 --> L2["B-2. 打开【机台互联连接器】工具"]
+    L2 --> L3["B-3. 输入机台 A 的 IP / 用户名 / 密码"]
+
+    M4 --> ReadyCheck{"两端就绪核验"}
+    L3 --> ReadyCheck
+
+    ReadyCheck --> ClickConnect["B 端点击【🚀 一键连接并保活】"]
+    ClickConnect --> ConnectSuccess["本地生成 Z: 盘, 状态灯全绿, 心跳守护运行"]
+    ConnectSuccess --> FinalWork["B 端 IDE 打开 Z: 盘, 按 F5 直接驱动 A 端物理硬件"]
+    FinalWork --> SuccessEnd["终点: 双机互联闭环完成"]
+
+    classDef startEnd fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff;
+    classDef condition fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff;
+    classDef process fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#ffffff;
+    classDef success fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff;
+
+    class Start startEnd;
+    class SuccessEnd success;
+    class ReadyCheck condition;
+    class StepMachine process;
+    class StepLocal process;
+    class M1 process;
+    class M2 process;
+    class M3 process;
+    class M4 process;
+    class L1 process;
+    class L2 process;
+    class L3 process;
+    class ClickConnect process;
+    class ConnectSuccess process;
+    class FinalWork process;
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

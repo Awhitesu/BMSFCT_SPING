@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>相邻电芯异常电压自动修正业务流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+    <style>
+        body {
+            background-color: #0b0c10;
+            color: #c5c6c7;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #66fcf1;
+            margin-bottom: 5px;
+        }
+        .desc {
+            color: #8c8c8c;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        #canvas {
+            background-color: #1f2833;
+            border: 2px solid #45f3ff;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 4px 15px rgba(0, 255, 243, 0.2);
+            width: 90%;
+            max-width: 900px;
+            display: flex;
+            justify-content: center;
+        }
+        .legend {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            font-size: 13px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            border-radius: 3px;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>相邻电芯异常电压自动修正业务流程图</h1>
+    <div class="desc">此图展示了在开启 FIX_ADJACENT 修正逻辑下，对相邻两单体电压之和为 4.5V~5.5V 的异常判定与修正流程。</div>
+    
+    <div id="canvas">
+        <pre class="mermaid">
+graph TD
+    classDef start_end fill:#855CF8,stroke:#333,stroke-width:2px,color:#fff;
+    classDef normal fill:#3B82F6,stroke:#333,stroke-width:2px,color:#fff;
+    classDef condition fill:#F59E0B,stroke:#333,stroke-width:2px,color:#fff;
+    classDef success fill:#10B981,stroke:#333,stroke-width:2px,color:#fff;
+    classDef failed fill:#EF4444,stroke:#333,stroke-width:2px,color:#fff;
+
+    Start["开始判定当前相邻单体对 (idx1, idx2)"]
+    CheckNone["两单体读取值 val1, val2 是否均不为空?"]
+    CalcBound["获取判定上下限 check_min, check_max"]
+    CheckV1NG["单体1是否不在正常范围内? (val1 < check_min 或 val1 > check_max)"]
+    CheckV2NG["单体2是否不在正常范围内? (val2 < check_min 或 val2 > check_max)"]
+    CheckAnyNG["是否至少有一个单体不在正常范围内? (is_v1_ng 或 is_v2_ng)"]
+    CalcSum["计算两单体电压之和 total_val = val1 + val2"]
+    CheckSum["电压之和是否在 4.5V ~ 5.5V 之间?"]
+    ApplyFix["执行修正: 将两单体电压均设为 2.499V"]
+    KeepOrigin["保持原值: 不进行修正"]
+    End["结束当前单体对判定"]
+
+    Start --> CheckNone
+    CheckNone -- "否" --> KeepOrigin
+    CheckNone -- "是" --> CalcBound
+    CalcBound --> CheckV1NG
+    CheckV1NG --> CheckV2NG
+    CheckV2NG --> CheckAnyNG
+    CheckAnyNG -- "否" --> KeepOrigin
+    CheckAnyNG -- "是" --> CalcSum
+    CalcSum --> CheckSum
+    CheckSum -- "是" --> ApplyFix
+    CheckSum -- "否" --> KeepOrigin
+    ApplyFix --> End
+    KeepOrigin --> End
+
+    class Start start_end;
+    class End start_end;
+    class CalcBound normal;
+    class CheckV1NG normal;
+    class CheckV2NG normal;
+    class CalcSum normal;
+    class CheckNone condition;
+    class CheckAnyNG condition;
+    class CheckSum condition;
+    class ApplyFix success;
+    class KeepOrigin failed;
+        </pre>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="legend-color" style="background: #855CF8;"></div> 起点/终点 (紫色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #3B82F6;"></div> 常规执行 (蓝色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #F59E0B;"></div> 条件判断 (黄色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #10B981;"></div> 成功/修正 (绿色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #EF4444;"></div> 失败/不修正 (红色)</div>
+    </div>
+</body>
+</html>

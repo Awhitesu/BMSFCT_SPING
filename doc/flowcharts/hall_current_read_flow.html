@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>霍尔电流测试流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>霍尔电流读取及校验业务流程</h1>
+        <div class="mermaid">
+            graph TD
+                Start["开始工步"]
+                SendReq["发送 EOL CAN 帧 (ID: 0x7F0, DATA: 10 0B 01 00 01 00 00 00)"]
+                WaitResp{"等待 EOL 肯定响应 (ID: 0x7F8, 匹配 11 0B 01 40)?"}
+                TimeoutFail["超时/否定响应 (测试失败)"]
+                ExtractPayload["提取 4 字节 Payload 组合 (字节 4-7: 00 1E 82 B5)"]
+                Calculate["执行公式计算: (Value / 1000) - 2000"]
+                CheckRange{"判断计算出的电流值是否在判定范围内?"}
+                VerifyPass["通过判定 (PASS)"]
+                VerifyFail["不通过判定 (NG)"]
+                End["结束工步"]
+
+                Start --> SendReq
+                SendReq --> WaitResp
+                WaitResp -- "否" --> TimeoutFail
+                WaitResp -- "是" --> ExtractPayload
+                ExtractPayload --> Calculate
+                Calculate --> CheckRange
+                CheckRange -- "是" --> VerifyPass
+                CheckRange -- "否" --> VerifyFail
+                TimeoutFail --> End
+                VerifyPass --> End
+                VerifyFail --> End
+
+                classDef purple fill:#D6C4EC,stroke:#7030A0,stroke-width:2px;
+                classDef yellow fill:#FFF2CC,stroke:#D6B656,stroke-width:2px;
+                classDef blue fill:#DAE8FC,stroke:#6C8EBF,stroke-width:2px;
+                classDef red fill:#F8CECC,stroke:#B85450,stroke-width:2px;
+                classDef green fill:#D5E8D4,stroke:#82B366,stroke-width:2px;
+
+                class Start,End purple;
+                class WaitResp,CheckRange yellow;
+                class SendReq,ExtractPayload,Calculate blue;
+                class TimeoutFail,VerifyFail red;
+                class VerifyPass green;
+        </div>
+    </div>
+</body>
+</html>

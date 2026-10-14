@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PLC 界面保持寄存器读写功能扩展流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>PLC 界面保持寄存器读写功能扩展流程</h1>
+        <p>在 Easy320 PLC 独立界面中增加寄存器地址与数值输入、单寄存器写入 (FC06) 与读取 (FC03) 及结果反馈看板</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    Start["起点: 用户请求在 PLC 界面中增加读写保持寄存器功能 (如地址0写入5)"] --> UI["UI 扩展: 在 easy320_tab_standalone.py 增加【PLC 寄存器读写调试】控制面板"]
+
+    UI --> Inputs["输入控件: 地址输入框(0~65535) + 数值输入框(0~65535)"]
+    Inputs --> Actions{"操作选择: 用户点击读取或写入"}
+
+    Actions -->|"点击【写入寄存器】"| CheckConnWrite{"连接状态校验: PLC 是否已连接?"}
+    Actions -->|"点击【读取寄存器】"| CheckConnRead{"连接状态校验: PLC 是否已连接?"}
+
+    CheckConnWrite -->|"未连接"| WarnConn["提示: 请先连接 PLC 设备"]
+    CheckConnRead -->|"未连接"| WarnConn
+
+    CheckConnWrite -->|"已连接"| ExecWrite["驱动执行: Easy320Controller.write_register(address, value)"]
+    CheckConnRead -->|"已连接"| ExecRead["驱动执行: Easy320Controller.read_register(address, count=1)"]
+
+    ExecWrite --> WriteResult{"写入结果判定"}
+    WriteResult -->|"成功"| WriteSuccess["界面提示: 地址 X 写入值 Y 成功 (绿色高亮)"]
+    WriteResult -->|"失败"| WriteFail["界面提示: 写入失败 (红色提示并报错)"]
+
+    ExecRead --> ReadResult{"读取结果判定"}
+    ReadResult -->|"成功"| ReadSuccess["结果展示: 更新读取结果框 (显示十进制与十六进制)"]
+    ReadResult -->|"失败"| ReadFail["界面提示: 读取寄存器失败 (红色提示)"]
+
+    WriteSuccess --> SuccessEnd["终点: 读写交互完成, 界面实时反馈"]
+    ReadSuccess --> SuccessEnd
+
+    classDef startEnd fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff;
+    classDef condition fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff;
+    classDef process fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#ffffff;
+    classDef failure fill:#ef4444,stroke:#dc2626,stroke-width:2px,color:#ffffff;
+    classDef success fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff;
+
+    class Start startEnd;
+    class SuccessEnd success;
+    class Actions condition;
+    class CheckConnWrite condition;
+    class CheckConnRead condition;
+    class WriteResult condition;
+    class ReadResult condition;
+    class UI process;
+    class Inputs process;
+    class ExecWrite process;
+    class ExecRead process;
+    class WriteSuccess success;
+    class ReadSuccess success;
+    class WarnConn failure;
+    class WriteFail failure;
+    class ReadFail failure;
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

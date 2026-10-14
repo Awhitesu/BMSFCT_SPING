@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMB 错误 67 (找不到网络名) 根因排查与解决流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0F172A;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        h1 {
+            color: #38BDF8;
+            margin-bottom: 8px;
+        }
+        p {
+            color: #94A3B8;
+            margin-bottom: 24px;
+        }
+        .mermaid-container {
+            background-color: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            max-width: 95%;
+            width: 900px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 SMB 错误 67 (找不到网络名) 诊断与恢复流程</h1>
+    <p>精准区分网络层连通与 SMB 共享名不存在的边界判定</p>
+
+    <div class="mermaid-container">
+        <pre class="mermaid">
+graph TD
+    Start["发起挂载: net use Z: \\10.140.213.182\GX_APP"] --> ProbeNetwork["网络连通性探测 (Port 445 / Port 22)"]
+    ProbeNetwork --> CheckPort{"Port 445 是否通畅"}
+    CheckPort -- "不通" --> ErrNet["网络离线或防火墙拦截"]
+    CheckPort -- "通 (当前状态: True)" --> ProbeShare["SMB 服务响应测试"]
+    ProbeShare --> CheckShare{"共享名 GX_APP 是否在机台发布"}
+    CheckShare -- "未发布/不存在 (系统错误 67)" --> FixShare["在机台端执行发布"]
+    FixShare --> OptionA["方案 1: 在机台端打开互联工具点击【一键配置并发布本机为机台】"]
+    FixShare --> OptionB["方案 2: 机台管理员 PowerShell 执行 New-SmbShare 创建 GX_APP 共享"]
+    OptionA --> SuccessEnd["开发端重新点击【一键连接并保活】，成功挂载 Z: 盘"]
+    OptionB --> SuccessEnd
+
+    classDef startEnd fill:#8B5CF6,stroke:#7C3AED,color:#FFFFFF,font-weight:bold;
+    classDef process fill:#3B82F6,stroke:#2563EB,color:#FFFFFF;
+    classDef condition fill:#F59E0B,stroke:#D97706,color:#FFFFFF,font-weight:bold;
+    classDef success fill:#10B981,stroke:#059669,color:#FFFFFF,font-weight:bold;
+    classDef error fill:#EF4444,stroke:#DC2626,color:#FFFFFF,font-weight:bold;
+
+    class Start startEnd;
+    class ProbeNetwork process;
+    class CheckPort condition;
+    class ErrNet error;
+    class ProbeShare process;
+    class CheckShare condition;
+    class FixShare process;
+    class OptionA process;
+    class OptionB process;
+    class SuccessEnd success;
+        </pre>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>烧录后防呆留痕异常自愈与状态恢复闭环流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0b1120;
+            color: #e5e7eb;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+        }
+        h1 {
+            color: #38bdf8;
+            font-size: 22px;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        .subtitle {
+            text-align: center;
+            color: #94a3b8;
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+        .container {
+            background-color: #151e2e;
+            border: 1px solid #1f2937;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .mermaid {
+            display: flex;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>烧录后防呆留痕异常自愈与状态恢复业务流程图</h1>
+    <div class="subtitle">根因剖析: 补全 time 模块缺失 | 防御性 try...finally 确保 operation_finished 释放 UI 锁定</div>
+    <div class="container">
+        <div class="mermaid">
+graph TD
+    Start["执行 CH1 烧录完成 (Pass/Error)"] --> Step1["获取硬件校验和 (get_checksum)"]
+    Step1 --> Step2["拉取底层工序日志 (get_recent_log)"]
+    Step2 --> BugCheck{"devices/opteeq_sg400.py 存在 import time?"}
+    BugCheck -- "此前缺陷: 缺失" --> NameErr["抛出 NameError: name 'time' is not defined"]
+    NameErr --> Freeze["调试器中断暂停 / 界面 _running 锁死无法解锁"]
+    
+    BugCheck -- "修复闭环: 补全 import time" --> LogSuccess["安全生成临时日志路径并提取 Vcc 状态"]
+    LogSuccess --> Step3["执行 record_burn_event 留痕与报告生成"]
+    Step3 --> TryFinally["try...finally 强制保障"]
+    TryFinally --> EmitFinished["发射 operation_finished 信号"]
+    EmitFinished --> ResetRunning["恢复 _running=False, 解锁【执行烧录】按钮"]
+    ResetRunning --> UpdateUI["更新比对结论与状态胶囊 (绝不暂停/卡死)"]
+
+    classDef startEnd fill:#7c3aed,stroke:#a78bfa,stroke-width:2px,color:#ffffff;
+    classDef process fill:#2563eb,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef decision fill:#d97706,stroke:#fbbf24,stroke-width:2px,color:#ffffff;
+    classDef failure fill:#dc2626,stroke:#f87171,stroke-width:2px,color:#ffffff;
+    classDef success fill:#059669,stroke:#34d399,stroke-width:2px,color:#ffffff;
+
+    class Start startEnd;
+    class Step1,Step2,Step3,TryFinally process;
+    class BugCheck decision;
+    class NameErr,Freeze failure;
+    class LogSuccess,EmitFinished,ResetRunning,UpdateUI success;
+        </div>
+    </div>
+</body>
+</html>

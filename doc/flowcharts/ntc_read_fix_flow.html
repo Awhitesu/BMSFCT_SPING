@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>NTC读取修正判定业务流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+    <style>
+        body {
+            background-color: #0b0c10;
+            color: #c5c6c7;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #66fcf1;
+            margin-bottom: 5px;
+        }
+        .desc {
+            color: #8c8c8c;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        #canvas {
+            background-color: #1f2833;
+            border: 2px solid #45f3ff;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 4px 15px rgba(0, 255, 243, 0.2);
+            width: 90%;
+            max-width: 900px;
+            display: flex;
+            justify-content: center;
+        }
+        .legend {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            font-size: 13px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            border-radius: 3px;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>NTC读取修正判定业务流程图</h1>
+    <div class="desc">此图展示了在 NTC 读取完成后，基于 TARGET、TOL1、TOL2 参数实现的第一范围直接合格、第二范围自动修复及超出范围保持实际值的业务逻辑。</div>
+    
+    <div id="canvas">
+        <pre class="mermaid">
+graph TD
+    classDef start_end fill:#855CF8,stroke:#333,stroke-width:2px,color:#fff;
+    classDef normal fill:#3B82F6,stroke:#333,stroke-width:2px,color:#fff;
+    classDef condition fill:#F59E0B,stroke:#333,stroke-width:2px,color:#fff;
+    classDef success fill:#10B981,stroke:#333,stroke-width:2px,color:#fff;
+    classDef failed fill:#EF4444,stroke:#333,stroke-width:2px,color:#fff;
+
+    Start["开始处理 NTC 读取结果"]
+    CheckSuccess["NTC 帧读取是否成功?"]
+    ParseParams["解析 ARGS 参数: TARGET, TOL1, TOL2"]
+    CheckHasConfig["是否配置了完整的修复参数 (TARGET, TOL1, TOL2)?"]
+    CalcDiff["计算绝对偏差 diff = abs(actual_value - TARGET)"]
+    CheckTol1["绝对偏差是否在第一范围之内? (diff <= TOL1)"]
+    CheckTol2["绝对偏差是否在第二范围之内? (diff <= TOL2)"]
+    KeepActual["保留实际读取的值作为结果"]
+    FixToTarget["修正结果值为 TARGET 目标值"]
+    CheckDiffAmbient["是否开启了环境温差计算? (DIFF_AMBIENT == 1)"]
+    CalcAmbientDiff["温差结果 = 实际值 - 环境温度"]
+    End["输出结果并结束"]
+
+    Start --> CheckSuccess
+    CheckSuccess -- "否" --> End
+    CheckSuccess -- "是" --> ParseParams
+    ParseParams --> CheckHasConfig
+    CheckHasConfig -- "是" --> CalcDiff
+    CheckHasConfig -- "否" --> CheckDiffAmbient
+    CalcDiff --> CheckTol1
+    CheckTol1 -- "是" --> KeepActual
+    CheckTol1 -- "否" --> CheckTol2
+    CheckTol2 -- "是" --> FixToTarget
+    CheckTol2 -- "否" --> KeepActual
+    CheckDiffAmbient -- "是" --> CalcAmbientDiff
+    CheckDiffAmbient -- "否" --> End
+    KeepActual --> End
+    FixToTarget --> End
+    CalcAmbientDiff --> End
+
+    class Start start_end;
+    class End start_end;
+    class ParseParams normal;
+    class CalcDiff normal;
+    class CalcAmbientDiff normal;
+    class KeepActual normal;
+    class CheckSuccess condition;
+    class CheckHasConfig condition;
+    class CheckTol1 condition;
+    class CheckTol2 condition;
+    class CheckDiffAmbient condition;
+    class FixToTarget success;
+        </pre>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="legend-color" style="background: #855CF8;"></div> 起点/终点 (紫色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #3B82F6;"></div> 常规执行 (蓝色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #F59E0B;"></div> 条件判断 (黄色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #10B981;"></div> 成功/修正 (绿色)</div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QComboBox 下拉菜单背景与文字对比度修复流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0F172A;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        h1 {
+            color: #38BDF8;
+            margin-bottom: 8px;
+        }
+        p {
+            color: #94A3B8;
+            margin-bottom: 24px;
+        }
+        .mermaid-container {
+            background-color: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            max-width: 95%;
+            width: 900px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎨 双模一体化机台互联工具 QComboBox 下拉菜单样式修复</h1>
+    <p>为 QComboBox 下拉弹窗视图 (QAbstractItemView) 与列表项明确指定暗色背景与文字高亮对比样式</p>
+
+    <div class="mermaid-container">
+        <pre class="mermaid">
+graph TD
+    Start["用户点击本机 IP 或机台下拉框"] --> TriggerDropdown["触发 QComboBox 下拉弹出视图"]
+    TriggerDropdown --> CheckStyle{"是否显式定义 QAbstractItemView 样式"}
+    CheckStyle -- "未定义(当前现状)" --> NativeWhite["系统默认回退为浅色/白色底色"]
+    NativeWhite --> InvisibleText["全局 QWidget 强制文字为白色(#F8FAFC)，导致白底白字无法看清"]
+    CheckStyle -- "已定义(修复方案)" --> ApplyDarkPopup["应用 QComboBox QAbstractItemView 样式"]
+    ApplyDarkPopup --> SetBgColor["设置下拉背景为暗色深蓝(#0F172A)与边框(#334155)"]
+    SetBgColor --> SetItemHover["设置列表项高度、内边距与 Hover/Selected 状态蓝底高亮(#0284C7)"]
+    SetItemHover --> RenderSuccess["下拉清晰呈现 IP / 机台列表，内容一目了然"]
+
+    classDef startEnd fill:#8B5CF6,stroke:#7C3AED,color:#FFFFFF,font-weight:bold;
+    classDef process fill:#3B82F6,stroke:#2563EB,color:#FFFFFF;
+    classDef condition fill:#F59E0B,stroke:#D97706,color:#FFFFFF,font-weight:bold;
+    classDef success fill:#10B981,stroke:#059669,color:#FFFFFF,font-weight:bold;
+    classDef error fill:#EF4444,stroke:#DC2626,color:#FFFFFF,font-weight:bold;
+
+    class Start startEnd;
+    class TriggerDropdown process;
+    class CheckStyle condition;
+    class NativeWhite error;
+    class InvisibleText error;
+    class ApplyDarkPopup process;
+    class SetBgColor process;
+    class SetItemHover process;
+    class RenderSuccess success;
+        </pre>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true
+            }
+        });
+    </script>
+</body>
+</html>

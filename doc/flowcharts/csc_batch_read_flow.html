@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>CSC批量读取流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CSC批量读取优化业务流程</h1>
+        <div class="mermaid">
+            graph TD
+                Start["开始工步"]
+                ResetInit["物理断电复位并下发节点配置"]
+                NodeConfigCheck{"节点配置是否有成功响应?"}
+                ReadLoop["物理读取所有电芯(192个)"]
+                FixAdjacent["进行相邻电芯5-0异常修正"]
+                CheckPass{"最终判定是否全部合格?"}
+                FakeMode{"是否开启Fake作弊模式?"}
+                Compensate["进行随机补偿"]
+                AttemptFailed["本轮尝试失败"]
+                AttemptSuccess["本轮尝试成功"]
+                RetryLimit{"重试次数已达上限?"}
+                End["结束工步"]
+
+                Start --> ResetInit
+                ResetInit --> NodeConfigCheck
+                NodeConfigCheck -- "是" --> ReadLoop
+                NodeConfigCheck -- "否" --> RetryLimit
+                ReadLoop --> FixAdjacent
+                FixAdjacent --> CheckPass
+                CheckPass -- "是" --> AttemptSuccess
+                CheckPass -- "否" --> FakeMode
+                FakeMode -- "是" --> Compensate
+                Compensate --> AttemptSuccess
+                FakeMode -- "否" --> RetryLimit
+                RetryLimit -- "否" --> ResetInit
+                RetryLimit -- "是" --> AttemptFailed
+                AttemptSuccess --> End
+                AttemptFailed --> End
+
+                classDef purple fill:#D6C4EC,stroke:#7030A0,stroke-width:2px;
+                classDef yellow fill:#FFF2CC,stroke:#D6B656,stroke-width:2px;
+                classDef blue fill:#DAE8FC,stroke:#6C8EBF,stroke-width:2px;
+                classDef red fill:#F8CECC,stroke:#B85450,stroke-width:2px;
+                classDef green fill:#D5E8D4,stroke:#82B366,stroke-width:2px;
+
+                class Start,End purple;
+                class NodeConfigCheck,CheckPass,FakeMode,RetryLimit yellow;
+                class ResetInit,ReadLoop,FixAdjacent,Compensate blue;
+                class AttemptFailed red;
+                class AttemptSuccess green;
+        </div>
+    </div>
+</body>
+</html>

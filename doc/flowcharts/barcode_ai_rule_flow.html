@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>配方条码关联与 AI 规则智能检查流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #1e1e2e;
+            color: #cdd6f4;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            color: #89b4fa;
+            text-align: center;
+        }
+        .mermaid {
+            background: #181825;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <h1>配方关联 SN 条码与 AI 规则智能生成/检查逻辑流程图</h1>
+    <div class="mermaid">
+    graph TD
+        Start["["在配方编辑页 (ConfigTab) 配置条码规则"]"] --> InputSample["["输入示例 SN 条码 (例: SCUx03XP010010B126091)"]"]
+        
+        InputSample --> ClickAIRule["["点击 🤖 AI 智能推导规则 按钮"]"]
+        ClickAIRule --> AnalyzePattern["["AI 智能分析引擎: 提取固定前缀、字符集范围、正则边界"]"]
+        AnalyzePattern --> AutoFillRegex["["自动生成并填充标准正则规则 (例: ^SCUx[A-Z0-9]{19}$)"]"]
+        
+        AutoFillRegex --> TestMatch["["点击 🧪 测试匹配 按钮验证规则正确性"]"]
+        TestMatch --> SaveRecipe["["保存配方 (将 master_sn_regex 持久化写入 JSON)"]"]
+        
+        SaveRecipe --> SwitchOverview["["主界面 (OverviewTab) 加载配方并同步条码规则"]"]
+        SwitchOverview --> ScanBarcode["["扫码枪/手动输入 SN 条码"]"]
+        
+        ScanBarcode --> ValidateRegex{["SN 是否匹配当前配方 AI 条码规则?"]}
+        
+        ValidateRegex -- "匹配 (PASS)" --> AllowTest["["绿框高亮提示匹配成功，允许启动测试"]"]
+        ValidateRegex -- "不匹配 (FAIL)" --> BlockTest["["红框告警 ❌ 条码不符合配方 AI 规则，阻断测试"]"]
+
+        classDef startEnd fill:#cba6f7,stroke:#94e2d5,stroke-width:2px,color:#11111b;
+        classDef condition fill:#f9e2af,stroke:#fab387,stroke-width:2px,color:#11111b;
+        classDef process fill:#89b4fa,stroke:#b4befe,stroke-width:2px,color:#11111b;
+        classDef alert fill:#f38ba8,stroke:#eba0ac,stroke-width:2px,color:#11111b;
+
+        class Start,AllowTest startEnd;
+        class ValidateRegex condition;
+        class InputSample,ClickAIRule,AnalyzePattern,AutoFillRegex,TestMatch,SaveRecipe,SwitchOverview,ScanBarcode process;
+        class BlockTest alert;
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

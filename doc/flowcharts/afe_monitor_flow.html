@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AFE 供电电源监控业务逻辑流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+    <style>
+        body {
+            background-color: #121214;
+            color: #e1e1e6;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #4ecca3;
+            margin-bottom: 20px;
+        }
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            background-color: #1a1a1e;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            border: 1px solid #2e2e38;
+        }
+        .mermaid {
+            background-color: #1a1a1e;
+            padding: 10px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>AFE 供电电源监控业务逻辑流程图</h1>
+    <div class="container">
+        <pre class="mermaid">
+flowchart TD
+    Start["开始：启动 AFE 供电电源监控线程"] --> Loop["循环开始：每隔 1.5 秒轮询三台 AFE 电源"]
+    Loop --> CheckP1{"判断 1# AFE 是否已联机"}
+    
+    CheckP1 -- "否" --> ConnectP1["尝试连接 1# AFE 电源"]
+    ConnectP1 --> VerifyP1{"连接是否成功"}
+    VerifyP1 -- "是" --> ReadP1["读取 1# AFE 电压、电流和输出状态"]
+    VerifyP1 -- "否" --> ErrP1["将 1# AFE 标记为离线，电压电流记为 -1"]
+    
+    CheckP1 -- "是" --> ReadP1
+    
+    ReadP1 --> CheckP2{"判断 2# AFE 是否已联机"}
+    ErrP1 --> CheckP2
+    
+    CheckP2 -- "否" --> ConnectP2["尝试连接 2# AFE 电源"]
+    ConnectP2 --> VerifyP2{"连接是否成功"}
+    VerifyP2 -- "是" --> ReadP2["读取 2# AFE 电压、电流和输出状态"]
+    VerifyP2 -- "否" --> ErrP2["将 2# AFE 标记为离线，电压电流记为 -1"]
+    
+    CheckP2 -- "是" --> ReadP2
+    
+    ReadP2 --> CheckP3{"判断 3# AFE 是否已联机"}
+    ErrP2 --> CheckP3
+    
+    CheckP3 -- "否" --> ConnectP3["尝试连接 3# AFE 电源"]
+    ConnectP3 --> VerifyP3{"连接是否成功"}
+    VerifyP3 -- "是" --> ReadP3["读取 3# AFE 电压、电流和输出状态"]
+    VerifyP3 -- "否" --> ErrP3["将 3# AFE 标记为离线，电压电流记为 -1"]
+    
+    CheckP3 -- "是" --> ReadP3
+    
+    ReadP3 --> EmitSignal["通过 Qt 信号 data_updated 发送三台电源的最新状态数据"]
+    ErrP3 --> EmitSignal
+    
+    EmitSignal --> UIUpdate["UI 接收信号，刷新底部面板 AFE 监控数据"]
+    UIUpdate --> CheckStop{"判断监控是否需要停止"}
+    
+    CheckStop -- "否" --> Sleep["等待 1.5 秒"]
+    Sleep --> Loop
+    
+    CheckStop -- "是" --> End["结束：停止线程，清理连接"]
+
+    %% 集中样式声明
+    classDef purple fill:#8a2be2,stroke:#333,stroke-width:2px,color:#fff;
+    classDef yellow fill:#fff7c2,stroke:#333,stroke-width:2px,color:#000;
+    classDef blue fill:#d2e5ff,stroke:#333,stroke-width:2px,color:#000;
+    classDef red fill:#ffc2c2,stroke:#333,stroke-width:2px,color:#000;
+    classDef green fill:#c2ffd2,stroke:#333,stroke-width:2px,color:#000;
+
+    %% 样式绑定
+    class Start,End purple;
+    class CheckP1,VerifyP1,CheckP2,VerifyP2,CheckP3,VerifyP3,CheckStop yellow;
+    class Loop,ReadP1,ReadP2,ReadP3,EmitSignal,Sleep blue;
+    class ErrP1,ErrP2,ErrP3 red;
+    class ConnectP1,ConnectP2,ConnectP3,UIUpdate green;
+        </pre>
+    </div>
+</body>
+</html>

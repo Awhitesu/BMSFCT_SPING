@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>状态栏工业级全等高效果交互预览</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 30px;
+            background-color: #0B1120;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+        }
+        h2 {
+            font-size: 18px;
+            color: #38BDF8;
+            margin-bottom: 8px;
+        }
+        p {
+            color: #94A3B8;
+            font-size: 13px;
+            margin-top: 0;
+            margin-bottom: 16px;
+        }
+        .stats-bar {
+            background-color: #1A1A2E;
+            border: 1px solid #2D2D4A;
+            border-radius: 8px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+        }
+        /* 统一 56px 等高卡片规范 */
+        .kpi-card {
+            height: 56px;
+            min-width: 105px;
+            background-color: #16213E;
+            border: 1px solid #2D3748;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            box-sizing: border-box;
+            padding: 4px 8px;
+        }
+        .kpi-title {
+            color: #94A3B8;
+            font-size: 11px;
+            font-weight: 500;
+        }
+        .kpi-value {
+            font-size: 20px;
+            font-weight: bold;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin-top: 1px;
+        }
+        .val-total { color: #00E5FF; text-shadow: 0 0 10px rgba(0, 229, 255, 0.3); }
+        .val-pass { color: #00FF66; text-shadow: 0 0 10px rgba(0, 255, 102, 0.3); }
+        .val-fail { color: #FF3366; text-shadow: 0 0 10px rgba(255, 51, 102, 0.3); }
+        .val-rate { color: #FFD700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
+
+        /* 清零按钮 (等高 56px) */
+        .btn-reset {
+            height: 56px;
+            min-width: 110px;
+            background-color: #241D35;
+            color: #FFAA33;
+            border: 1px solid #FF9900;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+        }
+        .btn-reset:hover {
+            background-color: #33264A;
+            border-color: #FFB84D;
+            color: #FFCC66;
+            transform: translateY(-1px);
+        }
+        .btn-reset.disabled {
+            background-color: #1A1A28;
+            color: #555566;
+            border: 1px dashed #3D3D4E;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* APP 刷写面板 (等高 56px) */
+        .flash-panel {
+            height: 56px;
+            flex: 1;
+            min-width: 250px;
+            background-color: #16213E;
+            border: 1px solid #2D3748;
+            border-radius: 6px;
+            padding: 6px 12px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .flash-line1 {
+            color: #38BDF8;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .flash-line2 {
+            color: #94A3B8;
+            font-size: 10px;
+        }
+        .progress-bar-bg {
+            height: 5px;
+            background-color: #0F172A;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            background-color: #00E5FF;
+            transition: width 0.3s;
+        }
+
+        /* 用户与测试次数卡片 (等高 56px) */
+        .user-card {
+            height: 56px;
+            min-width: 125px;
+            background-color: #16213E;
+            color: #00FFCC;
+            border: 1px solid #2D3748;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-sizing: border-box;
+        }
+        .user-card:hover {
+            border-color: #00FFCC;
+        }
+        .counter-card {
+            height: 56px;
+            min-width: 95px;
+            background-color: #16213E;
+            color: #FFD700;
+            border: 1px solid #555533;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+    <h2>状态栏工业标准全等高 (56px) 界面效果预览</h2>
+    <p>全部 8 个组件严格等高 56px，上下水平线 100% 绝对齐平，彻底消除高低错落感</p>
+
+    <!-- 管理员模式 -->
+    <div style="font-size: 12px; color: #38BDF8; margin-bottom: 6px;">【场景一：超级管理员 ADMIN 登录状态（数据清零按钮激活可用）】</div>
+    <div class="stats-bar">
+        <div class="kpi-card">
+            <span class="kpi-title">生产总数</span>
+            <span class="kpi-value val-total" id="v_total">128</span>
+        </div>
+        <div class="kpi-card">
+            <span class="kpi-title">合格数</span>
+            <span class="kpi-value val-pass" id="v_pass">124</span>
+        </div>
+        <div class="kpi-card">
+            <span class="kpi-title">不合格</span>
+            <span class="kpi-value val-fail" id="v_fail">4</span>
+        </div>
+        <div class="kpi-card">
+            <span class="kpi-title">合格率</span>
+            <span class="kpi-value val-rate" id="v_rate">96.88%</span>
+        </div>
+        <div class="btn-reset" onclick="doReset()">
+            <span>🔄 数据清零</span>
+            <span style="font-size: 10px; opacity: 0.8;">(仅管理员)</span>
+        </div>
+        <div class="flash-panel">
+            <div class="flash-line1">APP刷写: 待启动</div>
+            <div class="flash-line2">Record: -- &nbsp;|&nbsp; PCAN: 等待刷写监听</div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" style="width: 35%;"></div>
+            </div>
+        </div>
+        <div class="user-card">
+            <span>👤 ADMIN</span>
+            <span style="font-size: 10px; color: #64748B;">(超级管理员)</span>
+        </div>
+        <div class="counter-card">
+            <span>⚡ 测试次数</span>
+            <span style="font-size: 11px;">28 次</span>
+        </div>
+    </div>
+
+    <!-- 操作员模式 -->
+    <div style="font-size: 12px; color: #94A3B8; margin-bottom: 6px;">【场景二：普通操作员 Operator 登录状态（数据清零自动置灰禁用）】</div>
+    <div class="stats-bar">
+        <div class="kpi-card">
+            <span class="kpi-title">生产总数</span>
+            <span class="kpi-value val-total">128</span>
+        </div>
+        <div class="kpi-card">
+            <span class="kpi-title">合格数</span>
+            <span class="kpi-value val-pass">124</span>
+        </div>
+        <div class="kpi-card">
+            <span class="kpi-title">不合格</span>
+            <span class="kpi-value val-fail">4</span>
+        </div>
+        <div class="kpi-card">
+            <span class="kpi-title">合格率</span>
+            <span class="kpi-value val-rate">96.88%</span>
+        </div>
+        <div class="btn-reset disabled" title="需要管理员权限执行统计清零">
+            <span>🔄 数据清零</span>
+            <span style="font-size: 10px;">(无权操作)</span>
+        </div>
+        <div class="flash-panel">
+            <div class="flash-line1">APP刷写: 待启动</div>
+            <div class="flash-line2">Record: -- &nbsp;|&nbsp; PCAN: 等待刷写监听</div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" style="width: 0%;"></div>
+            </div>
+        </div>
+        <div class="user-card" style="color: #FFC107;">
+            <span>👤 OP001</span>
+            <span style="font-size: 10px; color: #64748B;">(操作员)</span>
+        </div>
+        <div class="counter-card">
+            <span>⚡ 测试次数</span>
+            <span style="font-size: 11px;">28 次</span>
+        </div>
+    </div>
+
+    <script>
+        function doReset() {
+            if (confirm("【管理员确认】是否确认清空当前生产统计数据？")) {
+                document.getElementById('v_total').innerText = '0';
+                document.getElementById('v_pass').innerText = '0';
+                document.getElementById('v_fail').innerText = '0';
+                document.getElementById('v_rate').innerText = '0.00%';
+                alert("生产统计数据已成功清零！");
+            }
+        }
+    </script>
+</body>
+</html>

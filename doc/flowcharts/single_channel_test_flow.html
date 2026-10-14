@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>单通道测试序列可编辑系统 - 业务逻辑流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #121212;
+            color: #E0E0E0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #00E5FF;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #8888AA;
+            margin-bottom: 25px;
+            font-size: 14px;
+        }
+        .mermaid-container {
+            background-color: #1E1E2F;
+            border: 1px solid #3E3E5C;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            width: 90%;
+            max-width: 1200px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>单通道测试序列与判定详情 - 核心业务流程图</h1>
+    <div class="subtitle">GX_APP BMS 老化与单通道测试系统物理归档</div>
+    <div class="mermaid-container">
+        <pre class="mermaid">
+graph TD
+    classDef startEnd fill:#8E24AA,stroke:#FFF,color:#FFF,stroke-width:2px;
+    classDef condition fill:#FBC02D,stroke:#333,color:#000,stroke-width:2px;
+    classDef process fill:#1E88E5,stroke:#FFF,color:#FFF,stroke-width:2px;
+    classDef failure fill:#E53935,stroke:#FFF,color:#FFF,stroke-width:2px;
+    classDef success fill:#4CAF50,stroke:#FFF,color:#FFF,stroke-width:2px;
+
+    Start["单通道测试上位机启动"] :::startEnd
+    LoadRecipe["主界面直接载入/编辑测试序列 (Recipe JSON)"] :::process
+    InitUI["主界面初始化: 测试工步序列 + 判定详情面板 + 实时日志"] :::process
+    StartTest{"用户在主界面点击【开始测试】"} :::condition
+    
+    ExecStep["执行当前工步 (Step N)"] :::process
+    ReadData["实时采集单通道硬件数据 (CAN / AFE / 高压源)"] :::process
+    Evaluate["判定条件匹配 (实测值 vs 期望范围/报文)"] :::process
+    
+    CheckResult{"工步判定是否 OK?"} :::condition
+    PassNode["主界面序列表格更新: PASS (绿色高亮)<br>判定详情面板刷新对比数据"] :::success
+    FailNode["主界面序列表格更新: FAIL (红色高亮)<br>判定详情面板标记异常原因/触发自愈"] :::failure
+    
+    HasNext{"存在下一工步?"} :::condition
+    NextStep["工步索引 + 1"] :::process
+    EndTest["测试序列执行完毕, 汇总判定报告"] :::startEnd
+
+    Start --> LoadRecipe
+    LoadRecipe --> InitUI
+    InitUI --> StartTest
+    StartTest -- 点击开始 --> ExecStep
+    ExecStep --> ReadData
+    ReadData --> Evaluate
+    Evaluate --> CheckResult
+    CheckResult -- 通过 --> PassNode
+    CheckResult -- 失败 --> FailNode
+    PassNode --> HasNext
+    FailNode --> HasNext
+    HasNext -- 是 --> NextStep
+    NextStep --> ExecStep
+    HasNext -- 否 --> EndTest
+
+    class Start,EndTest startEnd;
+    class StartTest,CheckResult,HasNext condition;
+    class LoadRecipe,InitUI,ExecStep,ReadData,PassNode,FailNode,NextStep process;
+    class FailNode failure;
+    class PassNode success;
+        </pre>
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

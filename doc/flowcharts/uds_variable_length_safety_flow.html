@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UDS 响应数据变长与异常容错安全防护架构</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0B1120;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header {
+            text-align: center;
+            max-width: 900px;
+            margin-bottom: 24px;
+        }
+        h1 {
+            color: #38BDF8;
+            margin-bottom: 8px;
+            font-size: 24px;
+        }
+        p {
+            color: #94A3B8;
+            font-size: 14px;
+            margin: 4px 0;
+        }
+        .diagram-card {
+            background: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            max-width: 1100px;
+            width: 100%;
+            overflow-x: auto;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>UDS 响应数据变长、截断与填充字节四重安全防护架构</h1>
+        <p>彻底解决“返回数据长度不一样导致程序崩溃或误判”的工业现场隐患</p>
+    </div>
+
+    <div class="diagram-card">
+        <pre class="mermaid">
+flowchart TD
+    Start["收到 ECU UDS 响应原始字节流 (raw_bytes)"] --> CheckNRC{"第一道防线: 检查是否为负响应 (NRC)?"}
+
+    CheckNRC -->|"是 0x7F 开头 (长度仅3字节)"| HandleNRC["拦截并阻断数据提取: 判定为 ECU 拒绝并抛出明确错误码"]
+    HandleNRC --> FailEnd["判定为工步 FAIL (安全终止, 绝不闪退)"]
+
+    CheckNRC -->|"否 (正常 0x62 肯定响应)"| CheckOffset{"第二道防线: 响应长度是否大于起始偏移 (offset)?"}
+
+    CheckOffset -->|"否 (len <= offset)"| OffsetOverflow["安全拦截: 报错『实际长度不足，超出偏移量』"]
+    OffsetOverflow --> FailEnd
+
+    CheckOffset -->|"是 (len > offset)"| CheckDataType{"数据类型分支判断"}
+
+    CheckDataType -->|"数值计算 (CALC / FORMULA)"| CheckNumLen{"第三道防线: 剩余长度是否满足指定字节数 (len)?"}
+    CheckNumLen -->|"否 (字节不足)"| NumLenShort["严格防呆拦截: 报错『数值计算字节不足，防止残缺数据误判』"]
+    NumLenShort --> FailEnd
+    CheckNumLen -->|"是 (精确截取目标字节)"| SliceNum["按预设长度精确切片 (避免抓入尾部 0xAA/0x55 填充字节)"]
+    SliceNum --> CalcNum["执行大小端拼接与物理公式换算"]
+
+    CheckDataType -->|"字符串文本 (ASCII)"| AsciiMode{"第四道防线: 字符串提取模式"}
+    AsciiMode -->|"定长模式 (len > 0)"| SafeAsciiFixed["安全截取: min(len, 剩余长度) 避免越界"]
+    AsciiMode -->|"弹性模式 (len = 0)"| SafeAsciiFlex["截取到末尾，智能清洗 0x00 / 0xFF / 0xAA 填充字节"]
+    SafeAsciiFixed --> CleanAscii["剥离空字符与首尾空格 (strip)"]
+    SafeAsciiFlex --> CleanAscii
+
+    CalcNum --> WriteVar["将计算数值/文本安全写回全局变量池"]
+    CleanAscii --> WriteVar
+    WriteVar --> PassEnd["正常输出物理值，工步判定 PASS"]
+
+    classDef purpleStyle fill:#6B21A8,stroke:#C084FC,stroke-width:2px,color:#FFFFFF;
+    classDef yellowStyle fill:#854D0E,stroke:#FDE047,stroke-width:2px,color:#FFFFFF;
+    classDef blueStyle fill:#1E40AF,stroke:#60A5FA,stroke-width:2px,color:#FFFFFF;
+    classDef redStyle fill:#991B1B,stroke:#F87171,stroke-width:2px,color:#FFFFFF;
+    classDef greenStyle fill:#065F46,stroke:#34D399,stroke-width:2px,color:#FFFFFF;
+
+    class Start purpleStyle;
+    class CheckNRC,CheckOffset,CheckDataType,CheckNumLen,AsciiMode yellowStyle;
+    class SliceNum,CalcNum,SafeAsciiFixed,SafeAsciiFlex,CleanAscii,WriteVar blueStyle;
+    class HandleNRC,OffsetOverflow,NumLenShort,FailEnd redStyle;
+    class PassEnd greenStyle;
+        </pre>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            flowchart: {
+                curve: 'basis'
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>主界面选择测试配方下发 PLC 配方号与回读校验流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>主界面选择测试配方下发 PLC 配方号与回读校验流程</h1>
+        <p>在主界面切换或选择测试配方时，自动将配方号下发至 PLC 保持寄存器地址 0，并回读对比校验，不一致触发弹窗告警</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    Start["起点: 用户在主界面下拉框选择或切换测试配方"] --> LoadJSON["解析配方文件: 读取当前选中配方的 recipe_number (默认1)"]
+
+    LoadJSON --> CheckPLC{"检查 PLC 连接状态"}
+
+    CheckPLC -->|"未连接且重连失败"| WarnUnconnected["弹窗警告: 无法连接 PLC, 配方号下发失败"]
+    CheckPLC -->|"已连接"| WritePLC["Modbus FC06 下发: 向保持寄存器地址 0 写入 recipe_number"]
+
+    WritePLC --> CheckWrite{"写入是否成功?"}
+    CheckWrite -->|"写入失败"| WarnWriteFail["弹窗警告: 向 PLC 地址 0 写入配方号失败"]
+
+    CheckWrite -->|"写入成功"| ReadBack["Modbus FC03 回读: 读取保持寄存器地址 0 的数值"]
+
+    ReadBack --> CheckRead{"回读是否成功?"}
+    CheckRead -->|"回读无响应"| WarnReadFail["弹窗警告: 配方号已下发, 但回读地址 0 失败"]
+
+    CheckRead -->|"回读成功"| Compare{"对比校验: 回读值 == 下发配方号?"}
+
+    Compare -->|"数据不一致"| WarnMismatch["弹窗警告: PLC 配方号数据不一致 (下发值 != 回读值), 提示检查 PLC"]
+    Compare -->|"数据一致"| Success["终点: 校验通过, 记录日志, 配方序列正常展示"]
+
+    WarnUnconnected --> FailEnd["异常结束"]
+    WarnWriteFail --> FailEnd
+    WarnReadFail --> FailEnd
+    WarnMismatch --> FailEnd
+
+    classDef startEnd fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff;
+    classDef condition fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff;
+    classDef process fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#ffffff;
+    classDef failure fill:#ef4444,stroke:#dc2626,stroke-width:2px,color:#ffffff;
+    classDef success fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff;
+
+    class Start startEnd;
+    class Success success;
+    class FailEnd failure;
+    class CheckPLC condition;
+    class CheckWrite condition;
+    class CheckRead condition;
+    class Compare condition;
+    class LoadJSON process;
+    class WritePLC process;
+    class ReadBack process;
+    class WarnUnconnected failure;
+    class WarnWriteFail failure;
+    class WarnReadFail failure;
+    class WarnMismatch failure;
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

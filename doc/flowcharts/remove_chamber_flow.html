@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>移除高温老化箱功能 - 系统逻辑架构图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #121212;
+            color: #E0E0E0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #00E5FF;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #8888AA;
+            margin-bottom: 25px;
+            font-size: 14px;
+        }
+        .mermaid-container {
+            background-color: #1E1E2F;
+            border: 1px solid #3E3E5C;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            width: 90%;
+            max-width: 1200px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>移除高温老化箱功能 - 简化后的系统逻辑架构图</h1>
+    <div class="subtitle">GX_APP BMS 老化与单通道测试系统物理归档</div>
+    <div class="mermaid-container">
+        <pre class="mermaid">
+graph TD
+    classDef startEnd fill:#8E24AA,stroke:#FFF,color:#FFF,stroke-width:2px;
+    classDef condition fill:#FBC02D,stroke:#333,color:#000,stroke-width:2px;
+    classDef process fill:#1E88E5,stroke:#FFF,color:#FFF,stroke-width:2px;
+
+    Start["单通道测试上位机启动"] :::startEnd
+    InitDev["初始化硬件设备 (CAN 盒 / AFE / 模拟器 / 高压源 / 控制板)"] :::process
+    InitUI["初始化主界面 (加载精简 Tab 架构)"] :::process
+    
+    Tab1["1. 单通道测试与序列编辑 Tab"] :::process
+    Tab2["2. 工步与配方配置 Tab"] :::process
+    Tab3["3. 硬件管理中心 Tab"] :::process
+    Tab4["4. API 监控与调试 Tab"] :::process
+    Tab5["5. 单通道/硬件独立调试 Tab"] :::process
+    
+    Start --> InitDev
+    InitDev --> InitUI
+    InitUI --> Tab1
+    InitUI --> Tab2
+    InitUI --> Tab3
+    InitUI --> Tab4
+    InitUI --> Tab5
+
+    class Start startEnd;
+    class InitDev,InitUI,Tab1,Tab2,Tab3,Tab4,Tab5 process;
+        </pre>
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

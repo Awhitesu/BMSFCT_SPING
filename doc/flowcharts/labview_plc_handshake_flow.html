@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>LabVIEW 风格 PLC 开始测试保持寄存器握手流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body { background-color: #121212; color: #FFFFFF; font-family: sans-serif; padding: 20px; }
+        .mermaid { background-color: #1E1E1E; padding: 20px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h2>LabVIEW 风格 PLC 开始测试保持寄存器握手流程图</h2>
+    <div class="mermaid">
+    graph TD
+        classDef startEnd fill:#8A2BE2,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef condition fill:#FFD700,stroke:#333,stroke-width:2px,color:#000;
+        classDef process fill:#1E90FF,stroke:#fff,stroke-width:1px,color:#fff;
+        classDef success fill:#28A745,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef fail fill:#DC3545,stroke:#fff,stroke-width:2px,color:#fff;
+
+        Start["500ms 定时读取保持寄存器 1"]
+        
+        ReadVal["Modbus Read Holding Register (Address 1, Count 1)"]
+        CheckVal{"寄存器数值 == 1 ?"}
+        
+        IdleState["显示 [0]: 就绪 / 等待 PLC 触发"]
+        TriggerState["显示 [1]: 🚀 触发测试中"]
+
+        AutoReset["自动/手动写 0 复位保持寄存器 1 (Write Holding Register 1 = 0)"]
+        ExecTest["启动测试工步序列"]
+
+        Start --> ReadVal
+        ReadVal --> CheckVal
+        CheckVal -- "0 (无触发)" --> IdleState
+        CheckVal -- "1 (触发)" --> TriggerState
+        TriggerState --> ExecTest
+        ExecTest --> AutoReset
+        AutoReset --> IdleState
+
+        class Start startEnd;
+        class CheckVal condition;
+        class ReadVal,IdleState process;
+        class TriggerState,ExecTest success;
+        class AutoReset fail;
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

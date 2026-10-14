@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PLC开始与停止信号重新定义业务流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>PLC 开始与停止信号重新定义业务流程</h1>
+        <p>保持寄存器地址 1 每 500ms 轮询；值为 1 时写 0 并触发扫码/开始测试；值为 2 时写 0 并停止测试；默认保持 0</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    Start["起点: 主界面 500ms 定时器触发轮询"] --> ReadReg["FC03 读取: PLC 保持寄存器地址 1 (单个寄存器)"]
+
+    ReadReg --> CheckVal{"判断读取到的数值"}
+
+    CheckVal -->|"val == 1 (开始测试信号)"| ClearSignal1["FC06 写入: 向地址 1 写入 0 (清零复位)"]
+    CheckVal -->|"val == 2 (停止测试信号)"| ClearSignal2["FC06 写入: 向地址 1 写入 0 (清零复位)"]
+    CheckVal -->|"val == 0 (默认空闲)"| Idle["无操作, 等待下个 500ms 周期"]
+
+    ClearSignal1 --> TriggerScan["触发扫码: txt_sn 获取输入焦点并全选/清空"]
+    TriggerScan --> CheckRunning1{"当前是否处于测试中?"}
+    CheckRunning1 -->|"未在测试中"| StartTest["启动单通道测试: start_single_channel_test()"]
+    CheckRunning1 -->|"已在测试中"| IgnoreStart["忽略重复启动, 记录日志"]
+
+    ClearSignal2 --> CheckRunning2{"当前是否处于测试中?"}
+    CheckRunning2 -->|"正在测试中"| StopTest["强制停止测试: stop_single_channel_test()"]
+    CheckRunning2 -->|"未在测试中"| IgnoreStop["忽略停止, 记录日志"]
+
+    StartTest --> End["周期结束"]
+    IgnoreStart --> End
+    StopTest --> End
+    IgnoreStop --> End
+    Idle --> End
+
+    classDef startEnd fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff;
+    classDef condition fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff;
+    classDef process fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#ffffff;
+    classDef failure fill:#ef4444,stroke:#dc2626,stroke-width:2px,color:#ffffff;
+    classDef success fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff;
+
+    class Start startEnd;
+    class End success;
+    class CheckVal condition;
+    class CheckRunning1 condition;
+    class CheckRunning2 condition;
+    class ReadReg process;
+    class ClearSignal1 process;
+    class ClearSignal2 process;
+    class TriggerScan process;
+    class StartTest process;
+    class StopTest failure;
+    class IgnoreStart failure;
+    class IgnoreStop failure;
+    class Idle process;
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

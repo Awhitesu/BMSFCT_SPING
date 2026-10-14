@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>力捷丰烧录数据物理回读与源程序防呆比对闭环流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0F172A;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header {
+            text-align: center;
+            max-width: 960px;
+            margin-bottom: 24px;
+        }
+        h1 {
+            color: #38BDF8;
+            margin-bottom: 8px;
+            font-size: 24px;
+        }
+        p {
+            color: #94A3B8;
+            font-size: 14px;
+            margin: 4px 0;
+        }
+        .diagram-card {
+            background: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 32px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            max-width: 1020px;
+            width: 100%;
+            overflow-x: auto;
+        }
+        .legend {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+        }
+        .color-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>力捷丰烧录数据物理回读与源程序防呆比对闭环流程图</h1>
+        <p>在工步配置中启用单片机 Flash 物理回读与源程序地址镜像逐字节比对，彻底杜绝数据篡改与串扰异常</p>
+    </div>
+
+    <div class="diagram-card">
+        <pre class="mermaid">
+graph TD
+    classDef startEnd fill:#8B5CF6,stroke:#7C3AED,stroke-width:2px,color:#FFFFFF;
+    classDef condition fill:#F59E0B,stroke:#D97706,stroke-width:2px,color:#FFFFFF;
+    classDef normal fill:#3B82F6,stroke:#1D4ED8,stroke-width:2px,color:#FFFFFF;
+    classDef fail fill:#EF4444,stroke:#B91C1C,stroke-width:2px,color:#FFFFFF;
+    classDef success fill:#10B981,stroke:#059669,stroke-width:2px,color:#FFFFFF;
+
+    StartNode["工步弹窗红框处配置【烧录物理数据比对】"]
+    ConfigVerify["配置选项: 启用回读比对(VERIFY_DIFF) 与比对范围"]
+    SaveRecipe["保存参数到配方(PROJECT:.../VERIFY_DIFF:1)"]
+    RunStep["测试引擎执行【执行烧录工程】工步"]
+    BurnDownloader["下载器执行脱机工程烧录"]
+    CheckBurnPass["下载器返回状态是否为 Pass"]
+    BurnFail["工步判定 FAIL: 烧录硬件报错或超时"]
+    CheckVerifyEnabled["检查是否启用物理回读比对(VERIFY_DIFF)"]
+    DirectPass["未启用比对: 工步直接判定 PASS"]
+    ReadChipData["调用 programmer.read_chip 读取单片机物理 Flash 数据"]
+    GetSourceImage["解析工程提取源程序物理地址镜像数据"]
+    CompareDiff["逐字节严格比对(compare_and_diff_data)并分析Bit-Flip"]
+    ArchiveLog["双轨留痕归档: reports 报告与月度 CSV 流水账"]
+    CheckDiffCount["检测比对差异字节数(diff_count)"]
+    DiffFound["比对失败: 发现数据差异或比特翻转, 工步判定 FAIL"]
+    MatchPass["比对成功: 100% 逐字节匹配, 工步判定 PASS"]
+    EndNode["进入下一测试工步或报告输出"]
+
+    StartNode --> ConfigVerify
+    ConfigVerify --> SaveRecipe
+    SaveRecipe --> RunStep
+    RunStep --> BurnDownloader
+    BurnDownloader --> CheckBurnPass
+    CheckBurnPass -->|否 (Error/Timeout)| BurnFail
+    CheckBurnPass -->|是 (Pass)| CheckVerifyEnabled
+    CheckVerifyEnabled -->|未启用| DirectPass
+    CheckVerifyEnabled -->|已启用| ReadChipData
+    ReadChipData --> GetSourceImage
+    GetSourceImage --> CompareDiff
+    CompareDiff --> ArchiveLog
+    ArchiveLog --> CheckDiffCount
+    CheckDiffCount -->|diff > 0| DiffFound
+    CheckDiffCount -->|diff == 0| MatchPass
+    DirectPass --> EndNode
+    DiffFound --> EndNode
+    MatchPass --> EndNode
+    BurnFail --> EndNode
+
+    class StartNode,EndNode startEnd;
+    class CheckBurnPass,CheckVerifyEnabled,CheckDiffCount condition;
+    class ConfigVerify,SaveRecipe,RunStep,BurnDownloader,ReadChipData,GetSourceImage,CompareDiff,ArchiveLog normal;
+    class BurnFail,DiffFound fail;
+    class DirectPass,MatchPass success;
+        </pre>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="color-dot" style="background:#8B5CF6;"></div> 起点/终点</div>
+        <div class="legend-item"><div class="color-dot" style="background:#F59E0B;"></div> 条件分支/判定</div>
+        <div class="legend-item"><div class="color-dot" style="background:#3B82F6;"></div> 常规执行节点</div>
+        <div class="legend-item"><div class="color-dot" style="background:#EF4444;"></div> 差异/失败阻断</div>
+        <div class="legend-item"><div class="color-dot" style="background:#10B981;"></div> 校验通过/成功</div>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: false,
+                curve: 'basis'
+            }
+        });
+    </script>
+</body>
+</html>

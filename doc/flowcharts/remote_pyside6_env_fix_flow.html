@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>机台环境缺失 PySide6 依赖排查与修复流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>机台环境 PySide6 模块缺失排查与修复流程</h1>
+        <p>定位机台当前 Python 解释器环境未安装 PySide6 或版本不兼容根因并提供修复路径</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    Start["起点: 机台启动调试抛出 ModuleNotFoundError: No module named PySide6"] --> CheckInterp["审计机台环境: 检查当前 Python 解释器版本与已装库"]
+    CheckInterp --> Decision{"机台是否存在 Python 3.10-3.12 环境?"}
+    
+    Decision -->|"存在且已装 PySide6"| SwitchInterp["步骤A: VS Code 按 Ctrl+Shift+P 切换为该解释器"]
+    SwitchInterp --> VerifyA{"验证: python -c import PySide6"}
+    VerifyA -->|"导入成功"| SuccessEnd["终点: 按 F5 成功拉起程序"]
+
+    Decision -->|"不存在或当前环境为 3.14 缺失依赖"| InstallOption{"选择安装/部署方式"}
+    InstallOption -->|"环境为 Python 3.10-3.12"| PipInstall["在机台终端执行: pip install PySide6 python-can pymodbus"]
+    InstallOption -->|"环境为 Python 3.14 (无 PySide6 wheel)"| InstallPython["在机台安装 Python 3.11 并安装 requirements.txt 依赖"]
+    PipInstall --> VerifyA
+    InstallPython --> SwitchInterp
+
+    classDef startEnd fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff;
+    classDef condition fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff;
+    classDef process fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#ffffff;
+    classDef failure fill:#ef4444,stroke:#dc2626,stroke-width:2px,color:#ffffff;
+    classDef success fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff;
+
+    class Start startEnd;
+    class SuccessEnd startEnd;
+    class Decision condition;
+    class VerifyA condition;
+    class InstallOption condition;
+    class CheckInterp process;
+    class SwitchInterp process;
+    class PipInstall process;
+    class InstallPython process;
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>PyInstaller 独立免环境程序打包流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body { background-color: #121212; color: #FFFFFF; font-family: sans-serif; padding: 20px; }
+        .mermaid { background-color: #1E1E1E; padding: 20px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h2>PyInstaller 独立免环境程序打包流程图</h2>
+    <div class="mermaid">
+    graph TD
+        classDef startEnd fill:#8A2BE2,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef condition fill:#FFD700,stroke:#333,stroke-width:2px,color:#000;
+        classDef process fill:#1E90FF,stroke:#fff,stroke-width:1px,color:#fff;
+        classDef success fill:#28A745,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef fail fill:#DC3545,stroke:#fff,stroke-width:2px,color:#fff;
+
+        Start["发起应用程序打包指令"]
+        
+        subgraph PyInstallerBuild["PyInstaller 独立打包构建 (AgingTest_BMS.spec)"]
+            CheckSpec["载入 spec 脚本: 包含 icon, UI图片, 预设配方及配置文件"]
+            CompileEXE["打包 Python 3.11 解释器与依赖库生成 dist/AgingTest_BMS.exe"]
+        end
+
+        subgraph PortablePkg["便携压缩包生成"]
+            CompressZip["压缩打包为 dist/AgingTest_BMS.zip 便携绿色包"]
+        end
+
+        CheckSuccess{"构建是否成功且零错误?"}
+        DeployReady["产物就绪: 可复制至无环境电脑直接双击运行"]
+        BuildFail["构建失败，排查错误原因"]
+
+        Start --> CheckSpec
+        CheckSpec --> CompileEXE
+        CompileEXE --> CompressZip
+        CompressZip --> CheckSuccess
+        CheckSuccess -- "是" --> DeployReady
+        CheckSuccess -- "否" --> BuildFail
+
+        class Start startEnd;
+        class CheckSuccess condition;
+        class CheckSpec,CompileEXE,CompressZip process;
+        class DeployReady success;
+        class BuildFail fail;
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

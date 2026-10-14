@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本地运行机台程序驱动远程硬件架构决策流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>本地电脑运行机台程序与驱动机台硬件决策流程</h1>
+        <p>分析共享盘挂载下本地 Python 进程与机台物理硬件 (COM / PCAN-FD / PLC) 的跨机驱动可行性与最佳实施路径</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    Start["起点: 本地电脑已挂载机台代码盘(Z盘)"] --> CheckNature["硬件调用本质审计: 挂载仅共享文件系统, 不共享物理硬件"]
+    CheckNature --> ChooseArch{"选择执行架构"}
+
+    ChooseArch -->|"架构A: 本地直接运行 Python 进程"| LocalRun["本地 Python 进程执行"]
+    LocalRun --> DevAudit{"硬件访问路由"}
+    
+    DevAudit -->|"PLC Easy320 (Modbus TCP)"| PlcDirect["网络直连: 若局域网IP互通, 本地直接连接机台PLC IP"]
+    PlcDirect --> PlcSuccess["PLC 驱动成功"]
+
+    DevAudit -->|"物理串口 (COM1 / COM92)"| SerialShare["机台需安装串口网络透传服务 (如 USR-VCOM / com0com)"]
+    SerialShare --> SerialMap["本地安装虚拟串口驱动映射为虚拟 COM 口"]
+    SerialMap --> SerialRisk["存在网络波动、延迟及配置繁琐风险"]
+
+    DevAudit -->|"USB PCAN-FD 卡"| PcanCheck{"PCAN-Basic 物理依赖"}
+    PcanCheck -->|"底层驱动限制"| PcanFail["强依赖物理 USB 与本地 PCANBasic.dll, 无法直接网络透传"]
+
+    ChooseArch -->|"架构B (推荐): 远程解释器 / Remote-SSH"| RemoteExec["代码在本地编辑, Python 进程在机台执行"]
+    RemoteExec --> NativeHardware["100% 原生直接访问机台本地所有硬件"]
+    NativeHardware --> GuiOption{"界面展示与调试方式"}
+    GuiOption -->|"本地调试代码与断点"| IdeRemote["VS Code / IDE 远程连接机台运行调试"]
+    GuiOption -->|"查看完整 PySide6 GUI 界面"| RdpView["配合 Windows 自带远程桌面 (RDP) 同屏监控"]
+    IdeRemote --> SuccessEnd["终点: 零硬件改动实现本地写码/调试驱动机台硬件"]
+    RdpView --> SuccessEnd
+
+    classDef startEnd fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff;
+    classDef condition fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff;
+    classDef process fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#ffffff;
+    classDef failure fill:#ef4444,stroke:#dc2626,stroke-width:2px,color:#ffffff;
+    classDef success fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff;
+
+    class Start startEnd;
+    class SuccessEnd startEnd;
+    class ChooseArch condition;
+    class DevAudit condition;
+    class PcanCheck condition;
+    class GuiOption condition;
+    class CheckNature process;
+    class LocalRun process;
+    class PlcDirect process;
+    class SerialShare process;
+    class SerialMap process;
+    class RemoteExec process;
+    class NativeHardware process;
+    class IdeRemote process;
+    class RdpView process;
+    class PcanFail failure;
+    class SerialRisk failure;
+    class PlcSuccess success;
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

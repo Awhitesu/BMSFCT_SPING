@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>PLC 气缸通道名称标注流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body { background-color: #121212; color: #FFFFFF; font-family: sans-serif; padding: 20px; }
+        .mermaid { background-color: #1E1E1E; padding: 20px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h2>PLC 气缸通道名称标注流程图</h2>
+    <div class="mermaid">
+    graph TD
+        classDef startEnd fill:#8A2BE2,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef condition fill:#FFD700,stroke:#333,stroke-width:2px,color:#000;
+        classDef process fill:#1E90FF,stroke:#fff,stroke-width:1px,color:#fff;
+        classDef success fill:#28A745,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef fail fill:#DC3545,stroke:#fff,stroke-width:2px,color:#fff;
+
+        Start["PLC通道气缸名称标注需求"]
+        
+        subgraph Mapping["建立 PLC / Easy320 通道映射表"]
+            Map1["CH-01 / CH-1 -> 平推气缸"]
+            Map2["CH-02 / CH-2 -> 气缸抬起"]
+            Map3["CH-03 / CH-3 -> 气缸下压"]
+        end
+        
+        subgraph UI_Update["UI 界面标注渲染"]
+            UI_EasyTab["Easy320 调试 Tab: 按钮显示 CH-01 (平推气缸), CH-02 (气缸抬起), CH-03 (气缸下压)"]
+            UI_StepDlg["步骤编辑弹窗: 通道复选框显示 CH-1 (平推气缸), CH-2 (气缸抬起), CH-3 (气缸下压)"]
+        end
+        
+        subgraph Engine_Log["引擎与日志映射"]
+            EngineLog["执行测试步骤日志输出包含气缸功能中文备注"]
+        end
+        
+        End["完成标注"]
+
+        Start --> Map1
+        Start --> Map2
+        Start --> Map3
+        Map1 --> UI_EasyTab
+        Map2 --> UI_EasyTab
+        Map3 --> UI_EasyTab
+        Map1 --> UI_StepDlg
+        Map2 --> UI_StepDlg
+        Map3 --> UI_StepDlg
+        UI_EasyTab --> EngineLog
+        UI_StepDlg --> EngineLog
+        EngineLog --> End
+
+        class Start,End startEnd;
+        class Map1,Map2,Map3 process;
+        class UI_EasyTab,UI_StepDlg success;
+        class EngineLog process;
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

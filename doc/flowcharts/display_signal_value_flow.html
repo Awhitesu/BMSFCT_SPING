@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>保持寄存器1数值直接显示流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body { background-color: #121212; color: #FFFFFF; font-family: sans-serif; padding: 20px; }
+        .mermaid { background-color: #1E1E1E; padding: 20px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h2>保持寄存器1数值直接显示流程图</h2>
+    <div class="mermaid">
+    graph TD
+        classDef startEnd fill:#8A2BE2,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef condition fill:#FFD700,stroke:#333,stroke-width:2px,color:#000;
+        classDef process fill:#1E90FF,stroke:#fff,stroke-width:1px,color:#fff;
+        classDef success fill:#28A745,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef fail fill:#DC3545,stroke:#fff,stroke-width:2px,color:#fff;
+
+        Start["500ms 定时读取保持寄存器 1"]
+        ReadReg["调用 read_register(address=1, count=1) 提取实际数值 val"]
+        CheckVal{"val == 1 ?"}
+        
+        ShowTrigger["高亮显示: 🚀 开始测试信号 (保持寄存器1): 1 (触发中)"]
+        ShowNormal["正常显示: 🚩 开始测试信号 (保持寄存器1): {val}"]
+
+        Start --> ReadReg
+        ReadReg --> CheckVal
+        CheckVal -- "是 (val == 1)" --> ShowTrigger
+        CheckVal -- "否 (val == 0 或其他)" --> ShowNormal
+
+        class Start startEnd;
+        class CheckVal condition;
+        class ReadReg process;
+        class ShowTrigger,ShowNormal success;
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

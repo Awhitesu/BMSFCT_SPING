@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QComboBox 生命周期修复与安全防护流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0F172A;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        h1 {
+            color: #38BDF8;
+            margin-bottom: 8px;
+        }
+        p {
+            color: #94A3B8;
+            margin-bottom: 24px;
+        }
+        .mermaid-container {
+            background-color: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            max-width: 95%;
+            width: 900px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 PySide6 QComboBox C++ 对象生命周期绑定与异常防护</h1>
+    <p>维护对象父子归属树 (Parent Ownership Tree) 以防止 Python GC 提前释放底层 C++ 资源</p>
+
+    <div class="mermaid-container">
+        <pre class="mermaid">
+graph TD
+    Start["应用启动初始化 OverviewTab"] --> CreateParent["实例化 QFrame 父容器<br/>(self.top_title_frame = QFrame(self))"]
+    CreateParent --> CreateCombo["创建下拉框控件<br/>(self.combo_recipe = QComboBox(self.top_title_frame))"]
+    CreateCombo --> BindParent["绑定生命周期至 OverviewTab 实例"]
+    BindParent --> LoadRecipe["执行 load_default_or_first_recipe()"]
+    LoadRecipe --> UpdateRecipes["调用 update_recipes(recipes_list)"]
+    UpdateRecipes --> CheckGuard{"try...except 异常拦截保护"}
+    CheckGuard -- "C++ 对象有效" --> ReadText["读取 currentText() & 刷新下拉选项"]
+    CheckGuard -- "抛出 RuntimeError" --> CatchErr["捕获异常并输出 Warning 审计日志"]
+    ReadText --> Finish["成功初始化配方并渲染 7 列测试树"]
+    CatchErr --> Finish
+
+    classDef startEnd fill:#8B5CF6,stroke:#7C3AED,color:#FFFFFF,font-weight:bold;
+    classDef process fill:#3B82F6,stroke:#2563EB,color:#FFFFFF;
+    classDef condition fill:#F59E0B,stroke:#D97706,color:#FFFFFF,font-weight:bold;
+    classDef success fill:#10B981,stroke:#059669,color:#FFFFFF,font-weight:bold;
+    classDef error fill:#EF4444,stroke:#DC2626,color:#FFFFFF,font-weight:bold;
+
+    class Start startEnd;
+    class CreateParent process;
+    class CreateCombo process;
+    class BindParent process;
+    class LoadRecipe process;
+    class UpdateRecipes process;
+    class CheckGuard condition;
+    class ReadText process;
+    class CatchErr error;
+    class Finish success;
+        </pre>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>精简测试序列列展示 - 系统逻辑架构图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #121212;
+            color: #E0E0E0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #00E5FF;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #8888AA;
+            margin-bottom: 25px;
+            font-size: 14px;
+        }
+        .mermaid-container {
+            background-color: #1E1E2F;
+            border: 1px solid #3E3E5C;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            width: 90%;
+            max-width: 1200px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>精简测试序列列展示 - 6 列高亮架构图</h1>
+    <div class="subtitle">GX_APP BMS 老化与单通道测试系统物理归档</div>
+    <div class="mermaid-container">
+        <pre class="mermaid">
+graph TD
+    classDef startEnd fill:#8E24AA,stroke:#FFF,color:#FFF,stroke-width:2px;
+    classDef condition fill:#FBC02D,stroke:#333,color:#000,stroke-width:2px;
+    classDef process fill:#1E88E5,stroke:#FFF,color:#FFF,stroke-width:2px;
+
+    Start["单通道测试上位机启动"] :::startEnd
+    InitUI["主界面展现精简 6 列树状测试序列"] :::process
+    Col0["Col 0: 工步名称 / 指令动作 (自动拉伸填充)"] :::process
+    Col1["Col 1: 目标值 / 最小值 (或参数/设备)"] :::process
+    Col2["Col 2: 截止时间 / 最大值"] :::process
+    Col3["Col 3: 运行状态 (等待 / 执行中 / PASS / FAIL)"] :::process
+    Col4["Col 4: 实测结果"] :::process
+    Col5["Col 5: 耗时(s)"] :::process
+
+    Start --> InitUI
+    InitUI --> Col0
+    InitUI --> Col1
+    InitUI --> Col2
+    InitUI --> Col3
+    InitUI --> Col4
+    InitUI --> Col5
+
+    class Start startEnd;
+    class InitUI,Col0,Col1,Col2,Col3,Col4,Col5 process;
+        </pre>
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

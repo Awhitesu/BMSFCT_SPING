@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OverviewTab 缩进截断与UI初始化修复流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0F172A;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        h1 {
+            color: #38BDF8;
+            margin-bottom: 8px;
+        }
+        p {
+            color: #94A3B8;
+            margin-bottom: 24px;
+        }
+        .mermaid-container {
+            background-color: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            max-width: 95%;
+            width: 900px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 OverviewTab 缩进解耦与 _init_ui 布局完整性修复</h1>
+    <p>剥离误嵌套函数并恢复 OverviewTab 主界面布局流与组件绑定</p>
+
+    <div class="mermaid-container">
+        <pre class="mermaid">
+graph TD
+    Start["MainWindow 启动初始化 OverviewTab"] --> InitUI["执行 OverviewTab._init_ui()"]
+    InitUI --> BuildHeader["生成顶部配方工具栏 (top_title_frame)"]
+    BuildHeader --> BuildTree["渲染左侧 7 列只读测试树 (step_tree)"]
+    BuildTree --> BuildRight["构建右侧控制面板 (right_panel & SN输入框)"]
+    BuildRight --> BuildBtns["实例化大按钮组 (btn_run_test & btn_stop)"]
+    BuildBtns --> BuildStats["构建底部生产统计栏 (stats_frame)"]
+    BuildStats --> CreateRightContainer["实例化右下角预留容器 (self.right_controls_layout)"]
+    CreateRightContainer --> AttachMain["将 content_layout & stats_frame 挂载至 main_layout"]
+    AttachMain --> InitComplete["_init_ui() 100% 完整连续执行完毕"]
+    InitComplete --> CallEmbed["MainWindow 调用 embed_right_controls()"]
+    CallEmbed --> EmbedSuccess["成功嵌入用户卡片与测试次数，顺利进入主界面"]
+
+    classDef startEnd fill:#8B5CF6,stroke:#7C3AED,color:#FFFFFF,font-weight:bold;
+    classDef process fill:#3B82F6,stroke:#2563EB,color:#FFFFFF;
+    classDef success fill:#10B981,stroke:#059669,color:#FFFFFF,font-weight:bold;
+
+    class Start startEnd;
+    class InitUI process;
+    class BuildHeader process;
+    class BuildTree process;
+    class BuildRight process;
+    class BuildBtns process;
+    class BuildStats process;
+    class CreateRightContainer process;
+    class AttachMain process;
+    class InitComplete process;
+    class CallEmbed process;
+    class EmbedSuccess success;
+        </pre>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true
+            }
+        });
+    </script>
+</body>
+</html>

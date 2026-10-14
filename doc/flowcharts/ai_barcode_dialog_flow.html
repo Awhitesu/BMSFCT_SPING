@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 智能样本条码推导弹窗交互流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0F172A;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        h1 {
+            color: #38BDF8;
+            margin-bottom: 8px;
+        }
+        p {
+            color: #94A3B8;
+            margin-bottom: 24px;
+        }
+        .mermaid-container {
+            background-color: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            max-width: 95%;
+            width: 900px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 AiBarcodeRuleDialog 专属推导弹窗交互流程图</h1>
+    <p>主界面极简保持，专有弹窗扫码推导 + 实时验证 + 一键填入配方规则</p>
+
+    <div class="mermaid-container">
+        <pre class="mermaid">
+graph TD
+    Start["配方编辑主页 (ConfigTab) 点击 🤖 AI 智能样本推导"] --> OpenModal["弹出专有对话框 AiBarcodeRuleDialog"]
+    OpenModal --> FocusScan["扫码枪连续扫码 / 手动输入并添加样本条码"]
+    FocusScan --> UpdateList["已扫样本列表视图 (samples_list_widget) 实时刷新"]
+    UpdateList --> LiveEngine["触发 _recalculate_ai_rule() AI 对比分析引擎"]
+    
+    LiveEngine --> LCP["抽取最长公共前缀 (LCP) -> 识别固定前缀 (如 SCUx03XP)"]
+    LCP --> LCS["抽取最长公共后缀 (LCS)"]
+    LCS --> CharAnalysis["分析中间号段字符集及长度约束 -> 生成正则表达式"]
+    CharAnalysis --> Render看板["看板实时渲染展示推导正则与特征拆解报告"]
+    
+    Render看板 --> OptionalTest["(可选) 在验证框扫入测试条码 -> 实时 🟢通过 / 🔴不符"]
+    OptionalTest --> ClickConfirm["点击 ✅ 确认应用规则到配方"]
+    ClickConfirm --> WriteBack["将 generated_regex 填回主界面 self.edit_master_sn_regex"]
+    WriteBack --> Finish["关闭弹窗，完成配方条码规则设定"]
+
+    classDef startEnd fill:#8B5CF6,stroke:#7C3AED,color:#FFFFFF,font-weight:bold;
+    classDef process fill:#3B82F6,stroke:#2563EB,color:#FFFFFF;
+    classDef success fill:#10B981,stroke:#059669,color:#FFFFFF,font-weight:bold;
+
+    class Start startEnd;
+    class OpenModal process;
+    class FocusScan process;
+    class UpdateList process;
+    class LiveEngine process;
+    class LCP process;
+    class LCS process;
+    class CharAnalysis process;
+    class Render看板 process;
+    class OptionalTest process;
+    class ClickConfirm process;
+    class WriteBack process;
+    class Finish success;
+        </pre>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true
+            }
+        });
+    </script>
+</body>
+</html>

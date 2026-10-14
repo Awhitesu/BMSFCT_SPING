@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>底部生产统计大数字卡片与管理员清零业务流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>底部生产统计大数字卡片与管理员清零业务流程</h1>
+        <p>包含双层 KPI 卡片布局渲染、单工步测试结束自增驱动、以及仅管理员模式权限拦截与清零确认完整闭环</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    Init["系统启动: 初始化 OverviewTab 底部状态栏"] --> LoadInit["初始化统计数据: total=0, pass=0, fail=0, rate=0.00%"]
+    LoadInit --> RenderCards["渲染 4 组大数字 KPI 卡片: 上层灰色标签 + 下层 22px 粗体数字"]
+    RenderCards --> MountResetBtn["挂载数据清零按钮 (btn_reset_stats)"]
+    MountResetBtn --> ApplyPerm["权限同步: 触发 apply_role_permissions()"]
+
+    ApplyPerm --> CheckRoleInit{"当前登录身份是否为管理员?"}
+    CheckRoleInit -->|"是 (Admin)"| EnableBtn["启用清零按钮: setEnabled(True), 显示金黄色警戒边框"]
+    CheckRoleInit -->|"否 (Operator)"| DisableBtn["置灰清零按钮: setEnabled(False), 提示需要管理员权限"]
+
+    EnableBtn --> IdleState["界面就绪, 进入事件监听循环"]
+    DisableBtn --> IdleState
+
+    subgraph "分支1: 自动化测试完成触发统计更新"
+        TestEnd["测试结束: 触发 on_worker_test_finished(channel, status)"] --> IncTotal["生产总数递增: self.total_count += 1"]
+        IncTotal --> CheckStatus{"判定单板测试结果 status"}
+        CheckStatus -->|"PASS"| IncPass["合格数递增: self.pass_count += 1"]
+        CheckStatus -->|"FAIL"| IncFail["不合格数递增: self.fail_count += 1"]
+        IncPass --> CalcRate["重新计算合格率: pass_count / total_count * 100%"]
+        IncFail --> CalcRate
+        CalcRate --> RefreshKPI["刷新 4 组卡片下层大数字标签"]
+    end
+
+    subgraph "分支2: 管理员点击清零按钮触发流程"
+        ClickReset["操作员点击 🔄 数据清零 按钮"] --> CheckRoleRuntime{"运行时鉴权: is_admin 权限校验"}
+        CheckRoleRuntime -->|"无权限 (非法越权拦截)"| ShowDenied["弹出警告: 只有管理员模式可以执行清零!"]
+        CheckRoleRuntime -->|"有权限"| PopConfirm["弹出模态二次确认弹窗: 是否确认清空当前生产统计数据?"]
+
+        PopConfirm --> UserChoice{"用户确认选择"}
+        UserChoice -->|"取消"| CancelOp["放弃操作, 保持当前数据不变"]
+        UserChoice -->|"确认清零"| DoReset["执行数据复位: total=0, pass=0, fail=0, rate=0.00%"]
+        DoReset --> RefreshKPIZero["实时刷新 4 组卡片为 0 并高亮通知"]
+    end
+
+    classDef start_end fill:#8b5cf6,stroke:#7c3aed,color:#ffffff,stroke-width:2px;
+    classDef condition fill:#eab308,stroke:#ca8a04,color:#000000,stroke-width:2px;
+    classDef process fill:#0284c7,stroke:#0369a1,color:#ffffff,stroke-width:2px;
+    classDef error_fail fill:#ef4444,stroke:#dc2626,color:#ffffff,stroke-width:2px;
+    classDef success_pass fill:#22c55e,stroke:#16a34a,color:#ffffff,stroke-width:2px;
+
+    class Init start_end;
+    class IdleState start_end;
+    class CheckRoleInit condition;
+    class CheckStatus condition;
+    class CheckRoleRuntime condition;
+    class UserChoice condition;
+    class LoadInit process;
+    class RenderCards process;
+    class MountResetBtn process;
+    class ApplyPerm process;
+    class EnableBtn process;
+    class DisableBtn process;
+    class TestEnd process;
+    class IncTotal process;
+    class IncPass success_pass;
+    class IncFail error_fail;
+    class CalcRate process;
+    class RefreshKPI process;
+    class ClickReset process;
+    class ShowDenied error_fail;
+    class PopConfirm process;
+    class CancelOp process;
+    class DoReset success_pass;
+    class RefreshKPIZero success_pass;
+        </div>
+    </div>
+</body>
+</html>

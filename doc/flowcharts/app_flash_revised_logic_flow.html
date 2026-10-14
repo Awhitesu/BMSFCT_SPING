@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APP刷写精准修正业务流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>APP 刷写修正后真实业务流程</h1>
+        <p>1. 上位机同级读取 config.ini；2. config.ini 仅读不写；3. 读取键值去除引号；4. 在同级 Flash/&lt;键值&gt; 检索 *.hex/*.s19 提取首个固件；5. 向 Flash/Record.txt 写入 Start 触发刷写</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    StartNode["起点: 触发 APP 刷写流程 (输入上位机文件路径, 如 D:\\bmstest\\123.exe)"] --> GetHostDir["提取上位机所在同级目录 (host_dir = os.path.dirname)"]
+
+    GetHostDir --> LocateIni["定位同级配置文件: host_dir\\config.ini (纯读取, 绝不写入)"]
+    LocateIni --> ReadIniSection["读取指定段名 (如 App) 与指定键名 (如 addr / type)"]
+    ReadIniSection --> CleanQuotes["清洗键值数据: 去除外层引号与前后空白 (如 'Slate SR')"]
+
+    CleanQuotes --> LocateFlashDir["定位同级 Flash 根目录: host_dir\\Flash\\"]
+    LocateFlashDir --> LocateSubDir["定位目标子文件夹: host_dir\\Flash\\&lt;键值&gt; (如 Flash\\Slate SR\\)"]
+
+    LocateSubDir --> ScanFirmware["扫描子目录中所有 *.HEX 与 *.S19 固件"]
+    ScanFirmware --> HasFile{"是否存在有效固件文件?"}
+
+    HasFile -->|"是"| ExtractFirst["提取第 1 个固件文件名"]
+    HasFile -->|"否"| WarnNoFile["提示未找到固件文件"]
+
+    ExtractFirst --> OutputAppName["输出显示: APP Name"]
+    WarnNoFile --> EndNode["流程终止"]
+
+    OutputAppName --> LocateRecord["定位同级记录文件: host_dir\\Flash\\Record.txt"]
+    LocateRecord --> WriteStartToRecord["向 Record.txt 写入 Start (正式开启刷写触发)"]
+    WriteStartToRecord --> EndNode["终点: 刷写已开启并留痕"]
+
+    classDef startEnd fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff;
+    classDef condition fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff;
+    classDef process fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#ffffff;
+    classDef failure fill:#ef4444,stroke:#dc2626,stroke-width:2px,color:#ffffff;
+    classDef success fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff;
+
+    class StartNode startEnd;
+    class EndNode success;
+    class GetHostDir process;
+    class LocateIni process;
+    class ReadIniSection process;
+    class CleanQuotes process;
+    class LocateFlashDir process;
+    class LocateSubDir process;
+    class ScanFirmware process;
+    class HasFile condition;
+    class ExtractFirst process;
+    class WarnNoFile failure;
+    class OutputAppName success;
+    class LocateRecord process;
+    class WriteStartToRecord success;
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

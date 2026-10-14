@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UDS 真实报文协议格式解构图 (标准 ISO 14229 vs 原始 CAN 帧)</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0B1120;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header {
+            text-align: center;
+            max-width: 900px;
+            margin-bottom: 24px;
+        }
+        h1 {
+            color: #38BDF8;
+            margin-bottom: 8px;
+            font-size: 24px;
+        }
+        p {
+            color: #94A3B8;
+            font-size: 14px;
+            margin: 4px 0;
+        }
+        .diagram-card {
+            background: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            max-width: 1100px;
+            width: 100%;
+            overflow-x: auto;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>UDS 真实报文协议格式对齐与解构图</h1>
+        <p>澄清：标准 UDS (ISO 14229) 中间没有数据长度字节，有效数据紧跟 DID 之后</p>
+    </div>
+
+    <div class="diagram-card">
+        <pre class="mermaid">
+flowchart TD
+    subgraph StandardUDS["标准 UDS 0x22 肯定响应 (应用层 ISO 14229 - 上位机解析层)"]
+        direction LR
+        B0["B0: 肯定响应 SID<br/>(0x62)"]
+        B1["B1: DID 高字节<br/>(如 0xF1)"]
+        B2["B2: DID 低字节<br/>(如 0x90)"]
+        B3["B3: 数据 Payload 字节 1<br/>(无中间长度字段!)"]
+        B4["B4: 数据 Payload 字节 2"]
+        BN["BN: 剩余数据 Payload..."]
+        B0 --- B1 --- B2 --- B3 --- B4 --- BN
+    end
+
+    subgraph RawCAN["底层原始 CAN 帧 (网络层 ISO 15765-2 传输协议)"]
+        direction LR
+        CAN_PCI["单帧 PCI: 0x05<br/>(高4位0=单帧, 低4位=数据长度5)"]
+        CAN_62["0x62"]
+        CAN_DIDH["0xF1"]
+        CAN_DIDL["0x90"]
+        CAN_D1["0x4C"]
+        CAN_D2["0x56"]
+        CAN_PAD["0xAA 0xAA<br/>(尾部填充)"]
+        CAN_PCI --- CAN_62 --- CAN_DIDH --- CAN_DIDL --- CAN_D1 --- CAN_D2 --- CAN_PAD
+    end
+
+    RawCAN -->|"上位机 ISO-TP 协议栈自动解包并剥离 PCI 头部"| StandardUDS
+
+    classDef blueStyle fill:#1E40AF,stroke:#60A5FA,stroke-width:2px,color:#FFFFFF;
+    classDef greenStyle fill:#065F46,stroke:#34D399,stroke-width:2px,color:#FFFFFF;
+    classDef purpleStyle fill:#6B21A8,stroke:#C084FC,stroke-width:2px,color:#FFFFFF;
+    classDef yellowStyle fill:#854D0E,stroke:#FDE047,stroke-width:2px,color:#FFFFFF;
+
+    class B0,B1,B2 purpleStyle;
+    class B3,B4,BN greenStyle;
+    class CAN_PCI yellowStyle;
+    class CAN_62,CAN_DIDH,CAN_DIDL,CAN_D1,CAN_D2,CAN_PAD blueStyle;
+        </pre>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            flowchart: {
+                curve: 'basis'
+            }
+        });
+    </script>
+</body>
+</html>

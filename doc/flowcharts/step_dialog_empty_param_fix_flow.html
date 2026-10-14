@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>子工步弹窗无参动作页面残留修复流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0b1120;
+            color: #e5e7eb;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+        }
+        h1 {
+            color: #38bdf8;
+            font-size: 22px;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        .subtitle {
+            text-align: center;
+            color: #94a3b8;
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+        .container {
+            background-color: #151e2e;
+            border: 1px solid #1f2937;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .mermaid {
+            display: flex;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>子工步弹窗无参动作页面残留修复业务流程图</h1>
+    <div class="subtitle">根因: QStackedWidget.setCurrentIndex(-1) 未清除显示导致 Page 0 (电源设置) 残留 | 方案: 增设显式空参数页与动作精准联动</div>
+    <div class="container">
+        <div class="mermaid">
+graph TD
+    UserSelect["选择: 下载器 -> 力捷丰 SG400 -> 连接检测"] --> CheckAction{"功能动作判定"}
+    CheckAction -- "此前逻辑: setCurrentIndex(-1)" --> StackBug["QStackedWidget 机制限制: -1 无法隐藏已有部件, 导致 Page 0 (直流电源参数) 错误残留"]
+    StackBug --> WrongUI["错误子项: 设定电压 / 限制电流 / 同时控制输出状态"]
+    
+    CheckAction -- "修复方案: 显式匹配与专用空状态页" --> EmptyPage["切换至 page_empty 专属空参数页"]
+    EmptyPage --> CorrectUI["正确子项: 呈现 'ℹ️ 当前动作无需配置额外参数' 或直接执行烧录工程页"]
+    
+    CheckAction -- "选择: 执行烧录工程" --> BurnPage["切换至 Page 11: 烧录工程路径 + 超时配置"]
+
+    classDef startEnd fill:#7c3aed,stroke:#a78bfa,stroke-width:2px,color:#ffffff;
+    classDef process fill:#2563eb,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef failure fill:#dc2626,stroke:#f87171,stroke-width:2px,color:#ffffff;
+    classDef decision fill:#d97706,stroke:#fbbf24,stroke-width:2px,color:#ffffff;
+    classDef success fill:#059669,stroke:#34d399,stroke-width:2px,color:#ffffff;
+
+    class UserSelect startEnd;
+    class CheckAction decision;
+    class StackBug,WrongUI failure;
+    class EmptyPage,BurnPage process;
+    class CorrectUI success;
+        </div>
+    </div>
+</body>
+</html>

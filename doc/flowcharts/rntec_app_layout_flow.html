@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>APP刷写系统 - 参考布局重构架构流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body { background-color: #121212; color: #FFFFFF; font-family: sans-serif; padding: 20px; }
+        .mermaid { background-color: #1E1E1E; padding: 20px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h2>APP刷写系统 - 参考布局重构架构流程图</h2>
+    <div class="mermaid">
+    graph TD
+        classDef startEnd fill:#8A2BE2,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef condition fill:#FFD700,stroke:#333,stroke-width:2px,color:#000;
+        classDef process fill:#1E90FF,stroke:#fff,stroke-width:1px,color:#fff;
+        classDef success fill:#28A745,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef fail fill:#DC3545,stroke:#fff,stroke-width:2px,color:#fff;
+
+        Start["主界面初始化 (MainWindow & OverviewTab)"] ::: startEnd
+        
+        subgraph TopBar["顶部标题与导航栏"]
+            Title["居中显示 APP刷写系统 标题 & 顶部菜单栏"] ::: process
+        end
+
+        subgraph MainSplitter["主区域 (Horizontal Splitter 80% : 20%)"]
+            subgraph LeftTable["左侧测试列表 (80% 宽度)"]
+                TreeWidget["QTreeWidget 测试序列列表"] ::: process
+                Columns["7列标头: 序号 | 名称 | 下限 | 上限 | 测试值 | 单位 | 判定"] ::: process
+                RowHighlight["实时运行行: 绿色高亮<br/>判定列: PASS (绿块) / FAIL (红块)"] ::: process
+            end
+
+            subgraph RightPanel["右侧控制与状态屏 (20% 宽度)"]
+                RecipeCard["1. 配方/型号名称卡片"] ::: process
+                TimerBox["2. 巨型计时器 (00:00)"] ::: process
+                BigStatusCard["3. 巨型 PASS/FAIL 判定卡牌"] ::: process
+                SNInput["4. SN 码条码输入/显示框"] ::: process
+                BtnStart["5. 超大 开始 按钮"] ::: success
+                BtnStop["6. 超大 停止 按钮"] ::: fail
+            end
+        end
+
+        subgraph BottomBar["底部生产数据统计栏"]
+            StatsBar["生产数量 | 合格数量 | 不合格数量 | 合格率"] ::: process
+        end
+
+        Start --> Title
+        Title --> MainSplitter
+        MainSplitter --> BottomBar
+        
+        BtnStart -->|"用户点击开始 / 扫描SN"| TestLoop["启动测试引擎流水线"] ::: process
+        TestLoop --> RowHighlight
+        RowHighlight -->|"测试完成"| BigStatusCard
+        BigStatusCard -->|"更新计数"| StatsBar
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

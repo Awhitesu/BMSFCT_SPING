@@ -1,0 +1,3 @@
+SN:21402
+Chips:TC387;
+Channels:1

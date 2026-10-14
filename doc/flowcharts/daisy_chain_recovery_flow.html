@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>0x07 CSC批量读取 - 菊花链脱落后置自愈策略流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #38bdf8;
+        }
+        .mermaid-container {
+            display: flex;
+            justify-content: center;
+            background-color: #1e293b;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>0x07 CSC批量读取 - 菊花链脱落后置自愈重试流程</h1>
+    <div class="mermaid-container">
+        <pre class="mermaid">
+flowchart TD
+    Start["开始执行 0x07 CSC 批量读取工步"]
+    InitRetry["初始化菊花链自愈次数 daisy_retry = 0"]
+    
+    StepA["原逻辑1: 全量读取 192 通道单体电芯电压 (含单通道复测)"]
+    StepB{"是否使能: 相邻电芯异常修正 (之和4.5~5.5V)?"}
+    ExecB["执行相邻电芯 2.499V 自动修正"]
+    StepC{"是否使能: 异常电压随机补偿?"}
+    ExecC["执行随机合格电压补偿"]
+    
+    CheckFive{"校验完毕后: 是否存在连续 5 个 CELL 电压为 0V?"}
+    
+    CheckDaisyLimit{"daisy_retry < 3 ?"}
+    IncRetry["自愈重试计数 daisy_retry += 1"]
+    
+    ActionDisconnect["步骤1: 切断功能板 KL15 继电器"]
+    Delay10["步骤2: 延时等待 10 秒"]
+    ActionConnect["步骤3: 重新闭合 KL15 继电器"]
+    ActionConfigNode["步骤4: 下发 0x07 重新配置 CSC 节点数目"]
+    Delay5["步骤5: 延时等待 5 秒"]
+
+    FinalEval["完成工步结果最终判定 (合格 PASS / 超标 FAIL)"]
+    FailDaisy["判定工步失败 FAIL: 菊花链接触不良且自愈重试3次均失败"]
+
+    Start --> InitRetry
+    InitRetry --> StepA
+    StepA --> StepB
+    StepB -- "是" --> ExecB
+    ExecB --> StepC
+    StepB -- "否" --> StepC
+    StepC -- "是" --> ExecC
+    ExecC --> CheckFive
+    StepC -- "否" --> CheckFive
+    
+    CheckFive -- "否 (正常)" --> FinalEval
+    CheckFive -- "是 (接触不良)" --> CheckDaisyLimit
+    
+    CheckDaisyLimit -- "是" --> IncRetry
+    IncRetry --> ActionDisconnect
+    ActionDisconnect --> Delay10
+    Delay10 --> ActionConnect
+    ActionConnect --> ActionConfigNode
+    ActionConfigNode --> Delay5
+    Delay5 --> StepA
+    
+    CheckDaisyLimit -- "否 (超过3次)" --> FailDaisy
+
+    classDef startEnd fill:#8b5cf6,stroke:#7c3aed,color:#ffffff,stroke-width:2px;
+    classDef condition fill:#eab308,stroke:#ca8a04,color:#000000,stroke-width:2px;
+    classDef normal fill:#0284c7,stroke:#0369a1,color:#ffffff,stroke-width:1px;
+    classDef error fill:#ef4444,stroke:#dc2626,color:#ffffff,stroke-width:2px;
+    classDef success fill:#22c55e,stroke:#16a34a,color:#ffffff,stroke-width:2px;
+
+    class Start startEnd;
+    class FailDaisy error;
+    class FinalEval success;
+    class StepB condition;
+    class StepC condition;
+    class CheckFive condition;
+    class CheckDaisyLimit condition;
+    class InitRetry normal;
+    class StepA normal;
+    class ExecB normal;
+    class ExecC normal;
+    class IncRetry normal;
+    class ActionDisconnect normal;
+    class Delay10 normal;
+    class ActionConnect normal;
+    class ActionConfigNode normal;
+    class Delay5 normal;
+        </pre>
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

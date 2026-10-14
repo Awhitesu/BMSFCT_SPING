@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>PLC 保持寄存器 1 纯数值精简显示流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body { background-color: #121212; color: #FFFFFF; font-family: sans-serif; padding: 20px; }
+        .mermaid { background-color: #1E1E1E; padding: 20px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h2>PLC 保持寄存器 1 纯数值精简显示流程图</h2>
+    <div class="mermaid">
+    graph TD
+        classDef startEnd fill:#8A2BE2,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef condition fill:#FFD700,stroke:#333,stroke-width:2px,color:#000;
+        classDef process fill:#1E90FF,stroke:#fff,stroke-width:1px,color:#fff;
+        classDef success fill:#28A745,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef fail fill:#DC3545,stroke:#fff,stroke-width:2px,color:#fff;
+
+        Start["500ms 定时读取保持寄存器 1"]
+        ReadVal["读取保持寄存器数值 val"]
+        FormatPure["纯数值文本格式化: 🚩 开始测试信号: {val}"]
+        
+        SetColor{"数值配色判断"}
+        C_Green["val == 1: 高亮绿底白字"]
+        C_Blue["val == 2: 高亮蓝底白字"]
+        C_Default["val == 0 或其他: 默认暗黑青字"]
+
+        Start --> ReadVal
+        ReadVal --> FormatPure
+        FormatPure --> SetColor
+        SetColor -- "1" --> C_Green
+        SetColor -- "2" --> C_Blue
+        SetColor -- "0/其他" --> C_Default
+
+        class Start startEnd;
+        class SetColor condition;
+        class ReadVal,FormatPure process;
+        class C_Green,C_Blue,C_Default success;
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

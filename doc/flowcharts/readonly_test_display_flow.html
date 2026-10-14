@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>主测试界面只读运行与配方配置解耦 - 业务逻辑流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #121212;
+            color: #E0E0E0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #00E5FF;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #8888AA;
+            margin-bottom: 25px;
+            font-size: 14px;
+        }
+        .mermaid-container {
+            background-color: #1E1E2F;
+            border: 1px solid #3E3E5C;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            width: 90%;
+            max-width: 1200px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>主测试界面只读运行与配方配置解耦 - 业务逻辑架构图</h1>
+    <div class="subtitle">GX_APP BMS 老化与单通道测试系统物理归档</div>
+    <div class="mermaid-container">
+        <pre class="mermaid">
+graph TD
+    classDef startEnd fill:#8E24AA,stroke:#FFF,color:#FFF,stroke-width:2px;
+    classDef condition fill:#FBC02D,stroke:#333,color:#000,stroke-width:2px;
+    classDef process fill:#1E88E5,stroke:#FFF,color:#FFF,stroke-width:2px;
+
+    Start["上位机系统启动"] :::startEnd
+    
+    subgraph ConfigArea["工步与配方配置 Tab (配方编辑中心)"]
+        CreateRecipe["新建/编辑配方"] :::process
+        EditSteps["添加 / 删除 / 拖拽 / 弹窗编辑工步"] :::process
+        SaveRecipe["保存配方至 JSON 文件"] :::process
+        CreateRecipe --> EditSteps --> SaveRecipe
+    end
+
+    subgraph OverviewArea["单通道测试与序列编辑 Tab (主界面只读运行大屏)"]
+        SelectCombo["选择测试配方下拉框"] :::process
+        LoadReadOnly["加载只读测试序列 (禁用双击/拖拽/右键编辑)"] :::process
+        ClickRun{"点击【▶ 开始测试】"} :::condition
+        LiveScore["实时高亮打分 (运行中/PASS/FAIL)"] :::process
+        SelectCombo --> LoadReadOnly --> ClickRun -- 启动测试 --> LiveScore
+    end
+
+    Start --> ConfigArea
+    Start --> OverviewArea
+    SaveRecipe -. 刷新配方列表 .-> SelectCombo
+
+    class Start startEnd;
+    class ClickRun condition;
+    class CreateRecipe,EditSteps,SaveRecipe,SelectCombo,LoadReadOnly,LiveScore process;
+        </pre>
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

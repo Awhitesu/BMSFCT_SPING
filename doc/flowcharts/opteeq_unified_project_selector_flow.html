@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>力捷丰 SG400 统一工程选择与执行业务流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>力捷丰 SG400 统一工程选择与烧录执行业务流程</h1>
+        <p>彻底移除本地文件框与“填入”过渡按钮，合并为一体化【烧录工程】下拉选择器（支持下载器内置脱机工程直接烧录与本地文件追加）</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    Start["起点: 进入力捷丰调试页或点击【🔄 读取下载器工程】"] --> QueryList["后台发送 channel:setreplystring(channel:getfilelist('/proj'))"]
+    QueryList --> ParseList["解析下载器内存储的脱机工程 (如 Geely_VE21_DisableHSM_V2.opj)"]
+    ParseList --> PopulateCombo["自动填充到【烧录工程】下拉框并字母升序排列"]
+
+    PopulateCombo --> UserChoice{"操作员选择操作类型"}
+
+    UserChoice -->|"从下拉框选中脱机工程"| SelectItem["当前工程即为选中的脱机工程 (零复制/零填入)"]
+    UserChoice -->|"点击【📂 本地文件】"| PickLocal["调起本地文件选择器 (.oprj / .opj) 并插入当前项"]
+    UserChoice -->|"点击【⬇️ 导出到本地】"| ExportAction["调起本地保存对话框, 调用 OpteeQ_GetFile 提取脱机工程备份"]
+
+    SelectItem --> TriggerBurn["点击【执行 CH1 烧录】"]
+    PickLocal --> TriggerBurn
+
+    TriggerBurn --> CheckTarget{"判断当前工程类型"}
+    CheckTarget -->|".opj 脱机工程 (无绝对路径)"| RunRemote["直接执行 channel:runproject('xxx.opj') 下发下载器烧录"]
+    CheckTarget -->|".oprj / 本地绝对路径"| RunLocal["执行 CCMD RunProjectFile 或本地工程加载"]
+
+    RunRemote --> WaitResult["轮询 query_state 等待 Pass / Error 并在日志区展示"]
+    RunLocal --> WaitResult
+
+    classDef purple fill:#7c3aed,stroke:#a78bfa,stroke-width:2px,color:#ffffff;
+    classDef yellow fill:#b45309,stroke:#f59e0b,stroke-width:2px,color:#ffffff;
+    classDef blue fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef green fill:#15803d,stroke:#4ade80,stroke-width:2px,color:#ffffff;
+    classDef red fill:#991b1b,stroke:#f87171,stroke-width:2px,color:#ffffff;
+
+    class Start purple;
+    class UserChoice,CheckTarget yellow;
+    class QueryList,ParseList,PopulateCombo,SelectItem,PickLocal,ExportAction,RunRemote,RunLocal blue;
+    class WaitResult green;
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

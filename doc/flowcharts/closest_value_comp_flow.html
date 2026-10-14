@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>最接近值滤波采样与逼近补偿控制流程图</title>
+    <!-- 引入 Mermaid.js 库进行渲染 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+    <style>
+        body {
+            background-color: #0b0c10;
+            color: #c5c6c7;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #66fcf1;
+            margin-bottom: 5px;
+        }
+        .desc {
+            color: #8c8c8c;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        #canvas {
+            background-color: #1f2833;
+            border: 2px solid #45f3ff;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 4px 15px rgba(0, 255, 243, 0.2);
+            width: 90%;
+            max-width: 900px;
+            display: flex;
+            justify-content: center;
+        }
+        .legend {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            font-size: 13px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            border-radius: 3px;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>最接近值滤波采样与逼近补偿控制流程图</h1>
+    <div class="desc">此图展示了在最接近值采样滤波（SAMPLES, TARGET）模式下，结合 COMP_LIMIT 与 COMP_MAX 执行逼近补偿的控制逻辑。可在外部浏览器中缩放。</div>
+    
+    <div id="canvas">
+        <pre class="mermaid">
+graph TD
+    classDef start_end fill:#855CF8,stroke:#333,stroke-width:2px,color:#fff;
+    classDef normal fill:#3B82F6,stroke:#333,stroke-width:2px,color:#fff;
+    classDef condition fill:#F59E0B,stroke:#333,stroke-width:2px,color:#fff;
+    classDef success fill:#10B981,stroke:#333,stroke-width:2px,color:#fff;
+    classDef failed fill:#EF4444,stroke:#333,stroke-width:2px,color:#fff;
+
+    Start["开始滤波采样流程"]
+    ParseParams["解析 SAMPLES, TARGET, COMP_LIMIT, COMP_MAX"]
+    SampleLoop["循环采集 SAMPLES 次数据"]
+    FindClosest["获取与 TARGET 最接近的测量值 closest_val"]
+    CheckCompConfig{"是否同时配置了 COMP_LIMIT 和 COMP_MAX?"}
+    CalcDiff["计算绝对差值 diff = abs(closest_val - TARGET)"]
+    CheckUnderLimit{"diff &lt;= COMP_LIMIT?"}
+    CheckOverMax{"diff &lt;= COMP_MAX?"}
+    KeepValue["不补偿: 保持 closest_val"]
+    CompensateValue["执行逼近补偿: closest_val = TARGET"]
+    OutputResult["输出最终测量结果并返回"]
+
+    Start --> ParseParams
+    ParseParams --> SampleLoop
+    SampleLoop --> FindClosest
+    FindClosest --> CheckCompConfig
+    CheckCompConfig -- "否" --> KeepValue
+    CheckCompConfig -- "是" --> CalcDiff
+    CalcDiff --> CheckUnderLimit
+    CheckUnderLimit -- "是" --> KeepValue
+    CheckUnderLimit -- "否" --> CheckOverMax
+    CheckOverMax -- "是" --> CompensateValue
+    CheckOverMax -- "否" --> KeepValue
+    KeepValue --> OutputResult
+    CompensateValue --> OutputResult
+
+    class Start start_end;
+    class ParseParams normal;
+    class SampleLoop normal;
+    class FindClosest normal;
+    class CalcDiff normal;
+    class KeepValue success;
+    class CompensateValue success;
+    class OutputResult start_end;
+    class CheckCompConfig condition;
+    class CheckUnderLimit condition;
+    class CheckOverMax condition;
+        </pre>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="legend-color" style="background: #855CF8;"></div> 起点/终点 (紫色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #3B82F6;"></div> 常规执行 (蓝色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #F59E0B;"></div> 条件判断 (黄色)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #10B981;"></div> 成功/通过 (绿色)</div>
+    </div>
+</body>
+</html>

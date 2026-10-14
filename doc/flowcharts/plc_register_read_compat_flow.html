@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>PLC 地址1 寄存器全协议兼容探测读取流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body { background-color: #121212; color: #FFFFFF; font-family: sans-serif; padding: 20px; }
+        .mermaid { background-color: #1E1E1E; padding: 20px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h2>PLC 地址1 寄存器全协议兼容探测读取流程图</h2>
+    <div class="mermaid">
+    graph TD
+        classDef startEnd fill:#8A2BE2,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef condition fill:#FFD700,stroke:#333,stroke-width:2px,color:#000;
+        classDef process fill:#1E90FF,stroke:#fff,stroke-width:1px,color:#fff;
+        classDef success fill:#28A745,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef fail fill:#DC3545,stroke:#fff,stroke-width:2px,color:#fff;
+
+        Start["PLC 地址 1 数据读取触发"]
+        
+        subgraph AddrGen["1. 生成候选物理地址列表"]
+            A1["候选地址: 1 (1-based)"]
+            A2["候选地址: 0 (0-based)"]
+            A3["候选地址: 0xFC08 (Easy320基地址)"]
+            A4["候选地址: 0xFC09 (Easy320 CH-01偏移)"]
+        end
+
+        subgraph MultiProbe["2. 多功能码穿透探测 (FC01/FC03/FC02/FC04)"]
+            P_Coils["尝试 FC01 (Coils 线圈)"]
+            P_Hold["尝试 FC03 (Holding Registers 保持寄存器)"]
+            P_Disc["尝试 FC02 (Discrete Inputs 离散输入)"]
+            P_Input["尝试 FC04 (Input Registers 输入寄存器)"]
+        end
+
+        CheckSuccess{"检测到有效数据?"}
+        ReturnData["返回寄存器数值/线圈状态并更新 UI 高亮"]
+        ReturnEmpty["返回空数据，维持离线/就绪标志"]
+
+        Start --> AddrGen
+        AddrGen --> MultiProbe
+        MultiProbe --> CheckSuccess
+        CheckSuccess -- "是" --> ReturnData
+        CheckSuccess -- "否" --> ReturnEmpty
+
+        class Start startEnd;
+        class CheckSuccess condition;
+        class AddrGen,MultiProbe process;
+        class ReturnData success;
+        class ReturnEmpty fail;
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

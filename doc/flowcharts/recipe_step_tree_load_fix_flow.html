@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>配方测试工步树加载修复业务逻辑流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0d1117;
+            color: #c9d1d9;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #58a6ff;
+            margin-bottom: 20px;
+        }
+        .mermaid-container {
+            width: 95%;
+            background-color: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>配方测试工步树加载修复逻辑流程图</h1>
+    <div class="mermaid-container">
+        <pre class="mermaid">
+        flowchart TD
+            Start["用户选择配方 (recipe_tree 单击/双击)"] --> Trigger["触发 load_recipe_to_tree()"]
+            Trigger --> Clear["清空当前工步树 self.step_tree.clear()"]
+            Clear --> ParseInfo["读取配方 JSON 参数 (CAN波特率, 匹配正则等)"]
+            ParseInfo --> LoopItems{"遍历配方中的 items 主工步"}
+            
+            LoopItems -- "有未处理主工步" --> BuildParent["创建主工步 QTreeWidgetItem"]
+            BuildParent --> SetParentMeta["设置主工步 UserRole 元数据 (standard_type, retry_count, unit)"]
+            SetParentMeta --> LoopSub{"遍历 sub_steps 子工步"}
+            
+            LoopSub -- "有未处理子工步" --> BuildChild["创建子工步 QTreeWidgetItem"]
+            BuildChild --> SetChildMeta["设置子工步 UserRole 元数据 (device, type, is_judgment, fail_strategy)"]
+            SetChildMeta --> AddChild["parent.addChild(child)"]
+            AddChild --> LoopSub
+            
+            LoopSub -- "子工步遍历完毕" --> AddParent["self.step_tree.addTopLevelItem(parent)"]
+            AddParent --> LoopItems
+            
+            LoopItems -- "所有主工步遍历完毕" --> Expand["self.step_tree.expandAll() 展开所有工步"]
+            Expand --> End["配方测试工步正常展示完毕"]
+
+            classDef purple fill:#8a2be2,stroke:#fff,color:#fff;
+            classDef yellow fill:#b8860b,stroke:#fff,color:#fff;
+            classDef blue fill:#1e90ff,stroke:#fff,color:#fff;
+            classDef green fill:#2e8b57,stroke:#fff,color:#fff;
+            classDef red fill:#dc143c,stroke:#fff,color:#fff;
+
+            class Start purple;
+            class LoopItems,LoopSub yellow;
+            class Clear,ParseInfo,BuildParent,SetParentMeta,BuildChild,SetChildMeta,AddChild,AddParent,Expand blue;
+            class End green;
+        </pre>
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

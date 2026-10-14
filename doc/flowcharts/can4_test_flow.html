@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>CAN4 通讯测试优化逻辑流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+    <style>
+        body {
+            background-color: #0d1117;
+            color: #c9d1d9;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #161b22;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #30363d;
+        }
+        h1 {
+            color: #58a6ff;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CAN4 通讯测试优化流程图</h1>
+        <div class="mermaid">
+graph TD
+    Start(["开始: CAN4通讯测试"])
+    Action1["断开12号继电器"]
+    Delay1["等待 500ms"]
+    Action2["闭合14号继电器"]
+    Delay2["等待 1000ms (由500ms延长)"]
+    Receive["CAN 接收: ID=0x502 Timeout=1000ms (由500ms延长)"]
+    Check{"是否成功接收?"}
+    Success(["测试通过: PASS"])
+    RetryCheck{"已重试次数 >= 1 ? (启用复测1次)"}
+    Fail(["测试失败: NG"])
+
+    Start --> Action1
+    Action1 --> Delay1
+    Delay1 --> Action2
+    Action2 --> Delay2
+    Delay2 --> Receive
+    Receive --> Check
+    Check -- Yes --> Success
+    Check -- No --> RetryCheck
+    RetryCheck -- No --> Action1
+    RetryCheck -- Yes --> Fail
+
+    classDef purple fill:#9F7AEA,stroke:#7F9CF5,color:white;
+    classDef blue fill:#4299E1,stroke:#63B3ED,color:white;
+    classDef yellow fill:#ECC94B,stroke:#F6E05E,color:black;
+    classDef red fill:#F56565,stroke:#FC8181,color:white;
+    classDef green fill:#48BB78,stroke:#68D391,color:white;
+
+    class Start purple;
+    class Action1,Delay1,Action2,Delay2,Receive blue;
+    class Check,RetryCheck yellow;
+    class Success green;
+    class Fail red;
+        </div>
+    </div>
+</body>
+</html>

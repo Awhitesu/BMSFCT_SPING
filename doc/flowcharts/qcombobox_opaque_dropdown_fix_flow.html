@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QComboBox 下拉菜单透明穿透消除与纯实体不透明背景渲染流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0F172A;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #38BDF8;
+            font-size: 22px;
+            margin-bottom: 8px;
+        }
+        p.subtitle {
+            color: #94A3B8;
+            font-size: 14px;
+            margin-top: 0;
+            margin-bottom: 24px;
+        }
+        .flowchart-container {
+            background-color: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            max-width: 95%;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>QComboBox 下拉菜单透明穿透消除与实体暗黑背景修复流程</h1>
+    <p class="subtitle">物理归档：消除 Windows DWM 下拉分层窗体透明穿透，保障下拉菜单100%纯黑实体无遮挡视界</p>
+
+    <div class="flowchart-container">
+        <pre class="mermaid">
+flowchart TD
+    Start["用户点击烧录工程下拉框 (QComboBox)"] --> TriggerDropdown["触发弹出下拉菜单 (showPopup)"]
+    
+    TriggerDropdown --> CheckStyleConfig{"检查下拉列表背景样式配置"}
+    
+    CheckStyleConfig -- "现状: 仅QAbstractItemView定义背景未赋能::item" --> BugPath["Windows DWM 分层渲染未选中项背景缺失"]
+    BugPath --> TranslucentGlitch["发生透明穿透: 底层完成超时/取消/主界面按钮文字相互重叠干扰"]
+    
+    CheckStyleConfig -- "修复方案: 赋能双重纯实体不透明体系" --> FixPath["应用实体不透明样式与专用视图"]
+    
+    FixPath --> Step1["显式为 QComboBox QAbstractItemView::item 赋予实体暗黑底色 (#17172B)"]
+    Step1 --> Step2["为 QComboBox 挂载自定义 QListView 并开启 autoFillBackground 实体填充"]
+    Step2 --> Step3["全局 style.qss 同步升级 QComboBox QAbstractItemView::item 不透明背景"]
+    
+    Step3 --> RenderPopup["Qt 渲染弹出窗口 (QComboBoxPrivateContainer)"]
+    RenderPopup --> CheckOpacity{"背景是否100%纯实体不透明 ?"}
+    
+    CheckOpacity -- "通过" --> CleanView["下拉列表背景完全遮挡底层控件，文字清晰高对比度呈现"]
+    CheckOpacity -- "未通过" --> TranslucentGlitch
+    
+    CleanView --> End["用户舒适清晰选取目标烧录工程"]
+
+    classDef startEnd fill:#7C3AED,stroke:#A78BFA,stroke-width:2px,color:#FFFFFF;
+    classDef condition fill:#D97706,stroke:#FBBF24,stroke-width:2px,color:#FFFFFF;
+    classDef process fill:#2563EB,stroke:#60A5FA,stroke-width:2px,color:#FFFFFF;
+    classDef success fill:#059669,stroke:#34D399,stroke-width:2px,color:#FFFFFF;
+    classDef fail fill:#DC2626,stroke:#F87171,stroke-width:2px,color:#FFFFFF;
+
+    class Start startEnd;
+    class End startEnd;
+    class CheckStyleConfig condition;
+    class CheckOpacity condition;
+    class BugPath fail;
+    class TranslucentGlitch fail;
+    class FixPath process;
+    class Step1 process;
+    class Step2 process;
+    class Step3 process;
+    class RenderPopup process;
+    class CleanView success;
+        </pre>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+    </script>
+</body>
+</html>

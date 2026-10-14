@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>底部状态栏整合与控件缩小布局流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body { background-color: #121212; color: #FFFFFF; font-family: sans-serif; padding: 20px; }
+        .mermaid { background-color: #1E1E1E; padding: 20px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h2>底部状态栏整合与控件缩小布局流程图</h2>
+    <div class="mermaid">
+    graph TD
+        classDef startEnd fill:#8A2BE2,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef condition fill:#FFD700,stroke:#333,stroke-width:2px,color:#000;
+        classDef process fill:#1E90FF,stroke:#fff,stroke-width:1px,color:#fff;
+        classDef success fill:#28A745,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef fail fill:#DC3545,stroke:#fff,stroke-width:2px,color:#fff;
+
+        Start["启动 MainWindow 主界面"] ::: startEnd
+
+        subgraph WindowTopBar["顶部纯净 Header"]
+            HeaderTitle["纯净居中大标题: APP刷写系统"] ::: success
+        end
+
+        subgraph OverviewBottomBar["OverviewTab 底部整洁状态栏"]
+            subgraph LeftStatsGroup["左侧等间距生产统计 (图1)"]
+                S1["生产数量"] ::: process
+                S2["合格数量"] ::: process
+                S3["不合格数量"] ::: process
+                S4["合格率"] ::: process
+            end
+
+            subgraph RightControlsGroup["右下角极简可点击卡片 (图2)"]
+                UserBtn["👤 ADMIN (超级管理员) [缩小按钮]"] ::: process
+                AgingCount["⚡ 老化执行: 2次 [缩小卡片]"] ::: process
+            end
+        end
+
+        Start --> WindowTopBar
+        Start --> OverviewBottomBar
+        LeftStatsGroup --- RightControlsGroup
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

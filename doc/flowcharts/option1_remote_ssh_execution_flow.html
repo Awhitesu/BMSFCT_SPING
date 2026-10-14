@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>方案一：远程连接机台驱动硬件实施流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>方案一：Remote-SSH 远程调试机台硬件实施流程</h1>
+        <p>通过本地 IDE 直连机台 Python 运行环境，实现本地编写/断点调试与机台硬件原生驱动</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    Start["起点: 用户确认按方案一执行"] --> Step1["步骤 1: 机台电脑启用 OpenSSH 服务"]
+    Step1 --> Verify1{"验证 1: 机台 22 端口监听状态"}
+    Verify1 -->|"端口未开放/服务未启动"| FixSsh["排查机台 OpenSSH 服务安装与防火墙设置"]
+    FixSsh --> Step1
+    Verify1 -->|"监听正常"| Step2["步骤 2: 本地电脑配置 SSH 连接机台"]
+    
+    Step2 --> Verify2{"验证 2: 本地终端执行 ssh user@ip"}
+    Verify2 -->|"连接拒绝/超时"| CheckNet["检查局域网连通性及机台 IP"]
+    CheckNet --> Step2
+    Verify2 -->|"成功登录机台终端"| Step3["步骤 3: 本地 IDE 连接远程并配置 Python 解释器"]
+
+    Step3 --> Verify3{"验证 3: 选择机台端 Python 与 launch.json 调试启动"}
+    Verify3 -->|"启动失败/依赖缺失"| FixEnv["排查机台端 Python 依赖库与硬件驱动"]
+    FixEnv --> Step3
+    Verify3 -->|"成功拉起并识别机台 PCAN/COM 硬件"| SuccessEnd["终点: 验证通过, 本地无缝调试机台硬件"]
+
+    classDef startEnd fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff;
+    classDef condition fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff;
+    classDef process fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#ffffff;
+    classDef failure fill:#ef4444,stroke:#dc2626,stroke-width:2px,color:#ffffff;
+    classDef success fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff;
+
+    class Start startEnd;
+    class SuccessEnd startEnd;
+    class Verify1 condition;
+    class Verify2 condition;
+    class Verify3 condition;
+    class Step1 process;
+    class Step2 process;
+    class Step3 process;
+    class FixSsh failure;
+    class CheckNet failure;
+    class FixEnv failure;
+
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

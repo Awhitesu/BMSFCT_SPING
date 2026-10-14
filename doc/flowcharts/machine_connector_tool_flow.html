@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>机台互联连接器工具架构与交互流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #38bdf8;
+        }
+        p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .diagram-container {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>机台互联连接器 (Machine Connector) 工具架构与业务流程</h1>
+        <p>支持多机台配置记忆、一键 SMB 挂载、后台心跳保活（防断线）、状态看板与快捷启动</p>
+    </div>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    Start["起点: 启动 Machine Connector 桌面工具"] --> LoadConfig["读取本地机台配置文件 machine_config.json"]
+    LoadConfig --> RenderUI["渲染暗黑高质感 GUI 界面与机台下拉列表"]
+
+    RenderUI --> ActionConnect["用户点击【一键连接与保活】"]
+    ActionConnect --> ProbeNet{"探测机台网络与 445 / 22 端口"}
+    
+    ProbeNet -->|"网络不可达"| ShowNetError["界面弹出红灯告警: 目标机台 IP 不通"]
+    ProbeNet -->|"端口正常"| ExecMount["执行 net use 挂载命令建立 Z: 盘"]
+
+    ExecMount --> CheckMount{"校验 Z: 盘符与文件系统"}
+    CheckMount -->|"挂载失败 (账密错误/占用)"| ShowMountError["界面提示挂载失败与排查建议"]
+    CheckMount -->|"挂载成功"| StartHeartbeat["启动后台守护线程: 每 25s 心跳保活 (防 Windows 超时断开)"]
+
+    StartHeartbeat --> UpdateDashboard["状态看板全绿: 网络通畅 / 端口开放 / 驱动器在线 / 心跳守护中"]
+    UpdateDashboard --> QuickOps{"用户快捷操作"}
+    
+    QuickOps -->|"打开目录"| OpenFolder["调用 explorer.exe 打开 Z: 盘"]
+    QuickOps -->|"远程启动"| RemoteLaunch["通过 SSH 自动化在机台运行 main.py"]
+    QuickOps -->|"断开连接"| Disconnect["停止心跳线程并卸载 Z: 盘"]
+    
+    Disconnect --> SuccessEnd["终点: 资源安全释放, 连接断开"]
+    OpenFolder --> SuccessEnd
+    RemoteLaunch --> SuccessEnd
+
+    classDef startEnd fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff;
+    classDef condition fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff;
+    classDef process fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#ffffff;
+    classDef failure fill:#ef4444,stroke:#dc2626,stroke-width:2px,color:#ffffff;
+    classDef success fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff;
+
+    class Start startEnd;
+    class SuccessEnd success;
+    class ProbeNet condition;
+    class CheckMount condition;
+    class QuickOps condition;
+    class LoadConfig process;
+    class RenderUI process;
+    class ActionConnect process;
+    class ExecMount process;
+    class StartHeartbeat process;
+    class UpdateDashboard process;
+    class OpenFolder process;
+    class RemoteLaunch process;
+    class Disconnect process;
+    class ShowNetError failure;
+    class ShowMountError failure;
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

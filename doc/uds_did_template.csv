@@ -1,0 +1,10 @@
+name,did,request,expected,mode,offset,length,endian,signed,scale,offset_val,unit,var_name
+电池总压,01 01,,,CALC,3,2,big,,0.1,0,V,BMS_PACK_VOLT
+电池总电流,01 02,,,CALC,3,2,big,1,0.1,-400,A,BMS_PACK_CURR
+SOC,01 03,,,CALC,3,1,big,,0.4,0,%,BMS_SOC
+单体最高电压,01 05,,,CALC,3,2,big,,0.001,0,V,BMS_CELL_MAX_V
+单体最低温度,01 08,,,CALC,3,1,big,1,1,-40,℃,BMS_CELL_MIN_T
+正极绝缘阻抗,01 09,,,CALC,3,2,big,,1,0,kΩ,BMS_INS_POS
+软件版本,F1 89,,,ASCII,3,8,big,,1,0,,ECU_SW_VER
+硬件版本,F1 93,,,ASCII,3,8,big,,1,0,,ECU_HW_VER
+VIN码,F1 90,,,ASCII,3,17,big,,1,0,,ECU_VIN

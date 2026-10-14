@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>PLC 开始测试信号位 500ms 轮询流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body { background-color: #121212; color: #FFFFFF; font-family: sans-serif; padding: 20px; }
+        .mermaid { background-color: #1E1E1E; padding: 20px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h2>PLC 开始测试信号位 500ms 轮询流程图</h2>
+    <div class="mermaid">
+    graph TD
+        classDef startEnd fill:#8A2BE2,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef condition fill:#FFD700,stroke:#333,stroke-width:2px,color:#000;
+        classDef process fill:#1E90FF,stroke:#fff,stroke-width:1px,color:#fff;
+        classDef success fill:#28A745,stroke:#fff,stroke-width:2px,color:#fff;
+        classDef fail fill:#DC3545,stroke:#fff,stroke-width:2px,color:#fff;
+
+        Start["PLC 开始测试信号轮询机制"]
+        
+        subgraph PollingLoop["500ms 定时器循环 (QTimer)"]
+            CheckConn{"Easy320 设备已连接?"}
+            ReadModbus["Modbus TCP 读取 PLC 地址 1 (寄存器数量 1)"]
+            StoreVal["更新本地 trigger_signal 变量 (准备供后期自动触发)"]
+            UpdateUI["更新 UI 状态标签: 🚩 开始测试信号 (地址1)"]
+        end
+        
+        Start --> CheckConn
+        CheckConn -- "否" --> OfflineUI["显示 [未连接] 离线状态"]
+        CheckConn -- "是" --> ReadModbus
+        ReadModbus --> StoreVal
+        StoreVal --> UpdateUI
+
+        class Start startEnd;
+        class CheckConn condition;
+        class ReadModbus,StoreVal process;
+        class UpdateUI,OfflineUI success;
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</body>
+</html>

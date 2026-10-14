@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>力捷丰 SG400 查询按钮文本截断修复流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    </script>
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            background-color: #0b1120;
+            color: #e5e7eb;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+        }
+        h1 {
+            color: #38bdf8;
+            font-size: 22px;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        .subtitle {
+            text-align: center;
+            color: #94a3b8;
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+        .container {
+            background-color: #151e2e;
+            border: 1px solid #1f2937;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .mermaid {
+            display: flex;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>力捷丰 SG400 查询按钮文本截断修复业务流程图</h1>
+    <div class="subtitle">根因: setFixedWidth(130) 硬编码限制 vs 文本+内边距所需宽度(148px) | 方案: 自适应宽度自展</div>
+    <div class="container">
+        <div class="mermaid">
+graph TD
+    Bug["现象: 按钮文字显示为 '🔄 查询 CH1 状...' (末尾态字被截断)"] --> RootCause["根因分析: setFixedWidth(130) 硬编码锁定过小"]
+    RootCause --> Calc["宽度计算: 6个汉字 + CH1 + Emoji + padding(28px) = 约148px > 130px"]
+    
+    Calc --> Fix["修复方案: 移除 setFixedWidth 约束, 改为自适应宽度 (min-width: 145px)"]
+    Fix --> Layout["顶部 HeaderBar 自适应舒展, 彻底消除截断"]
+    Layout --> Verify["完整显示: '🔄 查询 CH1 状态' (100% 完整无缺)"]
+
+    classDef startEnd fill:#7c3aed,stroke:#a78bfa,stroke-width:2px,color:#ffffff;
+    classDef process fill:#2563eb,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef failure fill:#dc2626,stroke:#f87171,stroke-width:2px,color:#ffffff;
+    classDef success fill:#059669,stroke:#34d399,stroke-width:2px,color:#ffffff;
+
+    class Bug failure;
+    class RootCause,Calc process;
+    class Fix,Layout,Verify success;
+        </div>
+    </div>
+</body>
+</html>
