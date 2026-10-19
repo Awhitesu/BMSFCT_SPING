@@ -17,6 +17,10 @@ class DeviceStepDispatchTests(unittest.TestCase):
         self.manager=SimpleNamespace(dmm34461=driver,
             is_enabled=lambda _:True,device_step_lock=lambda _:threading.RLock())
         self.worker=ChannelWorker(1,[],device_manager=self.manager)
+        self.worker.is_running = True
+
+    def tearDown(self):
+        self.worker.is_running = False
 
     def step(self):
         return SubStep(SubStepType.READ_INSTRUMENT,{'device':DEVICES['dmm34461'][1],
@@ -34,6 +38,14 @@ class DeviceStepDispatchTests(unittest.TestCase):
         ok,result=self.worker._execute_sub_step_logic(self.step())
         self.assertFalse(ok);self.assertIn('DMM timeout',result)
         self.assertNotIn('DUT_V',self.worker.variables)
+
+    def test_stopped_worker_does_not_execute_device_step(self):
+        self.worker.is_running = False
+        ok, result = self.worker._execute_sub_step_logic(self.step())
+        self.assertFalse(ok)
+        self.assertIn('测试已停止', result)
+        self.driver.measure.assert_not_called()
+        self.assertNotIn('DUT_V', self.worker.variables)
 
     def test_can_uses_shared_pcan_without_obsolete_board_manager(self):
         can=Mock();can.is_connected=True;can.send_can_message.return_value=True

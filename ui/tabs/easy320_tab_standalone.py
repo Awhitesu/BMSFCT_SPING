@@ -1,21 +1,19 @@
 import sys
-import time
-from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, 
-                                QPushButton, QLabel, QGroupBox, QLineEdit, QScrollArea, QFrame, QMessageBox,
-                                QSpinBox,QFileDialog,QSizePolicy)
+
+from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton, QLabel, QGroupBox, QLineEdit, QScrollArea, QMessageBox, QSpinBox, QFileDialog, QSizePolicy
 from PySide6.QtCore import Qt, QTimer,QEvent
 
 # 导入之前提取的独立驱动
-from devices.easy320_driver import Easy320Controller
+
 from ui.device_task import DeviceTask
-from core.easy320_channels import default_channels,normalize_channels,read_channel_excel
+from core.easy320_channels import default_channels,read_channel_excel,configured_channels
 
 class Easy320StandaloneTab(QWidget):
     def __init__(self, driver, manager=None):
         super().__init__()
         self.setWindowTitle("Easy320 继电器控制测试")
         self.resize(1000, 600)
-        
+
         # 使用传入的驱动实例
         self.manager = manager
         self._driver = driver
@@ -26,16 +24,15 @@ class Easy320StandaloneTab(QWidget):
         self.relay_buttons = []
         self.channels=default_channels()
         self.channel_config_error=''
-        if manager and manager.db_manager:
-            saved=(manager.db_manager.load_sys_config() or {}).get('easy320_channels')
-            if saved is not None:
-                try:self.channels=normalize_channels((i+1,row['do'],row.get('name','')) for i,row in enumerate(saved))
-                except (ValueError,KeyError,TypeError) as exc:
-                    self.channels=[];self.channel_config_error=f'已保存通道配置无效：{exc}，请重新导入Excel'
+        try:self.channels=configured_channels(manager)
+        except (ValueError,KeyError,TypeError) as exc:
+            self.channels=[];self.channel_config_error=f'已保存通道配置无效：{exc}，请重新导入Excel'
         self.start_test_signal_val = 0
-        
+
         self._init_ui()
-        
+        from ui.layout_safety import protect_form_layout
+        protect_form_layout(self)
+
         # 定时同步共享驱动状态：启动自检已连接时也能立即显示。
         self.timer = QTimer(self)
         self.timer.timeout.connect(lambda:self.sync_status() if self.isVisible() else None)
@@ -50,41 +47,41 @@ class Easy320StandaloneTab(QWidget):
     def _init_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(15, 15, 15, 15)
-        
+
         # --- 1. 顶部通讯配置 ---
         group_comm = QGroupBox("Easy320 继电器控制 (Modbus TCP)")
         comm_layout = QHBoxLayout()
-        
+
         comm_layout.addWidget(QLabel("IP 地址:"))
         self.edit_ip = QLineEdit(self.easy320.ip)
         self.edit_ip.setReadOnly(True)
         self.edit_ip.setFixedWidth(150)
         comm_layout.addWidget(self.edit_ip)
-        
+
         comm_layout.addWidget(QLabel("端口:"))
         self.edit_port = QLineEdit(str(self.easy320.port))
         self.edit_port.setReadOnly(True)
         self.edit_port.setFixedWidth(60)
         comm_layout.addWidget(self.edit_port)
-        
+
         self.btn_connect = QPushButton("连接设备")
         self.btn_connect.setMinimumSize(110, 34)
         self.btn_connect.setStyleSheet("background-color: #007bff; color: white; font-weight: bold;")
         self.btn_connect.clicked.connect(self.connect_device)
-        
+
         self.btn_disconnect = QPushButton("断开连接")
         self.btn_disconnect.setMinimumSize(110, 34)
         self.btn_disconnect.clicked.connect(self.disconnect_device)
-        
+
         comm_layout.addWidget(self.btn_connect)
         comm_layout.addWidget(self.btn_disconnect)
         comm_layout.addStretch()
-        
+
         self.lbl_status = QLabel("状态: 未连接")
         self.lbl_status.setMinimumWidth(150)
         self.lbl_status.setAlignment(Qt.AlignCenter)
         comm_layout.addWidget(self.lbl_status)
-        
+
         group_comm.setLayout(comm_layout)
         main_layout.addWidget(group_comm)
         self._refresh_connection_state()
@@ -103,11 +100,11 @@ class Easy320StandaloneTab(QWidget):
         scroll.viewport().installEventFilter(self)
         scroll.setWidgetResizable(True)
         main_layout.addWidget(scroll)
-        
+
         panel_widget = QWidget()
         scroll.setWidget(panel_widget)
         panel_layout = QVBoxLayout(panel_widget)
-        
+
         group_relays = QGroupBox("继电器状态控制")
         self.relay_group=group_relays
         group_relays.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Maximum)
@@ -115,12 +112,12 @@ class Easy320StandaloneTab(QWidget):
         grid_layout.setSpacing(10)
         self.relay_grid=grid_layout
         self.relay_columns=0
-        
+
         self.rebuild_channels()
 
         group_relays.setLayout(grid_layout)
         panel_layout.addWidget(group_relays)
-        
+
         # --- 3. 批量操作 ---
         batch_layout = QHBoxLayout()
         btn_all_on = QPushButton("全部开启")
@@ -184,7 +181,7 @@ class Easy320StandaloneTab(QWidget):
 
         reg_layout.addStretch()
         panel_layout.addWidget(group_registers)
-        
+
         panel_layout.addStretch()
 
     def rebuild_channels(self):
@@ -193,6 +190,7 @@ class Easy320StandaloneTab(QWidget):
         self.relay_buttons=[]
         for position,channel in enumerate(self.channels):
             button=QPushButton();button.setCheckable(True)
+            button.setProperty('multilineTile',True)
             button.setMinimumWidth(150)
             button.setFixedHeight(72)
             button.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Fixed)
@@ -249,12 +247,6 @@ class Easy320StandaloneTab(QWidget):
         return True
 
     def connect_device(self):
-        ip = self.edit_ip.text().strip()
-        try:
-            port = int(self.edit_port.text().strip())
-        except:
-            port = 502
-            
         self.lbl_status.setText("状态: 正在连接...")
         driver = self.easy320
         self.run_task(driver.connect, lambda ok, value: self._finalize_connect(ok and value))
@@ -318,7 +310,7 @@ class Easy320StandaloneTab(QWidget):
             QMessageBox.warning(self, "提醒", "请先连接设备")
             self.relay_buttons[index].setChecked(not checked)
             return
-            
+
         driver=self.easy320
         def completed(ok, value):
             state=checked if ok and value else not checked

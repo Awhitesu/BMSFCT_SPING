@@ -1,6 +1,9 @@
 import os
 import sys
 import threading
+from core.instrument_control import control_power, shutdown_calibrator, connect_instrument, control_generator
+from core.board_control import control_board
+from core.simulator_control import control_simulator, read_simulator
 from pathlib import Path
 
 # Allow python-can to load the bundled 64-bit PCAN-Basic runtime without a
@@ -26,6 +29,7 @@ from .rigol_dg2052 import DG2052
 from .keysight_34461a import Keysight34461A
 from .tektronix_tbs2102b import TBS2102B
 from .ca550_driver import CA550Controller
+from .infoscan_scanner import InfoscanScanner
 from .easy320_driver import Easy320Controller
 from .opteeq_sg400 import OpteeQSG400
 from .renesas_e2_rfp import RenesasE2Rfp
@@ -49,6 +53,8 @@ class DeviceManager:
         self.rn_boards = {}
         self._device_step_locks = {}
         self._device_step_guard = threading.RLock()
+        from core.dbc_signals import DBCMonitor
+        self.dbc_monitor=DBCMonitor()
         
         
         
@@ -104,6 +110,8 @@ class DeviceManager:
         ca_com = cfg.get("ca550_com", "")
         ca_baudrate = int(cfg.get("ca550_baudrate", 9600))
         self.ca550 = CA550Controller(port=ca_com, baudrate=ca_baudrate)
+        self.scanner=InfoscanScanner(cfg)
+        self.enabled_devices['scanner']=bool(cfg.get('scanner_enabled',False))
 
         # 7. Easy320
         e320_ip = cfg.get("easy320_ip", "192.168.1.88")
@@ -135,24 +143,44 @@ class DeviceManager:
         self.pcan.zlg_sdk_path = cfg.get('zlg_sdk_path') or str(_PROJECT_ROOT / 'zlgcan(20260806)' / 'zlgcan_x64')
         self.pcan.zlg_ip = cfg.get('zlg_ip', '192.168.0.177')
         self.pcan.zlg_port = int(cfg.get('zlg_port', 8000))
+        from .rn_board import board_settings
+        for setting in board_settings(cfg):
+            board = self.rn_boards.get(setting['key'])
+            if board is not None and board.setting != setting:
+                with board._lock:
+                    board.disconnect()
+                    board.setting = setting
+                    board.ip, board.port = setting['ip'], setting['port']
 
     def device_step_lock(self,key):
         with self._device_step_guard:
             return self._device_step_locks.setdefault(key,threading.RLock())
 
-    def get_rn_board(self,key):
+    def get_rn_board(self,key,setting=None):
         from .rn_board import board_settings,RNBoard
-        cfg=self.db_manager.load_sys_config() if self.db_manager else {}
-        setting=next((s for s in board_settings(cfg or {}) if s['key']==key),None)
+        if setting is None:
+            cfg=self.db_manager.load_sys_config() if self.db_manager else {}
+            setting=next((s for s in board_settings(cfg or {}) if s['key']==key),None)
         if not setting or not setting['enabled'] or not setting['ip']:
             raise ValueError(f'{key} 未配置或未启用，请在板卡调试连接配置页保存配置')
         with self._device_step_guard:
             board=self.rn_boards.get(key)
             if board and board.setting!=setting:
-                board.disconnect();board=None
+                with board._lock:
+                    board.disconnect()
+                    board.setting = setting
+                    board.ip, board.port = setting["ip"], setting["port"]
             if board is None:
                 board=RNBoard(setting);self.rn_boards[key]=board
             return board
+
+    def resistor_routes(self):
+        from .rn_board import board_settings
+        from .resistor_bank import channel_routes
+        cfg = self.db_manager.load_sys_config() if self.db_manager else {}
+        boards = {s['key']: self.get_rn_board(s['key']) for s in board_settings(cfg or {})
+                  if s['kind'] == 'resistor' and s['enabled']}
+        return channel_routes(boards)
 
     def is_enabled(self, key: str) -> bool:
         return bool(getattr(self, "enabled_devices", {}).get(key, True))
@@ -172,9 +200,9 @@ class DeviceManager:
                 return sim, local + 1
         return None, None
 
-    def set_voltage(self, global_ch: int, voltage: float, logger=None):
+    def set_voltage(self, global_ch: int, voltage: float, logger=None, cancelled=lambda:False):
         sim, ch = self._get_sim_and_ch(global_ch)
-        if sim: return sim.set_voltage(ch, voltage, logger)
+        if sim: return control_simulator(sim,'voltage',[ch],voltage,logger=logger,cancelled=cancelled)
         if logger: logger(f"错误: 找不到通道 {global_ch} 对应的模拟器")
         return False
 
@@ -185,137 +213,111 @@ class DeviceManager:
                       if self.is_enabled(f"sim{slot}")
                       for ch in range(1, sim.max_channels + 1))
 
-    def set_current(self, global_ch: int, current: float, logger=None):
+    def set_current(self, global_ch: int, current: float, logger=None, cancelled=lambda:False):
         sim, ch = self._get_sim_and_ch(global_ch)
-        if sim: return sim.set_current_limit(ch, current, logger)
+        if sim: return control_simulator(sim,'current',[ch],current,logger=logger,cancelled=cancelled)
         if logger: logger(f"错误: 找不到通道 {global_ch} 对应的模拟器")
         return False
 
-    def output_control(self, global_ch: int, state: bool, logger=None):
+    def output_control(self, global_ch: int, state: bool, logger=None, cancelled=lambda:False):
         sim, ch = self._get_sim_and_ch(global_ch)
-        if sim: return sim.output_control(ch, state, logger)
+        if sim: return control_simulator(sim,'output',[ch],state,logger=logger,cancelled=cancelled)
         if logger: logger(f"错误: 找不到通道 {global_ch} 对应的模拟器")
         return False
 
-    def measure_voltage(self, global_ch: int, logger=None) -> float:
+    def measure_voltage(self, global_ch: int, logger=None, cancelled=lambda:False) -> float:
         sim, ch = self._get_sim_and_ch(global_ch)
-        if sim: return sim.measure_voltage(ch, logger)
+        if sim: return read_simulator(sim,'voltage',ch,logger,cancelled)
         if logger: logger(f"错误: 找不到通道 {global_ch} 对应的模拟器")
         return -1.0
 
-    def measure_current(self, global_ch: int, logger=None) -> float:
+    def measure_current(self, global_ch: int, logger=None, cancelled=lambda:False) -> float:
         sim, ch = self._get_sim_and_ch(global_ch)
-        if sim: return sim.measure_current(ch, logger)
+        if sim: return read_simulator(sim,'current',ch,logger,cancelled)
         if logger: logger(f"错误: 找不到通道 {global_ch} 对应的模拟器")
         return -1.0
 
-    def broadcast_voltage(self, voltage: float, logger=None) -> bool:
+    def broadcast_voltage(self, voltage: float, logger=None, cancelled=lambda:False) -> bool:
         from devices.simulator_batch import run_simulator_batch
-        result=run_simulator_batch(self.simulator_channels(),lambda sim,chs:sim.set_voltages(voltage,chs,logger))
+        result=run_simulator_batch(self.simulator_channels(),lambda sim,chs:control_simulator(sim,'voltage',chs,voltage,logger=logger,batch=True,cancelled=cancelled))
         if logger:
             for row in result['results']:
                 if not row['ok']: logger(str(row))
         return result['ok']
 
-    def broadcast_current(self, current: float, logger=None) -> bool:
-        """单设备单通道设置电流。"""
-        if logger: logger(f"[*] 全系统同步设置电流限制: {current}A")
-        success = True
-        attempted = 0
-        for i, sim in enumerate(self.simulators):
-            if self.is_enabled(f"sim{i+1}"):
-                for ch in range(1, sim.max_channels + 1):
-                    attempted += 1
-                    if not sim.set_current_limit(ch, current, logger):
-                        success = False
-                        if logger: logger(f'[!] 第{getattr(sim,"sequence_number",i+1)}台CH{ch}限流设置失败: {getattr(sim,"last_error","")}')
-        return success and attempted>0
+    def broadcast_current(self, current: float, logger=None, cancelled=lambda:False) -> bool:
+        return self._broadcast_simulator_parameter('current',current,logger,cancelled)
 
-    def broadcast_range(self, range_str: str, logger=None) -> bool:
-        """全系统广播设置量程: HIGH / LOW"""
-        if logger: logger(f"[*] 全系统同步设置量程: {range_str}")
-        success = True
-        attempted = 0
-        for i, sim in enumerate(self.simulators):
-            if self.is_enabled(f"sim{i+1}"):
-                for ch in range(1, sim.max_channels + 1):
-                    attempted += 1
-                    if not sim.set_range(ch, range_str, logger):
-                        success = False
-                        if logger: logger(f'[!] 第{getattr(sim,"sequence_number",i+1)}台CH{ch}量程设置失败: {getattr(sim,"last_error","")}')
-        return success and attempted>0
+    def broadcast_range(self, range_str: str, logger=None, cancelled=lambda:False) -> bool:
+        return self._broadcast_simulator_parameter('range',range_str,logger,cancelled)
 
-    def broadcast_output(self, state: bool, logger=None) -> bool:
+    def _broadcast_simulator_parameter(self,action,value,logger,cancelled):
         from devices.simulator_batch import run_simulator_batch
-        result=run_simulator_batch(self.simulator_channels(),lambda sim,chs:sim.output_controls(state,chs,logger))
+        result=run_simulator_batch(self.simulator_channels(),
+            lambda sim,chs:control_simulator(sim,action,chs,value,logger=logger,batch=True,cancelled=cancelled))
+        if logger:
+            for row in result['results']:
+                if not row['ok']:logger(str(row))
+        return result['ok']
+
+    def broadcast_output(self, state: bool, logger=None, cancelled=lambda:False) -> bool:
+        from devices.simulator_batch import run_simulator_batch
+        result=run_simulator_batch(self.simulator_channels(),lambda sim,chs:control_simulator(sim,'output',chs,state,logger=logger,batch=True,cancelled=cancelled))
         if logger:
             for row in result['results']:
                 if not row['ok']: logger(str(row))
         return result['ok']
 
-    def init_all_devices(self, logger=None):
+    def init_all_devices(self, logger=None, cancelled=lambda:False):
         """
         初始化连接所有硬件，遵循方案书要求的顺序启动防浪涌逻辑
         """
-        if logger: logger("[*] 开始系统硬件全量初始化...")
-
-        if self.is_enabled("pcan") and self.pcan:
-            self.pcan.connect()
-            if logger: logger(f"[*] USB PCAN-FD 状态: {'已联机' if self.pcan.is_connected else '离线'} ({self.pcan.channel})")
-
-        if self.is_enabled("opteeq") and self.opteeq:
-            self.opteeq.connect()
-            state = self.opteeq.query_state() if self.opteeq.is_connected else self.opteeq.last_error
-            if logger: logger(f"[*] 力捷丰 SG400 下载器状态: {'已联机' if self.opteeq.is_connected else '离线'} ({state})")
-
-        if self.is_enabled("e2_rfp") and self.e2_rfp:
-            self.e2_rfp.connect()
-            state = self.e2_rfp.query_state() if self.e2_rfp.is_connected else self.e2_rfp.last_error
-            if logger: logger(f"[*] 瑞萨 E2 下载器状态: {'已联机' if self.e2_rfp.is_connected else '离线'} ({state})")
-        
-        # 1. 基础控制与校准设备初始化
-        if self.is_enabled("easy320") and self.easy320: 
-            self.easy320.connect()
-            if logger: logger(f"[*] Easy320 PLC 状态: {'已联机' if self.easy320.is_connected else '离线'}")
-        if self.is_enabled("ca550") and self.ca550: 
-            self.ca550.connect()
-            if logger: logger(f"[*] CA550 校准源 状态: {'已联机' if self.ca550.is_connected else '离线'}")
-        
-        # 2. 电源类设备初始化
-        if self.is_enabled("hv") and self.hv_source: 
-            self.hv_source.connect()
-            if logger: logger(f"[*] NGI 高压源 状态: {'已联机' if self.hv_source.is_connected else '离线'}")
-        
-        if self.is_enabled("dut_pwr") and self.dut_power: 
-            self.dut_power.connect()
-            if logger: logger(f"[*] IT6722A 被测物供电电源 状态: {'已联机' if self.dut_power.is_connected else '离线'}")
-            
-
-        # 3. NGI 83624A 电池模拟器初始化
-        if self.is_enabled('it6333b'):
-            ok = self.it6333b.connect()
+        from .rn_board import board_settings
+        operations = []
+        devices = [('pcan', self.pcan), ('opteeq', self.opteeq), ('e2_rfp',self.e2_rfp),
+                   ('easy320',self.easy320), ('ca550',self.ca550), ('scanner',getattr(self,'scanner',None)), ('hv',self.hv_source),
+                   ('dut_pwr',self.dut_power), ('it6333b',self.it6333b),
+                   ('tbs2102b',self.tbs2102b), ('dg2052',self.dg2052), ('dmm34461',self.dmm34461)]
+        devices.extend((f'sim{i}',sim) for i,sim in enumerate(self.simulators,1))
+        operations.extend((key, device) for key,device in devices if self.is_enabled(key) and device)
+        cfg = self.db_manager.load_sys_config() if self.db_manager else {}
+        pending_boards = {}
+        for setting in board_settings(cfg or {}):
+            if setting['enabled']:
+                pending_boards[setting['key']] = setting
+                operations.append((setting['key'], None))
+        from PySide6.QtCore import QThread
+        def stop_requested():
+            return cancelled() or QThread.currentThread().isInterruptionRequested()
+        success = True
+        for key, device in operations:
+            if stop_requested():
+                return False
+            try:
+                if key in pending_boards:
+                    device = self.get_rn_board(key, pending_boards[key])
+                if key in ('hv', 'dut_pwr', 'ca550', 'it6333b', 'dg2052'):
+                    ok = connect_instrument(device, stop_requested)
+                else:
+                    ok = bool(device.connect())
+            except Exception as exc:
+                ok = False
+                if logger: logger(f"[!] {key}: {exc}")
+            if not ok and key == 'hv':
+                try:
+                    device.disconnect()
+                except Exception as exc:
+                    if logger: logger(f"[!] {key} disconnect: {exc}")
+                finally:
+                    device.is_connected = False
+            success = success and ok
             if logger:
-                logger(f"[*] IT6333B 三通道电源: {'已连接' if ok else self.it6333b.last_error}")
-        sim_conn_count = 0
-        if self.is_enabled('tbs2102b'):
-            ok = self.tbs2102b.connect()
-            if logger:
-                logger(f"[*] TBS2102B 示波器: {'已连接' if ok else self.tbs2102b.last_error}")
-        if self.is_enabled('dg2052'):
-            ok = self.dg2052.connect()
-            if logger:
-                logger(f"[*] DG2052 信号发生器: {'已连接' if ok else self.dg2052.last_error}")
-        if self.is_enabled('dmm34461'):
-            ok=self.dmm34461.connect()
-            if logger:logger(f"[*] 34461A 万用表: {'已连接' if ok else self.dmm34461.last_error}")
-        enabled_sims = [sim for idx, sim in enumerate(self.simulators, 1) if self.is_enabled(f"sim{idx}")]
-        for sim in enabled_sims:
-            if sim.connect():
-                sim_conn_count += 1
-        if logger: logger(f"[*] NGI 83624A 电池模拟器 状态: {sim_conn_count} / {len(enabled_sims)} 已联机")
-            
-
-        return True
+                detail = getattr(device, 'last_error', '') if not ok else getattr(device, 'identity', '')
+                if key == 'e2_rfp' and ok:
+                    logger('[+] e2_rfp: E2 USB已识别；目标连接未验证')
+                else:
+                    logger(f"{'[+]' if ok else '[!]'} {key}: {'connected' if ok else 'offline'}" + (f" ({detail})" if isinstance(detail, str) and detail else ''))
+        return success and not stop_requested()
 
     def get_all_device_status(self):
         """获取所有设备的连接状态列表，供 UI 展示"""
@@ -323,18 +325,37 @@ class DeviceManager:
         
         # 定义辅助函数
         def add_status(key, name, device, info=""):
+            if key == 'e2_rfp':
+                ready = bool(device and device.tool_ready)
+                present = bool(ready and device.is_connected)
+                status_list.append({
+                    'key': key, 'name': name, 'info': info,
+                    'status': 'E2已识别（目标未验证）' if present else '离线',
+                    'color': '#FFC107' if present else '#DC3545',
+                    'connection_verified': False,
+                    'usb_verified': present,
+                    'detail': getattr(device, 'presence_error', '') or getattr(device, 'last_error', ''),
+                })
+                return
             is_conn = getattr(device, "is_connected", False) if device else False
             status_list.append({
                 "key": key,
                 "name": name,
                 "info": info or (getattr(device, "ip", "") if device else ""),
                 "status": "已联机" if is_conn else "离线",
-                "color": "#28A745" if is_conn else "#DC3545"
+                "color": "#28A745" if is_conn else "#DC3545",
+                "detail": str(getattr(device, 'last_error', '') or '') if device else '设备尚未连接'
             })
 
         if self.is_enabled("hv") and self.hv_source: add_status("hv", "NGI 高压源", self.hv_source)
         if self.is_enabled("dut_pwr") and self.dut_power: add_status("dut_pwr", "IT6722A 被测物供电电源", self.dut_power, self.dut_power.port)
         if self.is_enabled("ca550") and self.ca550: add_status("ca550", "CA550 校准源", self.ca550, self.ca550.port)
+        if self.is_enabled('scanner'):
+            device=getattr(self,'scanner',None)
+            status_list.append(dict(key='scanner',name='infoscan FV31-2110 扫码器',
+                info=getattr(device,'port',''),status='串口已连接' if device and device.is_connected else '离线',
+                color='#28A745' if device and device.is_connected else '#DC3545',
+                detail=getattr(device,'last_error','') or '仅表示串口连接；扫码识别请在独立调试页验证。'))
         if self.is_enabled("easy320") and self.easy320: add_status("easy320", "Easy320 PLC", self.easy320)
         if self.is_enabled("pcan") and self.pcan: add_status("pcan", "USB PCAN-FD", self.pcan, self.pcan.channel)
         if self.is_enabled("opteeq") and self.opteeq: add_status("opteeq", "力捷丰 SG400 下载器", self.opteeq, f"{self.opteeq.ip}:{self.opteeq.port}")
@@ -352,88 +373,108 @@ class DeviceManager:
             add_status('tbs2102b', '泰克 TBS2102B 示波器', self.tbs2102b)
         if self.is_enabled('dmm34461'):
             add_status('dmm34461','34461A 万用表',self.dmm34461,f'{self.dmm34461.ip}:{self.dmm34461.port}')
+        from .rn_board import board_settings
+        cfg = self.db_manager.load_sys_config() if self.db_manager else {}
+        for setting in board_settings(cfg or {}):
+            if setting['enabled']:
+                add_status(setting['key'], setting['name'], self.rn_boards.get(setting['key']))
         return status_list
 
     def disconnect_all(self):
-        """断开所有设备的连接并释放资源 (新增系统安全退出逻辑)"""
-        for board in self.rn_boards.values():
-            try:board.disconnect()
-            except Exception:pass
-        # 释放所有电源设备
-        power_devices = [
-            getattr(self,'dmm34461',None),
-            getattr(self, "tbs2102b", None),
-            getattr(self, "dg2052", None),
-            getattr(self, "it6333b", None),
-            getattr(self, "hv_source", None),
-            getattr(self, "dut_power", None)
-        ]
-        for pwr in power_devices:
-            if pwr:
-                try: pwr.disconnect()
-                except: pass
-
-        # 释放其他设备
-        if getattr(self, "easy320", None):
-            try: self.easy320.disconnect()
-            except: pass
-        if getattr(self, "ca550", None):
-            try: self.ca550.disconnect()
-            except: pass
-            
-        # 释放所有电池模拟器
-        for sim in getattr(self, "simulators", []):
-            try: sim.disconnect()
-            except: pass
-        if getattr(self, "pcan", None):
-            try: self.pcan.disconnect()
-            except: pass
-        if getattr(self, "opteeq", None):
-            try: self.opteeq.disconnect()
-            except: pass
-        if getattr(self, "e2_rfp", None):
-            try: self.e2_rfp.disconnect()
-            except: pass
-            
-        print("[DeviceManager] 所有硬件设备通讯句柄已安全释放")
+        """Try every device; retain failures rather than reporting unconditional success."""
+        failures = []
+        try:
+            monitor=getattr(self,'dbc_monitor',None)
+            if monitor:monitor.stop()
+        except Exception as exc:failures.append(f'DBC: {exc}')
+        devices = [(key, board) for key, board in self.rn_boards.items()]
+        devices.extend((key, getattr(self, key, None)) for key in (
+            'dmm34461', 'tbs2102b', 'dg2052', 'it6333b', 'hv_source',
+            'dut_power', 'easy320', 'ca550', 'scanner', 'pcan', 'opteeq', 'e2_rfp'))
+        devices.extend((f'sim{index}', sim) for index, sim in
+                       enumerate(getattr(self, 'simulators', []), 1))
+        for name, device in devices:
+            if device is None:
+                continue
+            try:
+                if device.disconnect() is False:
+                    failures.append(f"{name}: {getattr(device, 'last_error', '') or 'disconnect not confirmed'}")
+            except Exception as exc:
+                failures.append(f'{name}: {exc}')
+        self.last_disconnect_errors = failures
+        if failures:
+            print('[DeviceManager] Disconnect failures: ' + '; '.join(failures))
+        else:
+            print('[DeviceManager] All device connections released')
+        return not failures
 
     def emergency_stop(self):
         """紧急停止：关闭所有电源输出"""
         print("!!! 触发紧急停止 !!!")
-        self.safe_shutdown_outputs()
+        self.safe_shutdown_outputs(emergency=True)
 
-    def safe_shutdown_outputs(self, channel_id=1, logger=None):
+    def safe_shutdown_outputs(self, channel_id=1, logger=None, emergency=False, check_offline=True):
         """尽最大可能关闭所有可能带电的输出，某个设备失败不影响其他设备。"""
         failures = []
+        unverified = []
+
+        def reachable(device, name):
+            if device is None:
+                return False
+            if getattr(device, 'is_connected', False):
+                return True
+            if getattr(device, '_ever_connected', False) is True:
+                message = name + ': 设备失联，无法确认输出关闭'
+                unverified.append(message)
+                if check_offline:
+                    failures.append(message)
+            return False
 
         def attempt(name, action):
             try:
                 result = action()
-                if result is False:
+                if result is False or result is None:
                     failures.append(name)
             except Exception as exc:
                 failures.append(f"{name}: {exc}")
 
-        sim, sim_ch = self._get_sim_and_ch(channel_id)
-        if sim and getattr(sim, "is_connected", False):
-            attempt("电池模拟器", lambda: sim.output_control(sim_ch, False))
-        if self.dut_power and getattr(self.dut_power, "is_connected", False):
-            attempt("DUT电源", lambda: self.dut_power.output_control(False))
-        if self.hv_source and getattr(self.hv_source, "is_connected", False):
-            attempt("高压源", lambda: self.hv_source.output_control(False))
-        if self.ca550 and getattr(self.ca550, "is_connected", False):
-            attempt("CA550归零", lambda: self.ca550.set_source_data(0.0))
-            attempt("CA550输出", lambda: self.ca550.set_source_output(0))
-        if self.it6333b and self.it6333b.is_connected:
+        grouped = {}
+        for global_ch, sim, local_ch in self.simulator_channels():
+            grouped.setdefault(id(sim), (sim, []))[1].append(local_ch)
+        for sim, channels in grouped.values():
+            if reachable(sim, f'Simulator {sim.sequence_number}'):
+                attempt(f"Simulator {sim.sequence_number}", lambda sim=sim, channels=channels: control_simulator(sim,'output',channels,False,logger=logger,batch=True))
+        for board in list(self.rn_boards.values()):
+            if not reachable(board, board.setting['name']):
+                continue
+            kind = board.setting['kind']
+            if kind == 'insulation':
+                attempt(board.setting['name'], lambda board=board: control_board(board,'insulation',state=False))
+            elif kind == 'resistor':
+                for channel in range(1, board.setting['channels'] + 1):
+                    attempt(f"{board.setting['key']} CH{channel}", lambda board=board, channel=channel: control_board(board,'resistance',channel=channel,resistance=0))
+            else:
+                attempt(board.setting['name'], lambda board=board: control_board(board,'all_relays',state=False))
+        if emergency and reachable(self.dut_power, 'DUT power'):
+            attempt("DUT power", lambda: control_power(self.dut_power, 'output_control', False))
+        if reachable(self.hv_source, '高压源'):
+            attempt("高压源", lambda: control_power(self.hv_source, 'output_control', False))
+        if reachable(self.ca550, 'CA550'):
+            attempt("CA550输出", lambda: shutdown_calibrator(self.ca550))
+        if reachable(self.it6333b, 'IT6333B'):
             for channel in (1,2,3):
-                attempt(f'IT6333B CH{channel}',lambda ch=channel:self.it6333b.output_control(ch,False))
-        if self.dg2052 and self.dg2052.is_connected:
+                attempt(f'IT6333B CH{channel}',lambda ch=channel:control_power(self.it6333b, 'output_control', False, channel=ch))
+        if reachable(self.dg2052, 'DG2052'):
             for channel in (1,2):
-                attempt(f'DG2052 CH{channel}',lambda ch=channel:self.dg2052.output_control(ch,False))
+                attempt(f'DG2052 CH{channel}',lambda ch=channel:control_generator(self.dg2052, 'output', ch, state=False))
 
+        self.last_shutdown_errors = list(failures)
+        self.last_shutdown_unverified = unverified
         if logger:
             if failures:
                 logger("[WARN] 安全断电未全部成功: " + "; ".join(failures))
+            elif unverified:
+                logger("[WARN] 在线设备已执行关闭，但存在无法确认的失联输出: " + "; ".join(unverified))
             else:
                 logger("[*] 已执行安全断电")
         return not failures

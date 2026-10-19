@@ -1,0 +1,18 @@
+VERSION "BMSFCT simulation example - NOT a production protocol"
+NS_ :
+BS_:
+BU_: BMS Tester
+BO_ 848 BMS_Status: 8 BMS
+ SG_ PackVoltage : 0|16@1+ (0.1,0) [0|6553.5] "V" Tester
+ SG_ PackCurrent : 16|16@1- (0.1,0) [-3276.8|3276.7] "A" Tester
+ SG_ SOC : 32|8@1+ (0.4,0) [0|100] "%" Tester
+ SG_ BmsState : 40|8@1+ (1,0) [0|3] "" Tester
+ SG_ FaultCount : 48|8@1+ (1,0) [0|255] "" Tester
+ SG_ AliveCounter : 56|8@1+ (1,0) [0|255] "" Tester
+BO_ 849 BMS_CellStats: 8 BMS
+ SG_ MinCellVoltage : 0|16@1+ (0.001,0) [0|6] "V" Tester
+ SG_ MaxCellVoltage : 16|16@1+ (0.001,0) [0|6] "V" Tester
+ SG_ MaxTemperature : 32|8@1- (1,0) [-128|127] "degC" Tester
+ SG_ MinTemperature : 40|8@1- (1,0) [-128|127] "degC" Tester
+VAL_ 848 BmsState 0 "Sleep" 1 "Ready" 2 "Run" 3 "Fault";
+CM_ "SIMULATION ONLY. Replace signal definitions and test limits with approved project values.";

@@ -18,6 +18,19 @@ def download(size, data_format=0):
 
 
 class ProgressTests(unittest.TestCase):
+    def test_unmatched_frames_are_visible_in_diagnostics(self):
+        tracker = FlashProgress()
+        tracker.feed(dict(can_id=0x123, direction='RX', data=b'\x01\x00'))
+        status = tracker.snapshot()
+        self.assertEqual(status['received_frames'], 1)
+        self.assertEqual(status['observed_ids'], ['0x123'])
+        self.assertIsNone(status['last_can_age'])
+
+    def test_external_flash_ellipsis_status(self):
+        self.assertEqual(_record_state('Flash...'), 'FLASH')
+        self.assertEqual(_record_state('Flash…'), 'FLASH')
+        self.assertEqual(_record_state('PASSword'), '')
+
     def setUp(self):
         self.now = 0.0
         self.progress = FlashProgress(clock=lambda: self.now)

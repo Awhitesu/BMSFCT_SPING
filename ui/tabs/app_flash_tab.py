@@ -4,7 +4,7 @@ import time
 import configparser
 from datetime import datetime
 
-from PySide6.QtCore import Qt
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
     QLabel, QLineEdit, QPushButton, QFileDialog, QTextEdit,
@@ -27,6 +27,8 @@ class AppFlashTab(QWidget):
         super().__init__(parent)
         self.device_manager = device_manager
         self._init_ui()
+        from ui.layout_safety import protect_form_layout
+        protect_form_layout(self)
 
     def _init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -206,7 +208,6 @@ class AppFlashTab(QWidget):
         return os.path.normpath(os.path.join(host_dir, rel_or_abs))
 
     def _on_browse_file(self):
-        cur = self.edit_base_path.text().strip()
         init_dir = self._get_host_dir()
         file_path, _ = QFileDialog.getOpenFileName(
             self, "选择上位机程序文件", init_dir,
@@ -217,7 +218,6 @@ class AppFlashTab(QWidget):
             self._log(f"上位机程序文件已更新: {file_path}")
 
     def _on_browse_dir(self):
-        cur = self.edit_base_path.text().strip()
         init_dir = self._get_host_dir()
         dir_path = QFileDialog.getExistingDirectory(self, "选择上位机同级目录", init_dir)
         if dir_path:
@@ -250,7 +250,7 @@ class AppFlashTab(QWidget):
         try:
             config = configparser.ConfigParser()
             config.read(ini_path, encoding="utf-8")
-            
+
             # 大小写不敏感查找 Section
             matched_sec = None
             for s in config.sections():

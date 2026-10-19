@@ -32,6 +32,7 @@ class Easy320Controller:
         """建立连接并执行握手验证"""
         import socket
         with self.lock:
+            self.is_connected = False
             # 1. 物理探测 IP 是否可达 (超时 0.8s)
             try:
                 with socket.create_connection((self.ip, self.port), timeout=0.8):
@@ -48,7 +49,7 @@ class Easy320Controller:
                 
                 if self.client.connect():
                     result = self.client.read_coils(address=self.start_address, count=1, device_id=self.slave_id)
-                    if result and not result.isError():
+                    if result and not result.isError() and len(result.bits) >= 1:
                         self.is_connected = True
                         logger.info(f"成功连接并验证 Easy320: {self.ip}:{self.port}")
                         return True
@@ -87,16 +88,23 @@ class Easy320Controller:
                     time.sleep(0.05)
                     
                     # 优先尝试线圈写入 (FC05)
+                    register_mode = False
                     result = self.client.write_coil(address=address, value=state, device_id=self.slave_id)
                     if not (result and not result.isError()):
                         # 备选尝试寄存器写入 (FC06)
+                        register_mode = True
                         result = self.client.write_register(address=address, value=1 if state else 0, device_id=self.slave_id)
                         
                     if result and not result.isError():
                         # 增加物理回读校验
                         time.sleep(0.05)
-                        check = self.client.read_coils(address=address, count=1, device_id=self.slave_id)
-                        if not check.isError() and check.bits[0] == state:
+                        if register_mode:
+                            check = self.client.read_holding_registers(address=address, count=1, device_id=self.slave_id)
+                            values = getattr(check, 'registers', [])
+                        else:
+                            check = self.client.read_coils(address=address, count=1, device_id=self.slave_id)
+                            values = getattr(check, 'bits', [])
+                        if check and not check.isError() and values and values[0] == state:
                             return True
                         else:
                             logger.warning(f"Easy320 继电器 {index} 写入成功但回读校验失败，准备重试")
@@ -120,32 +128,18 @@ class Easy320Controller:
         if not self.is_connected:
             return []
         with self.lock:
-            # 候选物理地址: 1-based (address), 0-based (address-1), 以及 Easy320 偏移
-            addrs_to_try = [address]
-            if address > 0:
-                addrs_to_try.append(address - 1)
-            addrs_to_try.append(self.start_address + address - 1)
-
-            for addr in addrs_to_try:
-                # 兼容 device_id 与 slave 参数
-                for p_name in ["device_id", "slave"]:
-                    try:
-                        kwargs = {p_name: self.slave_id}
-                        res = self.client.read_holding_registers(address=addr, count=count, **kwargs)
-                        if res and not res.isError() and hasattr(res, 'registers'):
-                            return res.registers
-                    except Exception:
-                        pass
-
-                # 备用：若保持寄存器无响应，尝试线圈 (FC01)
-                for p_name in ["device_id", "slave"]:
-                    try:
-                        kwargs = {p_name: self.slave_id}
-                        res = self.client.read_coils(address=addr, count=count, **kwargs)
-                        if res and not res.isError() and hasattr(res, 'bits'):
-                            return [1 if b else 0 for b in res.bits[:count]]
-                    except Exception:
-                        pass
+            # The configured Modbus address is exact; never guess another register.
+            for parameter in ("device_id", "slave"):
+                try:
+                    result = self.client.read_holding_registers(
+                        address=address, count=count, **{parameter: self.slave_id})
+                    if result and not result.isError() and len(result.registers) == count:
+                        return list(result.registers)
+                    return []
+                except TypeError:
+                    continue
+                except Exception:
+                    return []
             return []
 
     def write_register(self, address: int, value: int, verify: bool = True) -> bool:

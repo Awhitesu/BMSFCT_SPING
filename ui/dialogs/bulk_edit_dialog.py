@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                                QLineEdit, QPushButton, QComboBox, QCheckBox, QGroupBox)
-from PySide6.QtCore import Qt
+
 
 class BulkEditDialog(QDialog):
     def __init__(self, parent=None):

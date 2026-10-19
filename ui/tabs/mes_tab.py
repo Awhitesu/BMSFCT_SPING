@@ -1,5 +1,4 @@
 import json
-import os
 from datetime import datetime
 
 from PySide6.QtCore import QObject, QThread, Signal
@@ -8,6 +7,9 @@ from PySide6.QtWidgets import (QFormLayout, QGroupBox, QHBoxLayout, QLabel,
                                QVBoxLayout, QWidget)
 
 from core.mes_client import DEFAULT_MES_URL, MesClient
+from core.mes_client import MesCheckResult
+from core.numeric_validation import finite_reading
+from core import system_config
 
 
 class _MesRequestWorker(QObject):
@@ -19,18 +21,22 @@ class _MesRequestWorker(QObject):
         self.payload = payload
 
     def run(self):
-        client = MesClient(self.settings["url"], self.settings["timeout"])
-        result = client.move_in_check(**self.payload)
+        try:
+            client = MesClient(self.settings["url"], self.settings["timeout"])
+            result = client.move_in_check(**self.payload)
+        except Exception as exc:
+            result = MesCheckResult(False, f"MES 请求异常: {exc}")
         self.finished.emit(result, self.payload)
 
 
 class MesTab(QWidget):
     """MES endpoint configuration and manual move-in check page."""
 
-    def __init__(self, user_name_provider=None, parent=None):
+    def __init__(self, user_name_provider=None, parent=None, db_manager=None):
         super().__init__(parent)
         self.user_name_provider = user_name_provider or (lambda: "")
-        self.config_path = os.path.join("config", "sys_config.json")
+        self.db_manager = db_manager
+        self.config_path = system_config.default_path()
         self._thread = None
         self._worker = None
         self._build_ui()
@@ -76,19 +82,21 @@ class MesTab(QWidget):
         layout.addWidget(QLabel("请求 / 响应日志"))
         layout.addWidget(self.log, 1)
         self.refresh_user()
+        from ui.layout_safety import protect_form_layout
+        protect_form_layout(self)
 
     def refresh_user(self):
         self.user_label.setText(str(self.user_name_provider() or ""))
 
     def _read_all_config(self):
-        try:
-            with open(self.config_path, "r", encoding="utf-8") as handle:
-                return json.load(handle)
-        except (OSError, ValueError):
-            return {}
+        return self.db_manager.load_sys_config() if self.db_manager is not None else system_config.load(self.config_path)
 
     def load_config(self):
-        config = self._read_all_config()
+        try:
+            config = self._read_all_config()
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "配置读取失败", str(exc))
+            return
         self.url_edit.setText(config.get("mes_url", DEFAULT_MES_URL))
         self.equipment_edit.setText(config.get("mes_equipment_no", "GS-APP-08"))
         self.timeout_edit.setText(str(config.get("mes_timeout", 10)))
@@ -99,24 +107,33 @@ class MesTab(QWidget):
             QMessageBox.warning(self, "配置错误", "MES URL 必须以 http:// 或 https:// 开头。")
             return False
         try:
-            timeout = max(0.1, float(self.timeout_edit.text().strip()))
+            timeout = finite_reading(self.timeout_edit.text().strip())
+            if timeout <= 0:
+                raise ValueError('Timeout must be positive')
         except ValueError:
             QMessageBox.warning(self, "配置错误", "超时必须是数字。")
             return False
-        config = self._read_all_config()
-        config.update({
+        config = {
             "mes_url": url,
             "mes_equipment_no": self.equipment_edit.text().strip(),
             "mes_timeout": timeout,
-        })
-        os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
-        with open(self.config_path, "w", encoding="utf-8") as handle:
-            json.dump(config, handle, ensure_ascii=False, indent=4)
+        }
+        try:
+            if self.db_manager is not None:
+                if not self.db_manager.save_sys_config(config):
+                    raise OSError('系统配置未保存，请检查文件权限及配置内容')
+            else:
+                system_config.update(config, self.config_path)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "配置保存失败", str(exc))
+            return False
         if show_message:
             QMessageBox.information(self, "保存成功", "MES 配置已保存，后续测试项立即生效。")
         return True
 
     def send_test(self):
+        if self._thread is not None or getattr(self, '_closing', False):
+            return
         self.refresh_user()
         if not self.save_config(show_message=False):
             return
@@ -129,7 +146,7 @@ class MesTab(QWidget):
         if not payload["sn"]:
             QMessageBox.warning(self, "参数缺失", "请输入或扫描 SN 条码。")
             return
-        settings = {"url": self.url_edit.text().strip(), "timeout": float(self.timeout_edit.text())}
+        settings = {"url": self.url_edit.text().strip(), "timeout": finite_reading(self.timeout_edit.text())}
         display_payload = {"equipmentNo": payload["equipment_no"], "orderNo": payload["order_no"],
                            "sn": payload["sn"], "userName": payload["user_name"]}
         self.log.append(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] POST {settings['url']}\n"
@@ -142,13 +159,24 @@ class MesTab(QWidget):
         self._worker.finished.connect(self._on_finished)
         self._worker.finished.connect(self._thread.quit)
         self._thread.finished.connect(self._worker.deleteLater)
-        self._thread.finished.connect(self._thread.deleteLater)
+        self._thread.finished.connect(self._retire_thread)
         self._thread.start()
 
     def _on_finished(self, result, payload):
         status = "PASS" if result.passed else "FAIL"
         response = json.dumps(result.response, ensure_ascii=False) if isinstance(result.response, (dict, list)) else str(result.response)
         self.log.append(f"RESPONSE HTTP={result.status_code} {status}: {result.message}\n{response}\n")
-        self.test_button.setEnabled(True)
+
+    def _retire_thread(self):
+        from PySide6.QtCore import QTimer
+        thread = self._thread
+        if thread is None:
+            return
+        if not thread.wait(0):
+            QTimer.singleShot(10, self._retire_thread)
+            return
         self._thread = None
         self._worker = None
+        thread.deleteLater()
+        if not getattr(self, '_closing', False):
+            self.test_button.setEnabled(True)

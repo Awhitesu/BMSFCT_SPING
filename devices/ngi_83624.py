@@ -8,6 +8,17 @@ class NGI83624:
     """
     NGI 83624 单/全通道 电池模拟器驱动 (基于 SCPI 协议)
     """
+    # Unloaded H2.00/S1.42 tests found a LOW-range rebound after an initial
+    # in-range reading, as late as 0.69 s after ON. Observe startup and require
+    # a fresh, continuous all-channel pass window; never reuse an early pass.
+    OUTPUT_MIN_SETTLE_SECONDS = 1.0
+    OUTPUT_STABLE_SECONDS = 0.3
+    OUTPUT_CONFIRM_TIMEOUT = 3.0
+    OUTPUT_POLL_INTERVAL = 0.1
+    LIVE_MIN_SETTLE_SECONDS = 0.5
+    READ_STABLE_SECONDS = 0.3
+    READ_TIMEOUT_SECONDS = 3.0
+
     def __init__(self, ip: str, port: int = 7000, max_channels: int = 24):
         self.ip = ip
         self.port = port
@@ -38,11 +49,17 @@ class NGI83624:
             identity = self._read_line()
             if not identity:
                 raise TimeoutError("TCP端口可连接，但设备未响应 *IDN? 查询")
+            if "83624" not in identity.upper():
+                raise ValueError(f"Unexpected simulator identity: {identity}")
+            self.identity = identity
+            self.last_error = ""
             self.is_connected = True
             self._fail_count = 0
             print(f"[*] NGI 83624A ({self.ip}) 通讯握手成功: {identity}")
+            self._ever_connected = True
             return True
         except Exception as e:
+            self.last_error = str(e)
             print(f"[NGI83624] 通讯握手失败 ({self.ip}): {e}")
             try:
                 if self.sock:
@@ -61,9 +78,13 @@ class NGI83624:
         if self.sock:
             try:
                 self.sock.shutdown(socket.SHUT_RDWR)
-                self.sock.close()
-            except:
+            except OSError:
                 pass
+            finally:
+                try:
+                    self.sock.close()
+                except OSError:
+                    pass
         self.sock = None
         self.is_connected = False
         self._rx_buffer = b''
@@ -162,6 +183,8 @@ class NGI83624:
                 selection=','.join(map(str,channels))
                 if not self._safe_send(f'SOUR:VOLT {voltage:g}(@{selection})\n'.encode(),logger=logger): return False
                 replies=self._query_channels('SOUR{ch}:VOLT?',channels,logger)
+                if len(replies) != len(channels):
+                    raise ValueError('Incomplete voltage setpoint replies')
                 failed=[]
                 for ch,reply in zip(channels,replies):
                     try:
@@ -175,7 +198,10 @@ class NGI83624:
 
     def output_controls(self,state,channels=None,logger=None):
         channels=list(range(1,self.max_channels+1)) if channels is None else list(channels)
-        if not channels or any(not 1<=ch<=self.max_channels for ch in channels): return False
+        if (state not in (True, False) or not channels or len(set(channels)) != len(channels)
+                or any(type(ch) is not int or not 1<=ch<=self.max_channels for ch in channels)):
+            self.last_error = "Invalid output state or channels"
+            return False
         with self._lock:
             try:
                 selection=','.join(map(str,channels))
@@ -187,10 +213,13 @@ class NGI83624:
                 self.last_error=f'批量输出/校验失败：{exc}'; return False
 
     def read_voltage_snapshot(self,channels):
+        channels = list(channels)
         with self._lock:
             measured=self._query_channels('MEAS{ch}:VOLT?',channels)
             settings=self._query_channels('SOUR{ch}:VOLT?',channels)
             outputs=self._query_channels('OUTP{ch}:ONOFF?',channels)
+            if any(len(values) != len(channels) for values in (measured, settings, outputs)):
+                raise ValueError('Incomplete voltage snapshot replies')
             result=[]
             for measured_value,setting,output in zip(measured,settings,outputs):
                 voltage=float(measured_value);target=float(setting)
@@ -204,7 +233,7 @@ class NGI83624:
             return all([self.set_current_limit(ch,current,logger) for ch in range(1,self.max_channels+1)])
         if not 1<=channel<=self.max_channels or not math.isfinite(current) or current<0:
             self.last_error='通道或限流值无效'; return False
-        return self._set_verified_parameter(channel,'OUTCURR',current*1000,0.01,logger)
+        return self._set_verified_parameter(channel,'OUTCURR',current*1000,0.00001,logger)
 
     def _set_verified_parameter(self,channel,name,value,tolerance,logger=None):
         with self._lock:
@@ -287,39 +316,221 @@ class NGI83624:
             replies=None
         return True
 
-    def _verify_output_voltage(self,channels,logger=None):
+    def _verify_output_voltage(self,channels,logger=None,*,minimum_settle=None,cancelled=None):
+        minimum_settle=self.OUTPUT_MIN_SETTLE_SECONDS if minimum_settle is None else minimum_settle
+        started=time.monotonic()
+        deadline=started+self.OUTPUT_CONFIRM_TIMEOUT
+        self.last_output_confirmation={'ok':False,'channels':list(channels)}
         targets=self._query_channels('SOUR{ch}:VOLT?',channels,logger)
         if len(targets)!=len(channels):
             raise ValueError('Incomplete voltage setpoint replies')
-        pending=dict(zip(channels,map(float,targets)))
-        if any(not math.isfinite(v) or v<0 for v in pending.values()):
+        targets=dict(zip(channels,map(float,targets)))
+        if any(not math.isfinite(v) or v<0 for v in targets.values()):
             raise ValueError('Invalid voltage setpoint')
-        deadline=time.monotonic()+3.0
+        stable_since=None
+        rounds=0
+        unstable_rounds=0
         latest={}
-        while pending:
-            local=list(pending)
+        while True:
+            if cancelled and cancelled():raise RuntimeError('Simulator control cancelled')
+            # Recheck EVERY selected channel. A prior pass is not evidence that
+            # the channel remained in range while another channel was ramping.
+            local=list(targets)
             measured=self._query_channels('MEAS{ch}:VOLT?',local,logger)
             states=self._query_channels('OUTP{ch}:ONOFF?',local,logger)
             if len(measured)!=len(local) or len(states)!=len(local):
                 raise ValueError('Incomplete output verification replies')
+            pending=[]
             for ch,value,state in zip(local,measured,states):
                 actual=float(value)
                 latest[ch]=(actual,state)
-                if (math.isfinite(actual) and
-                        abs(actual-pending[ch])<=0.05 and
-                        state.strip().upper() in ('1','ON','TRUE')):
-                    del pending[ch]
-            if not pending:
+                if (not math.isfinite(actual) or
+                        abs(actual-targets[ch])>0.05 or
+                        state.strip().upper() not in ('1','ON','TRUE')):
+                    pending.append(ch)
+            rounds+=1
+            now=time.monotonic()
+            if pending:
+                stable_since=None
+                unstable_rounds+=1
+            elif stable_since is None:
+                stable_since=now
+            elapsed=now-started
+            stable=0.0 if stable_since is None else now-stable_since
+            if cancelled and cancelled():raise RuntimeError('Simulator control cancelled')
+            ok=(not pending and elapsed>=minimum_settle and
+                stable>=self.OUTPUT_STABLE_SECONDS and now<=deadline)
+            self.last_output_confirmation=dict(ok=ok,channels=local,
+                duration_s=round(elapsed,6),stable_s=round(stable,6),
+                rounds=rounds,unstable_rounds=unstable_rounds,
+                targets=targets.copy(),readings=latest.copy())
+            if ok:
                 self.last_error=''
+                if logger:
+                    logger(f'[IP: {self.ip}] Output voltage stable: '
+                           f'{self.last_output_confirmation}')
                 return True
-            remaining=deadline-time.monotonic()
+            remaining=deadline-now
             if remaining<=0:
-                self.last_error='开启输出未达标（容差±0.05V）：'+ '; '.join(
-                    f'CH{ch} 设定{target:g}V，实测{latest[ch][0]:g}V，状态{latest[ch][1]}'
-                    for ch,target in pending.items())
-                if logger: logger(f'[IP: {self.ip}] {self.last_error}')
+                detail='; '.join(
+                    f'CH{ch} target={targets[ch]:g}V, actual={latest[ch][0]:g}V, state={latest[ch][1]}'
+                    for ch in (pending or local))
+                self.last_error=(f'Output voltage not stable (tolerance 0.05V; '
+                    f'observe>={minimum_settle:g}s, '
+                    f'stable>={self.OUTPUT_STABLE_SECONDS:g}s): '+detail)
+                if logger:logger(f'[IP: {self.ip}] {self.last_error}')
                 return False
-            time.sleep(min(.1,remaining))
+            time.sleep(min(self.OUTPUT_POLL_INTERVAL,remaining))
+
+    def apply_confirmed(self,action,channels,value,*,logger=None,cancelled=lambda:False,batch=False):
+        """Application transaction: preserve OFF channels; verify live outputs."""
+        with self._lock:
+            def active():
+                if cancelled():raise RuntimeError('Simulator control cancelled')
+            def checked(result):
+                if result is not True:raise RuntimeError(self.last_error or 'Simulator control not confirmed')
+            def failure(channels,reason):
+                try:
+                    if channels and self.output_controls(False,channels,logger) is not True:
+                        reason+='; OFF cleanup failed: '+self.last_error
+                except Exception as exc:
+                    reason+='; OFF cleanup raised: '+str(exc)
+                self.last_error=reason
+                return RuntimeError(reason)
+            if action=='output' and value is False:
+                checked(self.output_controls(False,channels,logger))
+                return True
+            active()
+            if action=='output':
+                try:
+                    checked(self.output_controls(True,channels,logger))
+                    active()
+                    return True
+                except Exception as exc:
+                    raise failure(channels,str(exc)) from exc
+            states={ch:self.read_output_state(ch,logger) for ch in channels}
+            if any(state is None for state in states.values()):
+                raise RuntimeError('Cannot confirm output states before changing parameters')
+            enabled=[ch for ch,state in states.items() if state]
+            cleanup_channels=list(enabled)
+            if action in ('range','current'):
+                saved={ch:self.read_source_settings(ch) for ch in channels}
+                if any(v is None for v in saved.values()):
+                    raise RuntimeError('Cannot read settings before parameter change')
+                if action=='range' and value=='LOW' and any(v['current']>.001000001 for v in saved.values()):
+                    raise ValueError('LOW range requires current limit <= 1 mA; set limit first')
+                if action=='current' and value>.001000001 and any(v['range']=='LOW' for v in saved.values()):
+                    raise ValueError('LOW range current limit must not exceed 1 mA')
+            try:
+                if action=='range':
+                    if enabled:checked(self.output_controls(False,enabled,logger))
+                    for ch in channels:
+                        active()
+                        checked(self.set_range(ch,value,logger))
+                        checked(self.set_current_limit(ch,saved[ch]['current'],logger))
+                    if enabled:
+                        active()
+                        checked(self.output_controls(True,enabled,logger))
+                elif action in ('voltage','voltage_on'):
+                    active()
+                    checked(self.set_voltage(channels[0],value,logger) if len(channels)==1 and not batch
+                            else self.set_voltages(value,channels,logger))
+                    active()
+                    if action=='voltage_on':
+                        cleanup_channels=list(channels)
+                        checked(self.output_controls(True,channels,logger))
+                    elif enabled:
+                        checked(self._verify_output_voltage(enabled,logger,
+                            minimum_settle=self.LIVE_MIN_SETTLE_SECONDS,cancelled=cancelled))
+                elif action=='current':
+                    for ch in channels:
+                        active()
+                        checked(self.set_current_limit(ch,value,logger))
+                    if enabled:
+                        checked(self._verify_output_voltage(enabled,logger,
+                            minimum_settle=self.LIVE_MIN_SETTLE_SECONDS,cancelled=cancelled))
+                else:raise ValueError('Unsupported simulator action')
+                active()
+                return True
+            except Exception as exc:
+                raise failure(cleanup_channels,str(exc)) from exc
+
+    def read_stable_snapshot(self,channels,cancelled=lambda:False):
+        channels=list(channels)
+        if (not channels or len(set(channels))!=len(channels) or
+                any(type(ch) is not int or not 1<=ch<=self.max_channels for ch in channels)):
+            raise ValueError('Invalid simulator snapshot channels')
+        with self._lock:
+            deadline=time.monotonic()+self.READ_TIMEOUT_SECONDS
+            stable_since=None
+            low=high=None
+            previous=None
+            while True:
+                if cancelled():raise RuntimeError('Simulator read cancelled')
+                values=self.read_voltage_snapshot(channels)
+                now=time.monotonic()
+                config=[(target,state) for _,target,state in values]
+                volts=[v for v,_,_ in values]
+                changed=(stable_since is None or config!=previous or
+                    any(max(hi,v)-min(lo,v)>.005 for lo,hi,v in zip(low or volts,high or volts,volts)))
+                if changed:
+                    stable_since=now
+                    low=volts[:];high=volts[:]
+                else:
+                    low=[min(a,b) for a,b in zip(low,volts)]
+                    high=[max(a,b) for a,b in zip(high,volts)]
+                previous=config
+                if cancelled():raise RuntimeError('Simulator read cancelled')
+                if now-stable_since>=self.READ_STABLE_SECONDS and now<=deadline:return values
+                if now>=deadline:raise RuntimeError('Simulator snapshot did not stabilize')
+                time.sleep(min(self.OUTPUT_POLL_INTERVAL,deadline-now))
+
+    def read_stable(self,channel,quantity,logger=None,cancelled=lambda:False):
+        """Return latest stable sample, never average away an out-of-range value.
+
+        Voltage is in V, current in mA. Voltage checks temporal stability.
+        Current returns the latest sample after a fresh observation window;
+        real load-current changes must be judged by recipe limits, not rejected
+        as a transport/settling error. Neither read switches an output.
+        """
+        if type(channel) is not int or not 1<=channel<=self.max_channels or quantity not in ('voltage','current'):
+            raise ValueError('Invalid simulator measurement selection')
+        with self._lock:
+            if cancelled():raise RuntimeError('Simulator read cancelled')
+            self.last_measurement_confirmation=dict(ok=False,channel=channel,quantity=quantity)
+            tolerance=.005
+            if quantity=='current':
+                settings=self.read_source_settings(channel)
+                if settings is None:raise RuntimeError(self.last_error or 'Cannot read current range')
+                tolerance=None
+            started=time.monotonic()
+            deadline=started+self.READ_TIMEOUT_SECONDS
+            stable_since=None
+            low=high=None
+            count=0
+            while True:
+                if cancelled():raise RuntimeError('Simulator read cancelled')
+                value=float(self._query(f'MEAS{channel}:'+('VOLT?' if quantity=='voltage' else 'CURR?'),logger))
+                if not math.isfinite(value):raise ValueError('Non-finite simulator measurement')
+                now=time.monotonic()
+                if stable_since is None or (tolerance is not None and max(high,value)-min(low,value)>tolerance):
+                    stable_since=now
+                    low=high=value
+                else:
+                    low=min(low,value);high=max(high,value)
+                count+=1
+                if logger:logger(f'[IP: {self.ip}] CH{channel} {quantity} sample={value:g}, observation={now-stable_since:.3f}s')
+                if cancelled():raise RuntimeError('Simulator read cancelled')
+                if now-stable_since>=self.READ_STABLE_SECONDS and now<=deadline:
+                    self.last_measurement_confirmation=dict(ok=True,channel=channel,quantity=quantity,
+                        value=value,tolerance=tolerance,samples=count,duration_s=now-started,
+                        window_s=now-stable_since,stable_s=now-stable_since if quantity=='voltage' else None)
+                    self.last_error=''
+                    return value
+                if now>=deadline:
+                    self.last_error=f'CH{channel} {quantity} did not stabilize; last={value:g}'
+                    raise RuntimeError(self.last_error)
+                time.sleep(min(self.OUTPUT_POLL_INTERVAL,deadline-now))
 
     def read_output_state(self, channel: int, logger=None):
         with self._lock:
@@ -338,7 +549,8 @@ class NGI83624:
                 if text in ("0", "OFF", "FALSE"):
                     return False
                 try:
-                    return bool(int(float(text.split(",")[0])))
+                    number = float(text)
+                    return bool(number) if number in (0, 1) else None
                 except Exception:
                     return None
 
@@ -398,6 +610,7 @@ class NGI83624:
                 data = self._query(cmd.strip(),logger)
                 if logger: logger(f"[IP: {self.ip}] [RX] {data} mA")
                 val = float(data)
+                if not math.isfinite(val): raise ValueError('Invalid current measurement')
                 self._fail_count = 0  # 成功时清零计数器
                 return val
             except Exception as e:

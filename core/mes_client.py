@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 import json
+import math
 from urllib import error, request
 
 
@@ -22,7 +23,9 @@ class MesCheckResult:
 class MesClient:
     def __init__(self, url: str, timeout: float = 10.0):
         self.url = (url or DEFAULT_MES_URL).strip()
-        self.timeout = max(0.1, float(timeout))
+        self.timeout = float(timeout)
+        if not math.isfinite(self.timeout) or self.timeout <= 0:
+            raise ValueError('MES timeout must be finite and positive')
 
     def move_in_check(self, equipment_no: str, order_no: str, sn: str,
                       user_name: str) -> MesCheckResult:
@@ -67,27 +70,39 @@ class MesClient:
     def _interpret_response(http_ok: bool, body: Any) -> tuple[bool, str]:
         """Accept common MES response envelopes while treating explicit failures as NG."""
         if not isinstance(body, dict):
+            if isinstance(body, bool):
+                return http_ok and body, 'MES 校验通过' if http_ok and body else 'MES 校验未通过'
             text = str(body).strip()
-            return http_ok, text or ("MES 校验通过" if http_ok else "MES 校验失败")
+            affirmative = isinstance(body, str) and text.lower() in {'true', 'pass', 'passed', 'ok', 'success', '成功', '通过'}
+            return bool(http_ok and affirmative), text or 'MES 响应缺少明确校验结论'
 
         message = str(body.get("message") or body.get("msg") or body.get("error") or "").strip()
+        if body.get('error') not in (None, False, 0, '', '0') or body.get('errors'):
+            return False, message or 'MES 返回明确错误'
         explicit = None
         for key in ("success", "passed", "pass", "result"):
             if key in body:
                 value = body[key]
+                if key == 'result' and isinstance(value, (dict, list)) and explicit is not None:
+                    continue  # A result payload is not a contradictory verdict flag.
                 if isinstance(value, bool):
                     explicit = value
                 elif isinstance(value, (int, float)):
-                    explicit = value in (0, 1, 200)
+                    explicit = value == 1 if key in ('success', 'passed', 'pass') else value in (0, 1, 200)
                 elif isinstance(value, str):
                     explicit = value.strip().lower() in {
                         "true", "pass", "passed", "ok", "success", "成功", "通过", "1", "200"
                     }
-                break
+                else:
+                    explicit = False
+                # An explicit failure cannot be overridden by another success flag.
+                if not explicit:
+                    return False, message or 'MES 校验未通过'
 
-        if explicit is None and "code" in body:
+        if "code" in body:
             code = body.get("code")
-            explicit = str(code).strip().lower() in {"0", "1", "200", "ok", "success"}
+            code_ok = str(code).strip().lower() in {"0", "1", "200", "ok", "success"}
+            explicit = code_ok if explicit is None else explicit and code_ok
 
-        passed = http_ok if explicit is None else bool(explicit and http_ok)
+        passed = bool(explicit and http_ok)
         return passed, message or ("MES 校验通过" if passed else "MES 校验未通过")

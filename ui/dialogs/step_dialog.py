@@ -1,4 +1,5 @@
 import base64
+import json
 
 import os
 import re
@@ -6,15 +7,23 @@ import re
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                                QLineEdit, QComboBox, QPushButton, QDoubleSpinBox, 
                                QSpinBox, QStackedWidget, QWidget, QFormLayout, QFrame, 
-                               QCheckBox, QScrollArea, QGridLayout, QFileDialog, QInputDialog,
-                               QTableWidget, QTableWidgetItem, QAbstractItemView, QMessageBox, QListView, QGroupBox,
-                               QCompleter)
+                                QCheckBox, QScrollArea, QGridLayout, QFileDialog, QInputDialog,
+                               QTableWidget, QTableWidgetItem, QAbstractItemView, QMessageBox, QListView, QGroupBox, QTabWidget, QApplication)
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QIntValidator
+from PySide6.QtGui import QIntValidator, QShortcut, QKeySequence
 from core.measurement_units import CURRENT_UNITS, VOLTAGE_UNITS, configured_read_unit, supports_read_units
 from ui.widgets.byte_grid_widget import ByteGridWidget
 from core.device_steps import DEVICES as STEP_DEVICES, ACTIONS as STEP_ACTIONS, device_key, action_spec, encode as encode_device_step, decode as decode_device_step
 from ui.widgets.device_step_form import DeviceStepForm
+from ui.widgets.eliding_label import ElidingLabel
+
+
+def _resolve_resource_stylesheet(stylesheet):
+    import sys
+    from pathlib import Path
+    root=Path(sys._MEIPASS) if getattr(sys,'frozen',False) else Path(__file__).resolve().parents[2]
+    prefix=(root/'resources').as_posix().replace('"','%22')+'/'
+    return re.sub(r'url\(resources/([^)]*)\)',lambda match:'url("'+prefix+match.group(1)+'")',stylesheet)
 
 class SmartProjectComboBox(QComboBox):
     """支持下拉菜单宽度自适应展开与全息长文本防截断的工程选择下拉框"""
@@ -35,8 +44,12 @@ class StepDialog(QDialog):
         super().__init__(parent)
         self.device_manager = device_manager or getattr(parent, 'device_manager', None)
         self.is_loading = False # 状态位：标记是否处于数据加载还原中
+        self._uds_load_error = ''
+        self._uds_edit_item = None
         self.setWindowTitle("编辑指令 (子工步)")
-        self.resize(680, 700)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowMinMaxButtonsHint)
+        available=self.screen().availableGeometry()
+        self.resize(min(1050,int(available.width()*.9)),min(820,int(available.height()*.9)))
         self.setStyleSheet("""
             QDialog { background-color: #1A1A2E; color: #E0E0E0; }
             QLabel { font-size: 14px; color: #B0B0B0; }
@@ -52,13 +65,14 @@ class StepDialog(QDialog):
             QCheckBox::indicator {
                 width: 20px;
                 height: 20px;
-                border: 2px solid #4ECCA3;
+                border: 2px solid white;
                 border-radius: 4px;
                 background-color: #1A1A2E;
             }
             QCheckBox::indicator:checked {
-                background-color: #4ECCA3;
-                border: 2px solid #4ECCA3;
+                background-color: white;
+                border: 2px solid white;
+                image: url(resources/checkbox_white_checked.svg);
             }
             QCheckBox::indicator:unchecked:hover, QRadioButton::indicator:unchecked:hover {
                 border: 2px solid #00E5FF;
@@ -125,16 +139,29 @@ class StepDialog(QDialog):
                 min-width: 100px;
             }
         """)
+        self.setStyleSheet(self.styleSheet() + """
+            QAbstractItemView::indicator { width: 20px; height: 20px; }
+            QAbstractItemView::indicator:unchecked { background: #1A1A2E; border: 2px solid white; border-radius: 4px; }
+            QAbstractItemView::indicator:checked { image: url(resources/checkbox_white_checked.svg); }
+            QGroupBox::indicator { width: 20px; height: 20px; border: 2px solid white; border-radius: 4px; background: #1A1A2E; }
+            QGroupBox::indicator:checked { image: url(resources/checkbox_white_checked.svg); background: white; }
+            QTabWidget::pane { border: 1px solid #334155; }
+            QTabBar::tab { background: #16213E; color: white; padding: 9px 14px; }
+            QTabBar::tab:selected { background: #0F3460; border-top: 2px solid white; }
+        """)
         
         main_layout = QVBoxLayout(self)
+        self.setStyleSheet(_resolve_resource_stylesheet(self.styleSheet()))
         main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(15)
         
         # 1. 设备与大类选择 (分类整理)
         top_frame = QFrame(self)
+        self.device_selection_frame = top_frame
         top_layout = QFormLayout(top_frame)
+        self.device_selection_form = top_layout
         top_layout.setLabelAlignment(Qt.AlignRight)
-        top_layout.setSpacing(15)
+        top_layout.setSpacing(6)
         
         # 一级分类
         self.category_combo = QComboBox()
@@ -151,6 +178,30 @@ class StepDialog(QDialog):
         
         self.action_combo = QComboBox()
         top_layout.addRow("功能动作:", self.action_combo)
+        binding = getattr(self.parent(), 'recipe_can_binding', None)
+        self.recipe_can_binding = binding() if callable(binding) else None
+        self.can_binding_label = QLabel()
+        self.can_physical_channel = QComboBox()
+        channel = (self.recipe_can_binding or {}).get('channel', '')
+        self.can_binding_label.setText('ZLG CANFDNET-400U（配方绑定）' if channel.startswith('ZLG_CAN')
+                                       else ('PCAN_USBBUS1（配方绑定）' if channel else '跟随运行配方的CAN卡'))
+        if (self.recipe_can_binding or {}).get('enabled') is False:
+            self.can_binding_label.setText('不使用 CAN（请先在配方中选择 CAN 卡）')
+            self.can_physical_channel.setEnabled(False)
+        default_channel = channel.removeprefix('ZLG_CAN') if channel.startswith('ZLG_CAN') else ('1' if channel else '')
+        self.can_physical_channel.addItem('跟随配方默认通道' + (f'（CH{default_channel}）' if default_channel else ''), 0)
+        for physical in range(1, 5 if channel.startswith('ZLG_CAN') or not channel else 2):
+            self.can_physical_channel.addItem(f'CH{physical}', physical)
+            zlg = (self.recipe_can_binding or {}).get('zlg')
+            if isinstance(zlg, dict) and len(zlg.get('channels', [])) == 4 and not zlg['channels'][physical-1]['enabled']:
+                self.can_physical_channel.setItemText(physical, f'CH{physical}（配方未启用）')
+                self.can_physical_channel.model().item(physical).setEnabled(False)
+        if channel == 'PCAN_USBBUS1':
+            self.can_physical_channel.setToolTip('PCAN_USBBUS1只有CH1；运行时始终使用配方绑定设备。')
+        self.can_binding_title = QLabel('配方CAN卡:')
+        self.can_channel_title = QLabel('物理通道:')
+        top_layout.addRow(self.can_binding_title, self.can_binding_label)
+        top_layout.addRow(self.can_channel_title, self.can_physical_channel)
         
         main_layout.addWidget(top_frame)
         
@@ -165,7 +216,8 @@ class StepDialog(QDialog):
         self.main_scroll = QScrollArea(self)
         self.main_scroll.setWidgetResizable(True)
         self.main_scroll.setFrameShape(QFrame.NoFrame)
-        self.main_scroll.setStyleSheet("background-color: transparent;")
+        self.main_scroll.setObjectName('stepMainScroll')
+        self.main_scroll.setStyleSheet('QScrollArea#stepMainScroll { background-color: transparent; }')
         
         self.main_scroll_content = QWidget() # 容器 Widget
         self.scroll_layout = QVBoxLayout(self.main_scroll_content)
@@ -173,7 +225,9 @@ class StepDialog(QDialog):
         self.scroll_layout.setSpacing(15)
         
         # 动态参数配置区
-        self.param_stack = QStackedWidget(self)
+        from ui.widgets.compact_step_layout import CurrentPageStack
+        self.param_stack = CurrentPageStack(self)
+        self.param_stack.currentChanged.connect(lambda *_:self.param_stack.updateGeometry())
         self.scroll_layout.addWidget(self.param_stack)
         
         # --- 页面 0: 仪表设置参数 (可多选) ---
@@ -219,6 +273,7 @@ class StepDialog(QDialog):
         # --- 页面 1: CAN 参数 ---
         self.page_can = QWidget()
         c_form = QFormLayout(self.page_can)
+        self.c_action_help=QLabel();self.c_action_help.setWordWrap(True);c_form.addRow(self.c_action_help)
         self.c_id = QLineEdit("0x7F0")
         self.c_data = QLineEdit("00 00 00 00 00 00 00 00")
         self.c_wait_id = QLineEdit("0x7F8")
@@ -237,10 +292,18 @@ class StepDialog(QDialog):
         c_form.addRow("帧 ID (HEX):", self.c_id)
         c_form.addRow("数据 (HEX):", self.c_data)
         c_form.addRow("等待响应 ID:", self.c_wait_id)
+        self.c_rx_format=QComboBox();self.c_rx_format.addItems(['自动（按响应ID）','标准帧','扩展帧'])
+        self.c_rx_prefix=QLineEdit();self.c_rx_prefix.setPlaceholderText('可选，例如 06；仅接收以这些字节开头的回复')
+        c_form.addRow('响应帧格式：',self.c_rx_format)
+        c_form.addRow('响应开头匹配：',self.c_rx_prefix)
         c_form.addRow("CAN 类型:", self.c_type)
         c_form.addRow("DLC:", self.c_dlc)
-        c_form.addRow("RNCAN通道:", self.c_channel)
+        self.c_channel.hide()  # Legacy CH is retained for file compatibility only.
         c_form.addRow("超时:", self.c_timeout)
+        from ui.widgets.can_parser_form import CanParserForm
+        self.can_parser = CanParserForm()
+        self.can_parser.capture_requested.connect(self._capture_can_response)
+        c_form.addRow(self.can_parser)
 
         # --- 页面 2: 等待参数 ---
         self.page_wait = QWidget()
@@ -294,17 +357,27 @@ class StepDialog(QDialog):
         scroll_content = QWidget()
         grid = QGridLayout(scroll_content)
         self.easy320_checks = []
-        plc_names = {1: "平推气缸", 2: "气缸抬起", 3: "气缸下压"}
-        for i in range(32):
-            ch_num = i + 1
-            alias = f" ({plc_names[ch_num]})" if ch_num in plc_names else ""
-            cb = QCheckBox(f"CH-{ch_num}{alias}")
-            grid.addWidget(cb, i // 4, i % 4)
+        from core.easy320_channels import configured_channels
+        try:
+            self.easy320_channels = configured_channels(self.device_manager)
+            self.easy320_config_error = ''
+        except (ValueError, KeyError, TypeError) as exc:
+            self.easy320_channels = []
+            self.easy320_config_error = f'继电器导入配置无效：{exc}'
+        self.easy320_missing_channels = set()
+        for i, row in enumerate(self.easy320_channels):
+            alias = f" ({row['name']})" if row['name'] else ''
+            cb = QCheckBox(row['do'] + alias)
+            cb.setToolTip(cb.text())
+            cb.setProperty('coil_index', row['index'])
+            grid.addWidget(cb, i, 0)
             self.easy320_checks.append(cb)
         scroll.setWidget(scroll_content)
         scroll.setWidgetResizable(True)
         
-        e_layout.addWidget(QLabel("选择操作通道 (多选):"))
+        self.easy320_channel_tip = QLabel(self.easy320_config_error or '选择导入表中的DO通道（多选，八进制编号）：')
+        self.easy320_channel_tip.setWordWrap(True)
+        e_layout.addWidget(self.easy320_channel_tip)
         e_layout.addWidget(scroll)
         self.param_stack.addWidget(self.page_easy320) # 4
 
@@ -449,7 +522,7 @@ class StepDialog(QDialog):
         self.eol_args_label = QLabel("附加参数:")
 
         # 添加到布局 (按用户指定顺序)
-        eol_form.addRow("RNCAN通道:", self.eol_channel)
+        self.eol_channel.hide()
         eol_form.addRow("发送ID:", self.eol_tx_id)
         eol_form.addRow("接收ID:", self.eol_rx_id)
         eol_form.addRow("CAN 类型:", self.eol_can_type)
@@ -466,6 +539,8 @@ class StepDialog(QDialog):
         temp_opts_layout.addWidget(self.eol_diff_ambient)
 
         self.eol_temp_convert = QCheckBox("温度换算")
+        self.eol_temp_convert.setEnabled(False)
+        self.eol_temp_convert.setToolTip("\u5df2\u505c\u7528\uff0c\u751f\u4ea7\u6d4b\u8bd5\u4fdd\u7559\u539f\u59cb\u5b9e\u6d4b\u503c")
         self.eol_temp_convert.setStyleSheet("color: #00E5FF;")
         self.eol_temp_convert.setVisible(False)
         temp_opts_layout.addWidget(self.eol_temp_convert)
@@ -474,11 +549,15 @@ class StepDialog(QDialog):
         eol_form.addRow("", temp_opts_layout)
         
         self.eol_fix_adjacent = QCheckBox("相邻电芯异常值修正 (之和为4.5~5.5V)")
+        self.eol_fix_adjacent.setEnabled(False)
+        self.eol_fix_adjacent.setToolTip("\u5df2\u505c\u7528\uff0c\u751f\u4ea7\u6d4b\u8bd5\u4fdd\u7559\u539f\u59cb\u5b9e\u6d4b\u503c")
         self.eol_fix_adjacent.setStyleSheet("color: #00E5FF;")
         self.eol_fix_adjacent.setVisible(False)
         eol_form.addRow("", self.eol_fix_adjacent)
         
         self.eol_compensate_random = QCheckBox("开启异常电压随机补偿")
+        self.eol_compensate_random.setEnabled(False)
+        self.eol_compensate_random.setToolTip("\u5df2\u505c\u7528\uff0c\u751f\u4ea7\u6d4b\u8bd5\u4fdd\u7559\u539f\u59cb\u5b9e\u6d4b\u503c")
         self.eol_compensate_random.setStyleSheet("color: #00E5FF;")
         self.eol_compensate_random.setVisible(False)
         eol_form.addRow("", self.eol_compensate_random)
@@ -497,35 +576,9 @@ class StepDialog(QDialog):
         
         self.param_stack.addWidget(self.page_eol) # 7
 
-        # --- 页面 8: 老化板继电器参数 (22路勾选模式) ---
-        self.page_aging_relay = QWidget()
-        ag_layout = QVBoxLayout(self.page_aging_relay)
-        
-        ag_scroll = QScrollArea()
-        ag_scroll_content = QWidget()
-        ag_grid = QGridLayout(ag_scroll_content)
-        self.aging_relay_checks = []
-        
-        # 继电器名称列表 (来自 aging_board_driver.py)
-        relay_names = [
-            "KL15", "CC1_2K_12V", "ISO_NEG_SHORT", "CHAOJI_CC_1K", 
-            "IN1_OUT1", "IN2_OUT2", "IN3_OUT3", "CAN_MATCH",
-            "SIG1_SIG2_SHORT", "SIG3_SHORT", "CAN1", "CAN2",
-            "CAN3", "CAN4", "HV", "ISOD_30K_1M",
-            "ISOD_1M_30K", "LINK_PACK_SHORT", "FACH_PACK_SHORT",
-            "DC_DC_100K", "DC_DC_500K", "HALL_POWER"
-        ]
-        
-        for i, name in enumerate(relay_names):
-            cb = QCheckBox(name)
-            ag_grid.addWidget(cb, i // 3, i % 3)
-            self.aging_relay_checks.append(cb)
-            
-        ag_scroll.setWidget(ag_scroll_content)
-        ag_scroll.setWidgetResizable(True)
-        ag_layout.addWidget(QLabel("选择老化板操作通道 (22路):"))
-        ag_layout.addWidget(ag_scroll)
-        self.param_stack.addWidget(self.page_aging_relay) # 8
+        # Reserved page index
+        # Preserve subsequent page indices while removing the obsolete page.
+        self.param_stack.addWidget(QWidget())  # reserved index 8
 
         # --- 页面 9: 变量操作 ---
         self.page_variable = QWidget()
@@ -704,6 +757,12 @@ class StepDialog(QDialog):
         self.app_flash_timeout.setRange(1, 86400)
         self.app_flash_timeout.setValue(300)
         self.app_flash_timeout.setSuffix(" s")
+        self.app_flash_tx_id = QLineEdit('0x7E4')
+        self.app_flash_rx_id = QLineEdit('0x7EC')
+        self.app_flash_tx_label = QLabel('刷写请求 ID（HEX）：')
+        self.app_flash_rx_label = QLabel('刷写响应 ID（HEX）：')
+        self.app_flash_monitor_help = QLabel('被动监听，不发送刷写请求。请填写外部刷写上位机实际使用的请求/响应 ID；与普通报文监控共用接收线程。ID 不匹配时只能显示 Record 状态。')
+        self.app_flash_monitor_help.setWordWrap(True)
         self.app_flash_program_label = QLabel("上位机路径:")
         self.app_flash_ini_label = QLabel("INI文件名/路径:")
         self.app_flash_section_label = QLabel("Section (段名):")
@@ -720,12 +779,28 @@ class StepDialog(QDialog):
         app_flash_layout.addRow(self.app_flash_record_label, self.app_flash_record)
         app_flash_layout.addRow(self.app_flash_timeout_label, self.app_flash_timeout)
         app_flash_layout.addRow("", self.app_flash_record_help)
+        app_flash_layout.addRow(self.app_flash_tx_label, self.app_flash_tx_id)
+        app_flash_layout.addRow(self.app_flash_rx_label, self.app_flash_rx_id)
+        app_flash_layout.addRow(self.app_flash_monitor_help)
         self.param_stack.addWidget(self.page_app_flash) # 12
 
         # --- 页面 12: UDS 服务交互列表 ---
         self.page_uds = QWidget()
+        self.page_uds.setStyleSheet("""
+            QCheckBox::indicator, QGroupBox::indicator, QAbstractItemView::indicator {
+                width: 20px; height: 20px; background: transparent;
+                border: 2px solid white; border-radius: 4px;
+            }
+            QCheckBox::indicator:checked, QGroupBox::indicator:checked, QAbstractItemView::indicator:checked {
+                image: url(resources/checkbox_green_tick.svg);
+                background: transparent; border: none;
+            }
+            QCheckBox::indicator:unchecked:hover, QGroupBox::indicator:unchecked:hover,
+            QAbstractItemView::indicator:unchecked:hover { background: transparent; border: 2px solid white; }
+        """)
+        self.page_uds.setStyleSheet(_resolve_resource_stylesheet(self.page_uds.styleSheet()))
         uds_layout = QVBoxLayout(self.page_uds)
-        uds_link_row = QHBoxLayout()
+        uds_link_row = QFormLayout()
         self.uds_tx_id = QLineEdit("0x7E0")
         self.uds_rx_id = QLineEdit("0x7E8")
         self.uds_can_type = QComboBox()
@@ -736,11 +811,16 @@ class StepDialog(QDialog):
         self.uds_timeout.setSuffix(" ms")
         for label, widget in (("请求ID", self.uds_tx_id), ("响应ID", self.uds_rx_id),
                               ("CAN类型", self.uds_can_type), ("超时", self.uds_timeout)):
-            uds_link_row.addWidget(QLabel(label + ":"))
-            uds_link_row.addWidget(widget)
+            uds_link_row.addRow(label + ":", widget)
         uds_layout.addLayout(uds_link_row)
+        from ui.widgets.security_access_form import SecurityAccessForm
+        self.uds_security = SecurityAccessForm()
+        uds_layout.addWidget(self.uds_security)
+        self.uds_unlock_add = QPushButton('添加 DLL 解锁到交互列表（放在会话切换之后、读写之前）')
+        self.uds_unlock_add.clicked.connect(self._add_security_unlock_row)
+        uds_layout.addWidget(self.uds_unlock_add)
 
-        uds_edit_row = QHBoxLayout()
+        uds_edit_row = QFormLayout()
         self.uds_service = QComboBox()
         self.uds_service.addItems([
             "10 诊断会话控制", "11 ECU复位", "14 清除诊断信息",
@@ -770,27 +850,32 @@ class StepDialog(QDialog):
         self.uds_request = QLineEdit()
         self.uds_request.setPlaceholderText("请求PDU，例如 22 F1 90")
         self.uds_expected = QLineEdit()
-        self.uds_expected.setPlaceholderText("期望响应，例如 62 F1 90 ?? ??")
+        self.uds_expected.setPlaceholderText("选填：额外响应校验；读取VIN等数据时可留空")
+        self.uds_result_expected = QLineEdit()
+        self.uds_result_expected.setPlaceholderText('选填：ASCII字符串、HEX字节或计算后数值，留空不校验提取结果')
+        self.uds_sync_expected = QCheckBox('跟随在线抓取选区更新期望结果')
+        self.uds_sync_expected.setChecked(True)
+        self.uds_sync_expected.setToolTip('仅使用真实抓取的响应填写；取消后可手动修改或清空期望结果。')
         self.uds_request.textChanged.connect(self.on_uds_request_changed)
         self.uds_request.textChanged.connect(lambda: self._sync_byte_grid_from_pdu())
         self.uds_expected.textChanged.connect(lambda: self._sync_byte_grid_from_pdu())
         self.uds_add_btn = QPushButton("添加到列表")
         self.uds_add_btn.clicked.connect(self.add_uds_row)
-        self.uds_update_btn = QPushButton("更新选中")
-        self.uds_update_btn.clicked.connect(self.update_uds_row)
-        uds_edit_row.addWidget(self.uds_service, 2)
-        uds_edit_row.addWidget(self.uds_request, 3)
-        uds_edit_row.addWidget(self.uds_expected, 3)
-        uds_edit_row.addWidget(self.uds_add_btn)
-        uds_edit_row.addWidget(self.uds_update_btn)
+        uds_edit_row.addRow("诊断服务：", self.uds_service)
+        uds_edit_row.addRow("请求 PDU：", self.uds_request)
+        uds_edit_row.addRow("报文前缀校验（HEX，选填）：", self.uds_expected)
+        uds_edit_row.addRow("额外期望结果（解析后）：", self.uds_result_expected)
+        uds_edit_row.addRow(self.uds_sync_expected)
         uds_layout.addLayout(uds_edit_row)
 
         uds_rule_row = QHBoxLayout()
-        self.uds_auto_response = QCheckBox("自动生成肯定响应")
+        self.uds_auto_response = QCheckBox("自动填写控制服务响应（读取服务留空）")
         self.uds_auto_response.setChecked(True)
         self.uds_auto_response.toggled.connect(lambda checked: checked and self.on_uds_request_changed(self.uds_request.text()))
         uds_rule_row.addWidget(self.uds_auto_response)
-        uds_rule_row.addWidget(QLabel("按响应前缀校验；可手动补充数据，?? 表示任意字节"))
+        response_tip = QLabel("按响应前缀校验；?? 表示任意字节。读取 VIN 等数据时可留空。")
+        response_tip.setWordWrap(True)
+        self.uds_auto_response.setToolTip(response_tip.text())
         uds_rule_row.addStretch()
         uds_layout.addLayout(uds_rule_row)
 
@@ -813,51 +898,21 @@ class StepDialog(QDialog):
             }
         """)
         uds_ext_vbox = QVBoxLayout(self.uds_extract_group)
+        output_help = QLabel('配置数据提取后，测试值只输出提取后的字符串或数值，原始报文仅记日志。循环读取保留最后一轮各行结果；读取VIN可留空期望响应，选择ASCII、偏移3、长度17。')
+        output_help.setWordWrap(True)
+        uds_ext_vbox.addWidget(output_help)
         uds_ext_vbox.setSpacing(6)
         uds_ext_vbox.setContentsMargins(10, 8, 10, 8)
 
-        # 0. 协议规范与常用 DID 字典选择栏 (万能兼容与一键预填)
-        row_dict = QHBoxLayout()
-        row_dict.setSpacing(6)
-
-        self.uds_proto_fmt = QComboBox()
-        self.uds_proto_fmt.addItems(["标准 UDS (ISO 14229, 偏移 3)", "私有协议 (含长度字节, 偏移 4)", "自定义协议/偏移"])
-        self.uds_proto_fmt.setStyleSheet("background-color: #1E293B; color: #38BDF8; font-weight: bold; font-size: 11px;")
-        self.uds_proto_fmt.currentIndexChanged.connect(self._on_uds_proto_fmt_changed)
-
-        from core.uds_dictionary import UDSDictionaryManager
-        self.uds_dict_mgr = UDSDictionaryManager()
-
-        self.combo_uds_templates = QComboBox()
-        self.combo_uds_templates.setStyleSheet("background-color: #1E293B; color: #FDE047; font-weight: bold; font-size: 11px;")
-        if self.combo_uds_templates.view():
-            self.combo_uds_templates.view().setMinimumWidth(380)
-        self._reload_uds_templates_combo()
-        self.combo_uds_templates.currentIndexChanged.connect(self._on_uds_template_selected)
-
-        self.btn_save_did_tpl = QPushButton("💾 存为模板")
-        self.btn_save_did_tpl.setToolTip("将当前配置的 DID、数据类型、比例与单位保存到本地字典库，随用随取")
-        self.btn_save_did_tpl.setStyleSheet("background-color: #0E7490; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px;")
-        self.btn_save_did_tpl.clicked.connect(self._on_save_current_as_template)
-
-        self.btn_import_did_csv = QPushButton("📂 导入CSV字典")
-        self.btn_import_did_csv.setToolTip("从外部 CSV 表格批量导入成百上千条企业内部 DID 协议")
-        self.btn_import_did_csv.setStyleSheet("background-color: #334155; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px;")
-        self.btn_import_did_csv.clicked.connect(self._on_import_did_csv)
-
+        sniff_row = QHBoxLayout()
+        sniff_row.addStretch()
         self.btn_live_sniff = QPushButton("📡 在线抓取 (Sniff)")
         self.btn_live_sniff.setToolTip("通过 PCAN 向真实被测 BMS 发送当前请求并抓取真实回包，瞬间生成方块")
         self.btn_live_sniff.setStyleSheet("background-color: #7C3AED; color: white; font-weight: bold; padding: 4px 10px; border-radius: 4px; font-size: 11px;")
         self.btn_live_sniff.clicked.connect(self._on_live_sniff_clicked)
 
-        row_dict.addWidget(QLabel("协议:"))
-        row_dict.addWidget(self.uds_proto_fmt, 2)
-        row_dict.addWidget(QLabel("模板:"))
-        row_dict.addWidget(self.combo_uds_templates, 3)
-        row_dict.addWidget(self.btn_save_did_tpl)
-        row_dict.addWidget(self.btn_import_did_csv)
-        row_dict.addWidget(self.btn_live_sniff)
-        uds_ext_vbox.addLayout(row_dict)
+        sniff_row.addWidget(self.btn_live_sniff)
+        uds_ext_vbox.addLayout(sniff_row)
 
         # 1. 可视化交互式拖拽字节流组件 (Byte Blocks)
         lbl_grid_tip = QLabel("🖱️ 响应报文方块 (在下方方块上按住鼠标左键直接滑动拖拽选区，系统自动计算偏移量和长度):")
@@ -865,6 +920,8 @@ class StepDialog(QDialog):
         uds_ext_vbox.addWidget(lbl_grid_tip)
 
         self.uds_byte_grid = ByteGridWidget(self)
+        self.uds_byte_grid.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.uds_byte_grid.customContextMenuRequested.connect(self._uds_selection_menu)
         self.uds_byte_grid.range_selected.connect(self._on_byte_grid_range_selected)
         uds_ext_vbox.addWidget(self.uds_byte_grid)
 
@@ -881,20 +938,19 @@ class StepDialog(QDialog):
         prev_layout.setContentsMargins(8, 4, 8, 4)
         prev_layout.setSpacing(14)
 
-        self.lbl_byte_range = QLabel("【拖拽选区】 未选择")
+        self.lbl_byte_range = ElidingLabel("【拖拽选区】 未选择")
         self.lbl_byte_range.setStyleSheet("font-size: 11px; color: #38BDF8; font-weight: bold;")
-        self.lbl_byte_hex = QLabel("Hex: --")
+        self.lbl_byte_hex = ElidingLabel("Hex: --")
         self.lbl_byte_hex.setStyleSheet("font-size: 11px; color: #A78BFA; font-family: Consolas, monospace;")
-        self.lbl_byte_int = QLabel("大端整数: --")
+        self.lbl_byte_int = ElidingLabel("大端整数: --")
         self.lbl_byte_int.setStyleSheet("font-size: 11px; color: #34D399;")
-        self.lbl_byte_phys = QLabel("换算物理值: --")
+        self.lbl_byte_phys = ElidingLabel("换算物理值: --")
         self.lbl_byte_phys.setStyleSheet("font-size: 11px; color: #FBBF24;")
 
-        prev_layout.addWidget(self.lbl_byte_range)
-        prev_layout.addWidget(self.lbl_byte_hex)
-        prev_layout.addWidget(self.lbl_byte_int)
-        prev_layout.addWidget(self.lbl_byte_phys)
-        prev_layout.addStretch()
+        prev_layout.addWidget(self.lbl_byte_range,1)
+        prev_layout.addWidget(self.lbl_byte_hex,1)
+        prev_layout.addWidget(self.lbl_byte_int,1)
+        prev_layout.addWidget(self.lbl_byte_phys,1)
         uds_ext_vbox.addWidget(self.uds_preview_frame)
 
         # 3. 快捷设定操作行
@@ -912,17 +968,26 @@ class StepDialog(QDialog):
         self.btn_quick_formula.setStyleSheet("background-color: #334155; color: white; padding: 4px 10px; border-radius: 4px; font-size: 11px;")
         self.btn_quick_formula.clicked.connect(lambda: self.uds_extract_mode.setCurrentIndex(3))
 
+        self.btn_quick_hex = QPushButton('设为 HEX 输出')
+        self.btn_quick_hex.setToolTip('按原顺序输出选中字节，例如 00 1A FF；保留前导零，不转换为ASCII或数值。')
+        self.btn_quick_hex.clicked.connect(lambda: self.uds_extract_mode.setCurrentIndex(4))
+
         row_quick_btns.addWidget(QLabel("快捷操作:"))
         row_quick_btns.addWidget(self.btn_quick_ascii)
         row_quick_btns.addWidget(self.btn_quick_calc)
         row_quick_btns.addWidget(self.btn_quick_formula)
+        row_quick_btns.addWidget(self.btn_quick_hex)
         row_quick_btns.addStretch()
-        uds_ext_vbox.addLayout(row_quick_btns)
+        self.uds_quick_widget = QWidget()
+        self.uds_quick_widget.setLayout(row_quick_btns)
+        uds_ext_vbox.addWidget(self.uds_quick_widget)
 
         # 4. 第一行: 提取模式、起始偏移、截取长度、写入变量名
-        row1_ext = QHBoxLayout()
+        row1_ext = QFormLayout()
         self.uds_extract_mode = QComboBox()
         self.uds_extract_mode.addItems(["无数据提取", "ASCII 字符串解码 (如 VIN/版本号)", "数值计算 CALC (原始值 * 比例 + 偏移)", "自定义公式 FORMULA (如 (val*0.05)+12)"])
+        self.uds_extract_mode.addItem('HEX 十六进制字节输出')
+        self.uds_extract_mode.addItem('BCD 十进制数字串（保留前导零）')
         self.uds_extract_mode.setStyleSheet("background-color: #1E293B; color: #F8FAFC;")
         self.uds_extract_mode.currentIndexChanged.connect(self._on_uds_extract_mode_changed)
 
@@ -942,19 +1007,15 @@ class StepDialog(QDialog):
         self.uds_extract_var.setPlaceholderText("写入变量名 (如 ECU_VIN, BMS_VOLT)")
         self.uds_extract_var.setToolTip("提取或计算后的结果将存入 self.variables[变量名]，供后续工步或判定使用")
 
-        row1_ext.addWidget(QLabel("提取模式:"))
-        row1_ext.addWidget(self.uds_extract_mode, 3)
-        row1_ext.addWidget(QLabel("偏移:"))
-        row1_ext.addWidget(self.uds_extract_offset, 1)
-        row1_ext.addWidget(QLabel("长度:"))
-        row1_ext.addWidget(self.uds_extract_len, 1)
-        row1_ext.addWidget(QLabel("变量名:"))
-        row1_ext.addWidget(self.uds_extract_var, 2)
+        row1_ext.addRow("当前段解析格式：", self.uds_extract_mode)
+        row1_ext.addRow("起始字节偏移（从0开始）：", self.uds_extract_offset)
+        row1_ext.addRow("提取长度（0表示到末尾）：", self.uds_extract_len)
+        row1_ext.addRow("结果变量名（选填）：", self.uds_extract_var)
         uds_ext_vbox.addLayout(row1_ext)
 
         # 第二行: 数值计算专属控件 (端序、有符号、比例、偏移量、单位、自定义公式)
         self.uds_ext_detail_widget = QWidget()
-        row2_ext = QHBoxLayout(self.uds_ext_detail_widget)
+        row2_ext = QFormLayout(self.uds_ext_detail_widget)
         row2_ext.setContentsMargins(0, 0, 0, 0)
         row2_ext.setSpacing(8)
 
@@ -988,60 +1049,72 @@ class StepDialog(QDialog):
         self.lbl_ext_unit = QLabel("单位:")
         self.lbl_ext_formula = QLabel("公式:")
 
-        row2_ext.addWidget(self.lbl_ext_endian)
-        row2_ext.addWidget(self.uds_extract_endian)
-        row2_ext.addWidget(self.uds_extract_signed)
-        row2_ext.addWidget(self.lbl_ext_scale)
-        row2_ext.addWidget(self.uds_extract_scale)
-        row2_ext.addWidget(self.lbl_ext_offset)
-        row2_ext.addWidget(self.uds_extract_offset_val)
-        row2_ext.addWidget(self.lbl_ext_formula)
-        row2_ext.addWidget(self.uds_extract_formula)
-        row2_ext.addWidget(self.lbl_ext_unit)
-        row2_ext.addWidget(self.uds_extract_unit)
+        row2_ext.addRow(self.lbl_ext_endian, self.uds_extract_endian)
+        row2_ext.addRow(self.uds_extract_signed)
+        row2_ext.addRow(self.lbl_ext_scale, self.uds_extract_scale)
+        row2_ext.addRow(self.lbl_ext_offset, self.uds_extract_offset_val)
+        row2_ext.addRow(self.lbl_ext_formula, self.uds_extract_formula)
+        row2_ext.addRow(self.lbl_ext_unit, self.uds_extract_unit)
 
         uds_ext_vbox.addWidget(self.uds_ext_detail_widget)
+        from ui.widgets.uds_segments_widget import UDSSegmentsWidget
+        self.uds_segments = UDSSegmentsWidget(self)
+        from PySide6.QtWidgets import QSplitter
+        selection_index = uds_ext_vbox.indexOf(self.uds_byte_grid)
+        selection_left = QWidget()
+        selection_layout = QVBoxLayout(selection_left)
+        selection_layout.setContentsMargins(0, 0, 0, 0)
+        selection_layout.addWidget(QLabel('拖选字节后右键选择格式，追加到右侧分段表'))
+        for widget in (self.uds_byte_grid, self.uds_preview_frame, self.uds_quick_widget):
+            uds_ext_vbox.removeWidget(widget)
+            selection_layout.addWidget(widget)
+        selection_layout.addStretch()
+        self.uds_selection_splitter = QSplitter(Qt.Horizontal)
+        self.uds_selection_splitter.setChildrenCollapsible(False)
+        self.uds_selection_splitter.addWidget(selection_left)
+        self.uds_selection_splitter.addWidget(self.uds_segments)
+        self.uds_selection_splitter.setSizes([650, 450])
+        uds_ext_vbox.insertWidget(selection_index, self.uds_selection_splitter)
+        self.uds_segments.enabled.toggled.connect(lambda multi: self.uds_quick_widget.setVisible(not multi))
+        self.uds_quick_widget.setVisible(False)
+        self.uds_segments.enabled.toggled.connect(lambda multi: output_help.setVisible(not multi))
+        self.uds_segments.enabled.toggled.connect(lambda multi: lbl_grid_tip.setVisible(not multi))
+        output_help.setVisible(False)
+        lbl_grid_tip.setVisible(False)
+        self.uds_segments.changed.connect(self._refresh_byte_grid_preview)
+        self.uds_segments.enabled.toggled.connect(self._on_uds_multi_toggled)
+        self.uds_segments.selected_rule.connect(self._load_uds_segment_for_edit)
+        self.uds_segments.append_requested.connect(self._add_uds_segment)
+        self.uds_segments.replace_requested.connect(lambda: self._add_uds_segment(replace=True))
+        for signal in (self.uds_extract_scale.valueChanged, self.uds_extract_offset_val.valueChanged,
+                       self.uds_extract_formula.textChanged, self.uds_extract_endian.currentIndexChanged,
+                       self.uds_extract_signed.toggled):
+            signal.connect(self._update_uds_expected_result)
+        self.uds_sync_expected.toggled.connect(self._update_uds_expected_result)
         uds_layout.addWidget(self.uds_extract_group)
         self._on_uds_extract_mode_changed(0)
 
-        # 面向产线用户的简易入口：选一个诊断项目即可自动生成请求与解析规则。
-        self.uds_simple_group = QGroupBox("✨ 简易配置（推荐）")
-        simple_layout = QVBoxLayout(self.uds_simple_group)
-        simple_row = QHBoxLayout()
-        self.uds_simple_template = QComboBox()
-        self.uds_simple_template.setEditable(True)
-        self.uds_simple_template.setInsertPolicy(QComboBox.NoInsert)
-        self.uds_simple_template.completer().setFilterMode(Qt.MatchContains)
-        self.uds_simple_template.completer().setCaseSensitivity(Qt.CaseInsensitive)
-        self.uds_simple_template.completer().setCompletionMode(QCompleter.PopupCompletion)
-        if self.uds_simple_template.lineEdit():
-            self.uds_simple_template.lineEdit().setPlaceholderText("输入名称或 DID 搜索，例如：总压、VIN、F190")
-        self.uds_simple_template.currentIndexChanged.connect(self._on_uds_simple_template_selected)
-        self.btn_uds_simple_add = QPushButton("生成并加入列表")
-        self.btn_uds_simple_add.setStyleSheet("background-color: #0E7490; color: white; font-weight: bold;")
-        self.btn_uds_simple_add.clicked.connect(self._add_simple_uds_item)
-        simple_row.addWidget(QLabel("诊断项目:"))
-        simple_row.addWidget(self.uds_simple_template, 1)
-        simple_row.addWidget(self.btn_uds_simple_add)
-        simple_layout.addLayout(simple_row)
-        self.lbl_uds_simple_preview = QLabel("选择项目后，系统会自动配置请求、响应校验、数据换算和结果变量。")
-        self.lbl_uds_simple_preview.setWordWrap(True)
-        self.lbl_uds_simple_preview.setStyleSheet("color: #7DD3FC; padding: 4px;")
-        simple_layout.addWidget(self.lbl_uds_simple_preview)
-        uds_layout.insertWidget(1, self.uds_simple_group)
-        self._reload_uds_templates_combo()
-
-        self.uds_table = QTableWidget(0, 5)
-        self.uds_table.setHorizontalHeaderLabels(["名称", "请求PDU", "期望响应", "校验", "数据提取/计算"])
+        self.uds_table = QTableWidget(0, 7)
+        self.uds_table.setHorizontalHeaderLabels(["名称", "请求PDU", "报文前缀（HEX）", "前缀校验", "数据提取/计算", "期望结果（解析后）", "最终输出"])
         self.uds_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.uds_table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.uds_table.cellDoubleClicked.connect(self.load_uds_row)
+        self.uds_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.uds_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.uds_table.customContextMenuRequested.connect(self._uds_context_menu)
+        self.uds_delete_shortcut = QShortcut(QKeySequence('Delete'), self.uds_table)
+        self.uds_delete_shortcut.setContext(Qt.WidgetShortcut)
+        self.uds_delete_shortcut.activated.connect(self.delete_uds_row)
+        self.uds_table.cellClicked.connect(self._on_uds_row_clicked)
+        self.uds_table.itemChanged.connect(self._on_uds_table_item_changed)
+        self.uds_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.uds_table.setToolTip("单击行进入参数编辑；Ctrl/Shift可多选，右键可编辑或删除。最终输出复选框只切换输出行。")
         self.uds_table.horizontalHeader().setStretchLastSection(True)
-        self.uds_table.setColumnWidth(0, 130)
-        self.uds_table.setColumnWidth(1, 150)
-        self.uds_table.setColumnWidth(2, 160)
-        self.uds_table.setColumnWidth(3, 70)
-        self.uds_table.setColumnWidth(4, 220)
+        self.uds_table.setColumnWidth(0, 100)
+        self.uds_table.setColumnWidth(1, 130)
+        self.uds_table.setColumnWidth(2, 120)
+        self.uds_table.setColumnWidth(3, 60)
+        self.uds_table.setColumnWidth(4, 200)
+        self.uds_table.setColumnWidth(5, 140)
+        self.uds_table.setColumnWidth(6, 80)
         uds_layout.addWidget(self.uds_table, 1)
 
         uds_control_row = QHBoxLayout()
@@ -1049,6 +1122,9 @@ class StepDialog(QDialog):
                               ("下移", lambda: self.move_uds_row(1)), ("清空", self.clear_uds_rows)):
             button = QPushButton(text)
             button.clicked.connect(handler)
+            if text == '删除':
+                self.uds_delete_btn = button
+                button.setText('删除选中行')
             uds_control_row.addWidget(button)
         uds_control_row.addStretch()
         self.uds_cycles = QSpinBox()
@@ -1062,6 +1138,12 @@ class StepDialog(QDialog):
         uds_control_row.addWidget(self.uds_cycles)
         uds_control_row.addWidget(QLabel("请求间隔:"))
         uds_control_row.addWidget(self.uds_interval)
+        uds_control_row.addWidget(self.uds_add_btn)
+        uds_layout.insertLayout(uds_layout.indexOf(self.uds_table), uds_control_row)
+        self._organize_uds_pages(uds_layout, uds_link_row, uds_edit_row, uds_rule_row, uds_control_row)
+        from ui.widgets.uds_sequence_workbench import UDSSequenceWorkbench
+        self.uds_workbench = UDSSequenceWorkbench(self)
+        self.uds_workbench.install()
         self.param_stack.addWidget(self.page_uds) # 13
 
         # --- 页面 14: 空参数占位页面 (针对无需配置额外参数的动作) ---
@@ -1137,6 +1219,10 @@ class StepDialog(QDialog):
         self.param_stack.addWidget(self.page_e2_rfp) # 15
         self.device_step_form=DeviceStepForm()
         self.param_stack.addWidget(self.device_step_form)
+        from ui.widgets.dbc_forms import DBCStepForm
+        dbc_provider=getattr(self.parent(),'recipe_dbc_asset',None)
+        self.dbc_form=DBCStepForm(dbc_provider() if callable(dbc_provider) else None)
+        self.param_stack.addWidget(self.dbc_form)
 
 
         # 3. 策略与判定设置
@@ -1150,6 +1236,9 @@ class StepDialog(QDialog):
         self.cb_judgment.setStyleSheet("color: #00E5FF; font-weight: bold;")
         policy_layout.addRow("", self.cb_judgment)
 
+        from ui.widgets.read_until_form import ReadUntilForm
+        self.read_until = ReadUntilForm()
+        self.scroll_layout.addWidget(self.read_until)
         self.scroll_layout.addWidget(policy_frame)
         
         self.main_scroll.setWidget(self.main_scroll_content)
@@ -1169,6 +1258,15 @@ class StepDialog(QDialog):
         main_layout.addLayout(btn_layout)
         
         # 信号连接
+        from ui.widgets.uds_field_write_form import UDSFieldWriteForm
+        self.uds_field_write_form=UDSFieldWriteForm(self)
+        self.param_stack.addWidget(self.uds_field_write_form)
+        from ui.widgets.can_periodic_form import CANPeriodicForm
+        self.can_periodic_form=CANPeriodicForm(self)
+        self.param_stack.addWidget(self.can_periodic_form)
+        from ui.widgets.variable_step_form import VariableStepForm
+        self.variable_step_form=VariableStepForm(self)
+        self.param_stack.addWidget(self.variable_step_form)
         self.category_combo.currentIndexChanged.connect(self.on_category_changed)
         self.sub_category_combo.currentIndexChanged.connect(self.on_sub_category_changed)
         self.device_combo.currentIndexChanged.connect(self.on_device_changed)
@@ -1182,8 +1280,61 @@ class StepDialog(QDialog):
         else:
             self.on_category_changed(0)
             self.on_eol_op_changed()
+        from ui.widgets.compact_step_layout import compact_combos
+        compact_combos(self)
+        self.scroll_layout.setAlignment(Qt.AlignTop)
 
     def accept(self):
+        if self.param_stack.currentWidget() is self.variable_step_form:
+            try:self.get_data()
+            except (ValueError,TypeError) as exc:
+                QMessageBox.warning(self,'变量参数错误',str(exc));return
+        if self.param_stack.currentWidget() is self.can_periodic_form:
+            try:self.get_data()
+            except (ValueError,TypeError) as exc:
+                QMessageBox.warning(self,'周期报文参数错误',str(exc));return
+        if self.uds_field_write_form.task.isRunning():return
+        if self.param_stack.currentWidget() is self.uds_field_write_form:
+            try:self.get_data()
+            except (ValueError,TypeError) as exc:
+                QMessageBox.warning(self,'三字段写入参数错误',str(exc));return
+        if self.param_stack.currentWidget() is self.dbc_form:
+            try:self.get_data()
+            except (ValueError,TypeError) as exc:
+                QMessageBox.warning(self,'DBC工步参数错误',str(exc));return
+            if (self.recipe_can_binding or {}).get('enabled') is False:
+                QMessageBox.warning(self,'未绑定CAN卡','DBC读取需要先选择配方CAN卡。');return
+        if self.uds_workbench.task.isRunning():
+            return
+        if self.param_stack.currentIndex() == 13:
+            if self._uds_edit_item is not None and not self.save_uds_edited_row(show_list=False):
+                return
+            try:
+                self.get_data()
+                self.uds_security.config()
+            except (ValueError, OSError) as exc:
+                QMessageBox.warning(self, '安全访问配置错误', str(exc))
+                return
+        if self.param_stack.currentIndex() == 12 and '查找' not in self.action_combo.currentText():
+            try:
+                self._app_flash_monitor_ids()
+            except ValueError as exc:
+                QMessageBox.warning(self, '刷写监听参数错误', str(exc))
+                return
+        try:
+            self.read_until.config()
+        except (ValueError, TypeError) as exc:
+            QMessageBox.warning(self, '范围等待参数错误', str(exc))
+            return
+        if self.param_stack.currentIndex() in (1, 7, 13) and (self.recipe_can_binding or {}).get('enabled') is False:
+            QMessageBox.warning(self, '未绑定 CAN 卡', '当前配方选择了“不使用 CAN”，请先在配方中选择 CAN 卡。')
+            return
+        if self.param_stack.currentIndex() == 1 and self.can_parser.isVisible() and self.can_parser.enabled.isChecked():
+            try:
+                self.can_parser.config()
+            except (ValueError, TypeError) as exc:
+                QMessageBox.warning(self, '解析参数错误', str(exc))
+                return
         key=device_key(self.device_combo.currentText())
         spec=action_spec(key,self.action_combo.currentText())
         if spec:
@@ -1191,6 +1342,23 @@ class StepDialog(QDialog):
             except (ValueError,TypeError) as exc:
                 QMessageBox.warning(self,'参数错误',str(exc));return
         super().accept()
+
+    def reject(self):
+        if hasattr(self, 'uds_workbench') and self.uds_workbench.task.isRunning():
+            self.uds_workbench.cancel.set()
+            return
+        if hasattr(self, 'uds_workbench'):
+            self.uds_workbench.stop()
+        super().reject()
+
+    def closeEvent(self, event):
+        if hasattr(self, 'uds_workbench') and self.uds_workbench.task.isRunning():
+            self.uds_workbench.cancel.set()
+            event.ignore()
+            return
+        if hasattr(self, 'uds_workbench'):
+            self.uds_workbench.stop()
+        super().closeEvent(event)
 
     def _combo_value(self, combo):
         if combo.isEditable():
@@ -1422,7 +1590,7 @@ class StepDialog(QDialog):
             self.eol_args.setVisible(True)
             if hasattr(self, "eol_args_label"):
                 self.eol_args_label.setVisible(True)
-            self.eol_args.setPlaceholderText("可选参数，例 TARGET:25,TOL1:0.5,TOL2:2.0,REPLACE:-50:25")
+            self.eol_args.setPlaceholderText("可选参数，格式：参数名:值")
             if hasattr(self, "eol_diff_ambient"):
                 self.eol_diff_ambient.setVisible(True)
             if hasattr(self, "eol_temp_convert"):
@@ -1502,10 +1670,51 @@ class StepDialog(QDialog):
                 self.device_combo.setCurrentText(label);self.on_device_changed()
                 self.action_combo.setCurrentText(spec.label);self.on_action_changed()
                 self.device_step_form.configure(key,spec,values)
+                from core.read_until import settings
+                self.read_until.load(settings(params_str))
                 self.cb_judgment.setChecked(data.get('is_judgment',False))
                 self.fail_strategy_combo.setCurrentText(data.get('fail_strategy','失败停止'))
                 return
             kv = self._split_params(params_str)
+            if 'VARSTEP64' in kv:
+                from core.variable_steps import decode
+                c=decode(params_str)
+                self.category_combo.setCurrentText('通用交互');self.on_category_changed()
+                self.device_combo.setCurrentText('写入变量' if c['operation']=='write' else '读取变量');self.on_device_changed();self.on_action_changed()
+                self.variable_step_form.load(c)
+                self.cb_judgment.setChecked(data.get('is_judgment',False))
+                self.fail_strategy_combo.setCurrentText(data.get('fail_strategy','失败停止'))
+                return
+            if 'CANPER64' in kv:
+                from core.can_periodic import decode
+                c=decode(params_str)
+                self.category_combo.setCurrentText('报文交互');self.on_category_changed()
+                self.device_combo.setCurrentText('CAN 交互');self.on_device_changed()
+                self.action_combo.setCurrentText('启动周期报文列表' if c['operation']=='start' else '停止周期报文列表')
+                self.on_action_changed();self.can_periodic_form.load(c)
+                if 'PCH' in kv:self.can_physical_channel.setCurrentIndex(self.can_physical_channel.findData(int(kv['PCH'])))
+                self.cb_judgment.setChecked(data.get('is_judgment',False))
+                self.fail_strategy_combo.setCurrentText(data.get('fail_strategy','失败停止'))
+                return
+            if 'WRITE64' in kv:
+                from core.uds_field_write import DEVICE,decode
+                self.category_combo.setCurrentText('报文交互');self.on_category_changed()
+                self.device_combo.setCurrentText(DEVICE);self.on_device_changed();self.on_action_changed()
+                self.uds_field_write_form.load(decode(kv['WRITE64']))
+                if 'PCH' in kv:self.can_physical_channel.setCurrentIndex(self.can_physical_channel.findData(int(kv['PCH'])))
+                self.cb_judgment.setChecked(data.get('is_judgment',False))
+                self.fail_strategy_combo.setCurrentText(data.get('fail_strategy','失败停止'))
+                return
+            if 'SEC64' in kv:
+                from core.seedkey import decode
+                self.uds_security.load(decode(kv['SEC64']))
+            if 'PCH' in kv:
+                physical = int(kv['PCH'])
+                index = self.can_physical_channel.findData(physical)
+                if index < 0:
+                    self.can_physical_channel.addItem(f'CH{physical}（不属于当前配方CAN卡，请重选）', physical)
+                    index = self.can_physical_channel.count()-1
+                self.can_physical_channel.setCurrentIndex(index)
             
             # 1. 还原一级分类 (Category)
             category = "设备操作"
@@ -1527,7 +1736,7 @@ class StepDialog(QDialog):
             if category == "设备操作":
                 sub_cat = "AFE"
                 if "AFE" in device: sub_cat = "AFE"
-                elif "继电器" in device or "Aging Board" in device or "Easy320" in device: sub_cat = "继电器"
+                elif "继电器" in device or "Easy320" in device: sub_cat = "继电器"
                 elif "HV Source" in device or "高压" in device: sub_cat = "高压源"
                 elif "Simulator" in device or "模拟" in device: sub_cat = "模拟电池"
                 elif "CA550" in device or "校准" in device: sub_cat = "校准源"
@@ -1549,9 +1758,15 @@ class StepDialog(QDialog):
             idx = self.action_combo.findText(action)
             if idx >= 0: self.action_combo.setCurrentIndex(idx)
             self.on_action_changed()
+            if self.param_stack.currentWidget() is self.dbc_form:
+                self.dbc_form.load(params_str)
+                from core.read_until import settings
+                self.read_until.load(settings(params_str))
             
             # 回读页面必须恢复读取量，否则默认电压会在再次保存时覆盖电流。
             if self.param_stack.currentIndex() == 3:
+                from core.read_until import settings
+                self.read_until.load(settings(params_str))
                 read_button = self.rb_curr if "电流" in params_str else self.rb_volt
                 read_button.setChecked(True)
                 self._update_read_units()
@@ -1602,10 +1817,13 @@ class StepDialog(QDialog):
                 if "ID" in kv: self.c_id.setText(kv["ID"])
                 if "DATA" in kv: self.c_data.setText(kv["DATA"])
                 if "WAIT_ID" in kv: self.c_wait_id.setText(kv["WAIT_ID"])
+                self.c_rx_format.setCurrentIndex(('auto','standard','extended').index(kv.get('RX_FORMAT','auto')))
+                self.c_rx_prefix.setText(kv.get('RX_PREFIX',''))
                 if "TIMEOUT" in kv: self.c_timeout.setValue(int(float(kv["TIMEOUT"])))
                 if "TYPE" in kv: self.c_type.setCurrentIndex(int(kv["TYPE"]))
                 if "DLC" in kv: self.c_dlc.setValue(int(kv["DLC"]))
                 if "CH" in kv: self.c_channel.setValue(int(kv["CH"]))
+                if "PARSE" in kv: self.can_parser.load(kv["PARSE"])
             except: pass
 
             # --- CA550 (Page 5) ---
@@ -1702,6 +1920,7 @@ class StepDialog(QDialog):
             # --- UDS 顺序交互 (Page 12) ---
             try:
                 if "UDS" in device:
+                    self._uds_load_error = ''
                     self.uds_tx_id.setText(kv.get("TX_ID", "0x7E0"))
                     self.uds_rx_id.setText(kv.get("RX_ID", "0x7E8"))
                     self.uds_can_type.setCurrentIndex(int(kv.get("TYPE", "0")))
@@ -1709,6 +1928,9 @@ class StepDialog(QDialog):
                     self.uds_cycles.setValue(int(kv.get("CYCLES", "1")))
                     self.uds_interval.setValue(int(kv.get("INTERVAL", "1")))
                     encoded = kv.get("LIST64", "")
+                    self.uds_table.setRowCount(0)
+                    from core.uds_sequence import settings_from
+                    self.uds_workbench.load_config(settings_from(kv.get('UDSCFG64', '')))
                     if encoded:
                         script = base64.urlsafe_b64decode(encoded).decode("utf-8")
                         for line in script.splitlines():
@@ -1718,7 +1940,17 @@ class StepDialog(QDialog):
                             line_main, pipe_sep, rule_str = line.partition("|")
                             request, separator, expected = line_main.partition("=>")
                             self._append_uds_table_row("自定义", request.strip(), expected.strip() if separator else "", rule_str.strip())
-            except: pass
+                        from core.uds_result_config import decode
+                        requests = [line.strip() for line in script.splitlines() if line.strip() and not line.strip().startswith('#')]
+                        metadata = decode(kv.get('UDSMETA64', ''), requests)
+                        for row, config in enumerate(metadata):
+                            self.uds_table.item(row, 5).setText(config.get('expected', ''))
+                            self.uds_table.item(row, 6).setCheckState(Qt.Checked if config.get('output') else Qt.Unchecked)
+                            self._set_uds_row_options(row, config)
+                            self.uds_table.item(row,0).setCheckState(Qt.Checked if config.get('enabled',True) else Qt.Unchecked)
+                            if config.get('name'):self.uds_table.item(row,0).setText(config['name'])
+            except Exception as exc:
+                self._uds_load_error = str(exc)
 
             # --- APP 刷写 (Page 12) ---
             try:
@@ -1731,6 +1963,8 @@ class StepDialog(QDialog):
                     self.app_flash_name.setText("" if app_name == "APPname" else app_name)
                     self.app_flash_record.setText(kv.get("RECORD", os.path.join("Flash", "Record.txt")))
                     self.app_flash_timeout.setValue(int(float(kv.get("TIMEOUT", "300"))))
+                    self.app_flash_tx_id.setText(kv.get('FLASH_TX_ID', '0x7E4'))
+                    self.app_flash_rx_id.setText(kv.get('FLASH_RX_ID', '0x7EC'))
             except (TypeError, ValueError):
                 pass
 
@@ -1742,16 +1976,19 @@ class StepDialog(QDialog):
 
             # --- 继电器控制 (Page 4/8) ---
             try:
-                if "继电器" in step_type or "Easy320" in device or "Aging Board" in device:
+                if "继电器" in step_type or "Easy320" in device:
                     channels = params_str.split(",")
                     for c in channels:
                         try:
                             clean_c = re.sub(r'[^\d]', '', c) # 只保留数字
                             if clean_c:
                                 c_idx = int(clean_c) - 1
-                                if 0 <= c_idx < 32:
-                                    if "Easy320" in device: self.easy320_checks[c_idx].setChecked(True)
-                                    if "Aging Board" in device and c_idx < 22: self.aging_relay_checks[c_idx].setChecked(True)
+                                if "Easy320" in device:
+                                    match = next((cb for cb in self.easy320_checks if cb.property('coil_index') == c_idx), None)
+                                    if match is not None: match.setChecked(True)
+                                    else:
+                                        self.easy320_missing_channels.add(c_idx)
+                                        self.easy320_channel_tip.setText('原工步包含当前导入表中不存在的DO通道：' + ', '.join(f'DO{i:o}' for i in sorted(self.easy320_missing_channels)) + '。请重新选择通道并核对工步。')
                         except: pass
             except: pass
 
@@ -1836,7 +2073,7 @@ class StepDialog(QDialog):
 
     def on_category_changed(self, index=0):
         category = self.category_combo.currentText()
-        self.sub_category_combo.setVisible(category == "设备操作")
+        self.device_selection_form.setRowVisible(self.sub_category_combo, category == "设备操作")
         
         self.sub_category_combo.clear()
         self.device_combo.clear()
@@ -1844,11 +2081,11 @@ class StepDialog(QDialog):
         if category == "设备操作":
             self.sub_category_combo.addItems(["直流源", "高压源", "模拟电池", "继电器", "校准源", "下载器", "测量仪器", "信号发生器", "示波器", "板卡"])
         elif category == "报文交互":
-            self.device_combo.addItems(["CAN 交互", "UDS 交互列表"])
+            self.device_combo.addItems(["CAN 交互", "UDS 交互列表", "CANDBC 交互", "UDS 2E 三字段写入"])
         elif category == "三方协议":
             self.device_combo.addItems(["3.5HEOL协议", "MES过站校验"])
         elif category == "通用交互":
-            self.device_combo.addItems(["等待 (Wait)", "变量操作 (Variable)", "公式计算 (Calculate)"])
+            self.device_combo.addItems(["等待 (Wait)", "写入变量", "读取变量", "变量操作 (Variable)", "公式计算 (Calculate)"])
         elif category == "特殊执行":
             self.device_combo.addItems(["3.5HEOL协议"])
         
@@ -1883,9 +2120,21 @@ class StepDialog(QDialog):
             self.on_device_changed()
 
     def on_device_changed(self, index=0):
+        text = self.device_combo.currentText()
+        can_related = any(word in text.upper() for word in ('CAN', 'UDS', 'EOL'))
+        for control in (self.can_binding_title,self.can_binding_label,self.can_channel_title,self.can_physical_channel):
+            control.setVisible(can_related)
         self.action_combo.clear()
         device_text = self.device_combo.currentText()
         if not device_text: return
+        if device_text in ('写入变量','读取变量'):
+            self.action_combo.addItem(device_text)
+            if not self.is_loading:self.on_action_changed()
+            return
+        if device_text == 'UDS 2E 三字段写入':
+            self.action_combo.addItem('写入三字段 ASCII 并校验响应')
+            if not self.is_loading:self.on_action_changed()
+            return
         key=device_key(device_text)
         if key in ('it6333b','dmm34461','dg2052','tbs2102b','insulation','resistor','relay','hv','hsd','dmm'):
             self.action_combo.addItems([a.label for a in STEP_ACTIONS[key]])
@@ -1902,12 +2151,17 @@ class StepDialog(QDialog):
                     "0x07 CSC控制读取", "0x07 CSC批量读取", "0x08 CRASH读取", "0x09 RTC控制读取", "0x10 NTC读取",
                     "0x0A EEPROM控制读取", "0x0B 霍尔电流读取", "0xFF 扩展指令"
                 ])
+        elif "CANDBC" in device_text:
+            self.action_combo.addItems(['读取DBC信号'])
         elif "UDS" in device_text:
             self.action_combo.addItems(["顺序发送并校验"])
         elif "MES" in device_text:
             self.action_combo.addItems(["moveInCheck过站校验"])
         elif "CAN" in device_text:
             self.action_combo.addItems(["发送指令", "交互/问答", "读取数据", "接收指定帧ID"])
+            self.action_combo.addItems(['启动周期报文列表','停止周期报文列表'])
+            self.action_combo.setItemData(0,'仅发送，不等待或解析回复',Qt.ToolTipRole)
+            self.action_combo.setItemData(1,'发送请求，等待指定ID的回复并解析',Qt.ToolTipRole)
         elif "等待" in device_text:
             self.action_combo.addItems(["固定延时"])
         elif "变量操作" in device_text:
@@ -1951,14 +2205,35 @@ class StepDialog(QDialog):
             self.read_unit.setCurrentText(previous)
 
     def on_action_changed(self):
+        if hasattr(self, 'read_until'):
+            key = device_key(self.device_combo.currentText())
+            spec = action_spec(key, self.action_combo.currentText())
+            action = self.action_combo.currentText()
+            self.read_until.setVisible(bool(spec.read and spec.key not in ('state', 'waveform')) if spec else (any(word in action for word in ('读取', '回读')) and any(x in self.device_combo.currentText().lower() for x in ('simulator', '模拟器', 'it6722', 'dut', 'ngi', '高压源', 'ca550'))))
         device = self.device_combo.currentText()
         action = self.action_combo.currentText()
+        if device in ('写入变量','读取变量'):
+            self.variable_step_form.set_operation('write' if device=='写入变量' else 'read')
+            self.param_stack.setCurrentWidget(self.variable_step_form)
+            return
+        if action in ('启动周期报文列表','停止周期报文列表'):
+            self.can_periodic_form.set_operation('start' if action=='启动周期报文列表' else 'stop')
+            self.param_stack.setCurrentWidget(self.can_periodic_form)
+            return
+        if device == 'UDS 2E 三字段写入':
+            self.param_stack.setCurrentWidget(self.uds_field_write_form)
+            return
         key=device_key(device);spec=action_spec(key,action)
         if spec:
             self.device_step_form.configure(key,spec)
             self.param_stack.setCurrentWidget(self.device_step_form)
             return
         
+        if 'CANDBC' in device:
+            self.param_stack.setCurrentWidget(self.dbc_form)
+            self.dbc_form.ensure_loaded()
+            self.read_until.setVisible(True)
+            return
         if "MES" in device:
             self.param_stack.setCurrentIndex(14)
         elif "3.5HEOL" in device:
@@ -1971,6 +2246,13 @@ class StepDialog(QDialog):
             self.param_stack.setCurrentIndex(13)
         elif "CAN" in device:
             self.param_stack.setCurrentIndex(1)
+            self.c_action_help.setText('仅发送：不等待回复，也不解析返回数据。' if '发送' in action else
+                ('仅接收：等待指定ID的报文并解析，不发送请求。' if action=='接收指定帧ID' else
+                 '请求应答：发送请求 → 等待指定响应ID → 匹配回复 → 输出解析结果。ID统一按十六进制填写。'))
+            self.can_parser.setVisible("发送" not in action)
+            for field in (self.c_rx_format,self.c_rx_prefix):
+                field.setVisible('发送' not in action)
+                self.page_can.layout().labelForField(field).setVisible('发送' not in action)
             # 动态显示/隐藏不需要的输入项
             c_layout = self.page_can.layout()
             if c_layout:
@@ -1991,8 +2273,6 @@ class StepDialog(QDialog):
             self.param_stack.setCurrentIndex(9)
         elif "公式计算" in device:
             self.param_stack.setCurrentIndex(10)
-        elif "同步屏障" in device:
-            self.param_stack.setCurrentIndex(14)
         elif "继电器" in device or "Easy320" in device:
             if "全部" in action:
                 self.param_stack.setCurrentIndex(14)
@@ -2028,7 +2308,8 @@ class StepDialog(QDialog):
             self.app_flash_record_label.setVisible(False)
             self.app_flash_record.setVisible(False)
             for widget in (self.app_flash_timeout_label, self.app_flash_timeout,
-                           self.app_flash_record_help):
+                           self.app_flash_record_help, self.app_flash_tx_label, self.app_flash_tx_id,
+                           self.app_flash_rx_label, self.app_flash_rx_id, self.app_flash_monitor_help):
                 widget.setVisible(not is_find)
         elif "CA550" in device:
             if "参数设置" in action:
@@ -2080,213 +2361,168 @@ class StepDialog(QDialog):
             self._update_read_units()
         self.on_var_changed()
 
-    def _reload_uds_templates_combo(self):
-        """重新加载常用 DID 字典/模板下拉框"""
-        if not hasattr(self, "combo_uds_templates"):
-            return
-        self.combo_uds_templates.blockSignals(True)
-        self.combo_uds_templates.clear()
-        self.combo_uds_templates.addItem("📋 选择常用 BMS 诊断读取模板 (一键预填)...", None)
-        
-        if not hasattr(self, "uds_dict_mgr"):
-            from core.uds_dictionary import UDSDictionaryManager
-            self.uds_dict_mgr = UDSDictionaryManager()
-            
-        items = self.uds_dict_mgr.get_all_items()
-        for item in items:
-            name = item.get("name", "未命名")
-            did = item.get("did", "")
-            label = f"{name} ({did})" if did else name
-            self.combo_uds_templates.addItem(label, item)
+    def _organize_uds_pages(self, root, link, editor, response, controls):
+        """Separate the workflow without changing the persisted UDS fields."""
+        for layout in (link, editor, response, controls):
+            root.removeItem(layout)
+        for widget in (self.uds_security, self.uds_unlock_add, self.uds_extract_group, self.uds_table):
+            root.removeWidget(widget)
+        self.uds_tabs = QTabWidget()
+        self.uds_tabs.setMinimumHeight(440)
+        root.addWidget(self.uds_tabs, 1)
+        pages = []
+        descriptions = [
+            ('1 连接参数', '先确认上方配方 CAN 卡和物理通道，再填写请求 ID、响应 ID、帧类型与超时。此处设置供整个交互列表共用。'),
+            ('2 安全解锁（可选）', '不需要解锁可直接下一步。需要时勾选安全访问，选择 DLL 并配置参数，再添加解锁行；在执行列表中将其放在会话切换之后、受保护读写之前。'),
+            ('3 请求与解析', '选择服务并填写请求 PDU。只校验响应可不提取；读取 VIN 等内容请选择 ASCII。可手输偏移、长度，也可在线抓取后选择字节。完成后到下一页添加。'),
+            ('4 执行列表', '点击右上方“添加到列表”加入请求；单击已有行返回第3页修改并保存回原行。Ctrl/Shift可多选，右键可编辑或删除。勾选某一行“最终输出”时只显示该行最后一轮结果，其他行仍执行并校验。期望结果留空不额外比较；不勾输出则兼容原有汇总方式。最后点击“确认指令”保存。'),
+        ]
+        for title, description in descriptions:
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.NoFrame)
+            content = QWidget()
+            layout = QVBoxLayout(content)
+            layout.setSpacing(12)
+            tip = QLabel(description)
+            tip.setWordWrap(True)
+            tip.setStyleSheet('color: #E2E8F0; padding: 8px; background: #16213E; border-radius: 4px;')
+            layout.addWidget(tip)
+            scroll.setWidget(content)
+            self.uds_tabs.addTab(scroll, title)
+            pages.append(layout)
+        pages[0].addLayout(link)
+        pages[0].addStretch()
+        pages[1].addWidget(self.uds_security)
+        pages[1].addWidget(self.uds_unlock_add)
+        pages[1].addStretch()
+        pages[2].addLayout(editor)
+        pages[2].addLayout(response)
+        self.uds_edit_actions = QWidget()
+        edit_actions = QHBoxLayout(self.uds_edit_actions)
+        edit_actions.setContentsMargins(0, 0, 0, 0)
+        self.uds_edit_hint = QLabel()
+        self.uds_edit_hint.setWordWrap(True)
+        self.uds_save_edit = QPushButton('保存修改并返回列表')
+        self.uds_save_edit.setAutoDefault(False)
+        self.uds_save_edit.clicked.connect(lambda: self.save_uds_edited_row())
+        self.uds_cancel_edit = QPushButton('取消修改／新增请求')
+        self.uds_cancel_edit.setAutoDefault(False)
+        self.uds_cancel_edit.clicked.connect(self.cancel_uds_edit)
+        edit_actions.addWidget(self.uds_edit_hint, 1)
+        edit_actions.addWidget(self.uds_save_edit)
+        edit_actions.addWidget(self.uds_cancel_edit)
+        self.uds_edit_actions.hide()
+        pages[2].addWidget(self.uds_edit_actions)
+        pages[2].addWidget(self.uds_extract_group)
+        pages[2].addStretch()
+        header = QHBoxLayout()
+        header.addWidget(QLabel('按执行顺序排列的 UDS 请求'))
+        header.addStretch()
+        controls.removeWidget(self.uds_add_btn)
+        header.addWidget(self.uds_add_btn)
+        pages[3].addLayout(header)
+        self.uds_draft_summary = QLabel()
+        self.uds_draft_summary.setWordWrap(True)
+        pages[3].addWidget(self.uds_draft_summary)
+        pages[3].addLayout(controls)
+        self.uds_table.setMinimumHeight(220)
+        pages[3].addWidget(self.uds_table, 1)
+        navigation = QHBoxLayout()
+        self.uds_previous = QPushButton('上一步')
+        self.uds_next = QPushButton('下一步')
+        for button in (self.uds_previous, self.uds_next):
+            button.setAutoDefault(False)
+            button.setStyleSheet('QPushButton { color: white; background: #16213E; border: 1px solid #64748B; border-radius: 4px; padding: 7px 16px; } QPushButton:disabled { color: #94A3B8; border-color: #334155; }')
+        self.uds_previous.clicked.connect(lambda: self.uds_tabs.setCurrentIndex(self.uds_tabs.currentIndex()-1))
+        self.uds_next.clicked.connect(lambda: self.uds_tabs.setCurrentIndex(self.uds_tabs.currentIndex()+1))
+        navigation.addWidget(self.uds_previous)
+        navigation.addStretch()
+        navigation.addWidget(self.uds_next)
+        root.addLayout(navigation)
+        self.uds_tabs.currentChanged.connect(self._update_uds_navigation)
+        self.uds_request.textChanged.connect(self._update_uds_navigation)
+        self._update_uds_navigation()
 
-        if hasattr(self, "uds_simple_template"):
-            self.uds_simple_template.blockSignals(True)
-            self.uds_simple_template.clear()
-            self.uds_simple_template.addItem("请选择或搜索诊断项目...", None)
-            for item in items:
-                name = item.get("name", "未命名")
-                did = item.get("did", "")
-                self.uds_simple_template.addItem(f"{name} ({did})" if did else name, item)
-            self.uds_simple_template.setCurrentIndex(0)
-            self.uds_simple_template.blockSignals(False)
-            
-        self.combo_uds_templates.blockSignals(False)
-
-    def _on_uds_simple_template_selected(self, idx: int):
-        """简易模式选择模板后，自动填入高级字段并展示最终执行效果。"""
-        if idx <= 0:
-            self.lbl_uds_simple_preview.setText("选择项目后，系统会自动配置请求、响应校验、数据换算和结果变量。")
-            return
-        item = self.uds_simple_template.currentData()
-        if not isinstance(item, dict):
-            return
-        from core.uds_dictionary import build_simple_uds_config
-        try:
-            config = build_simple_uds_config(item)
-        except ValueError as exc:
-            self.lbl_uds_simple_preview.setText(str(exc))
-            return
-
-        template_idx = self.combo_uds_templates.findData(item)
-        if template_idx >= 0:
-            self.combo_uds_templates.setCurrentIndex(template_idx)
-        self.uds_request.setText(config["request"])
-        # 仅校验稳定的服务/DID前缀，测量数据允许随真实状态变化。
-        self.uds_expected.setText(config["expected"])
-        unit_text = f" {config['unit']}" if config["unit"] else ""
-        variable_text = config["variable"] or "不保存变量"
-        self.lbl_uds_simple_preview.setText(
-            f"请求 {config['request']}  → 校验 {config['expected']}  → "
-            f"结果写入 {variable_text}{unit_text}"
-        )
-
-    def _add_simple_uds_item(self):
-        """把简易模式当前项目加入既有 UDS 顺序执行列表。"""
-        if self.uds_simple_template.currentIndex() <= 0:
-            QMessageBox.information(self, "简易配置", "请先选择一个诊断项目。")
-            return
-        self.add_uds_row()
-        self.lbl_uds_simple_preview.setText("已加入执行列表，可继续选择下一个诊断项目。")
-
-    def _on_uds_proto_fmt_changed(self, idx: int):
-        """协议规范切换 (0: 标准ISO 14229 偏移3, 1: 厂商私有含长度 偏移4, 2: 自定义)"""
-        if idx == 0:
-            self.uds_extract_offset.setValue(3)
-        elif idx == 1:
-            self.uds_extract_offset.setValue(4)
-        if hasattr(self, "uds_byte_grid"):
-            off = self.uds_extract_offset.value()
-            length = self.uds_extract_len.value()
-            self.uds_byte_grid.set_selection(off, length, emit_signal=False)
-            self._refresh_byte_grid_preview()
-
-    def _on_uds_template_selected(self, idx: int):
-        """选中常用 DID 模板后，一键自动填充请求、期望、偏移、长度、模式、系数、单位与变量名"""
-        if idx <= 0:
-            return
-        item = self.combo_uds_templates.currentData()
-        if not item or not isinstance(item, dict):
-            return
-            
-        req = item.get("request", "").strip()
-        exp = item.get("expected", "").strip()
-        if req:
-            self.uds_request.setText(req)
-        if exp:
-            self.uds_expected.setText(exp)
-        elif req and hasattr(self, "_uds_positive_response_prefix"):
-            self.uds_expected.setText(self._uds_positive_response_prefix(req))
-            
-        mode = item.get("mode", "NONE")
-        if mode == "ASCII":
-            self.uds_extract_mode.setCurrentIndex(1)
-        elif mode in ("CALC", "NUMERIC"):
-            self.uds_extract_mode.setCurrentIndex(2)
-            endian = item.get("endian", "big")
-            self.uds_extract_endian.setCurrentIndex(1 if endian == "little" else 0)
-            self.uds_extract_signed.setChecked(bool(item.get("signed", False)))
-            self.uds_extract_scale.setValue(float(item.get("scale", 1.0)))
-            self.uds_extract_offset_val.setValue(float(item.get("offset_val", 0.0)))
-            self.uds_extract_unit.setText(item.get("unit", ""))
-        elif mode == "FORMULA":
-            self.uds_extract_mode.setCurrentIndex(3)
-            endian = item.get("endian", "big")
-            self.uds_extract_endian.setCurrentIndex(1 if endian == "little" else 0)
-            self.uds_extract_formula.setText(item.get("formula", "val"))
-            self.uds_extract_unit.setText(item.get("unit", ""))
+    def _update_uds_navigation(self, *_):
+        page = self.uds_tabs.currentIndex()
+        self.uds_previous.setEnabled(page > 0)
+        self.uds_next.setEnabled(page < 3)
+        self.uds_next.setText('下一步：数据解析' if page == 2 else '下一步')
+        request = self.uds_request.text().strip()
+        editing = self._uds_edit_row()
+        if editing >= 0:
+            self.uds_draft_summary.setText(f'正在修改第{editing+1}行：{request}（保存后覆盖原行，不增加行数）')
+            self.uds_add_btn.setText('保存本行修改')
+            self.uds_edit_hint.setText(f'正在编辑第{editing+1}行。切换其他行或确认指令时也会保存；取消可放弃本次修改。')
         else:
-            self.uds_extract_mode.setCurrentIndex(0)
-            
-        offset = int(item.get("offset", 3))
-        length = int(item.get("length", 0))
-        self.uds_extract_offset.setValue(offset)
-        self.uds_extract_len.setValue(length)
-        
-        if offset == 3 and self.uds_proto_fmt.currentIndex() != 0:
-            self.uds_proto_fmt.blockSignals(True)
-            self.uds_proto_fmt.setCurrentIndex(0)
-            self.uds_proto_fmt.blockSignals(False)
-        elif offset == 4 and self.uds_proto_fmt.currentIndex() != 1:
-            self.uds_proto_fmt.blockSignals(True)
-            self.uds_proto_fmt.setCurrentIndex(1)
-            self.uds_proto_fmt.blockSignals(False)
-            
-        var_name = item.get("var_name", "")
-        if var_name:
-            self.uds_extract_var.setText(var_name)
-            
-        self._sync_byte_grid_from_pdu()
-        if hasattr(self, "uds_byte_grid"):
-            self.uds_byte_grid.set_selection(offset, length, emit_signal=False)
-            self._refresh_byte_grid_preview()
+            self.uds_add_btn.setText('添加到列表')
+            self.uds_draft_summary.setText(f'待添加请求：{request}' if request else '尚无待添加请求。请到第3页填写；单击已有行可修改。')
 
-    def _on_save_current_as_template(self):
-        """将当前配置的 DID 提取规则保存为自定义模板"""
-        req = self.uds_request.text().strip().upper()
-        if not req:
-            QMessageBox.warning(self, "提示", "请先输入请求 PDU (如 22 01 01)")
-            return
-            
-        parts = req.split()
-        did_str = " ".join(parts[1:3]) if len(parts) >= 3 else req
-        default_name = f"BMS 自定义项 ({did_str})"
-        
-        name, ok = QInputDialog.getText(self, "保存为模板", "请输入模板名称:", text=default_name)
-        if not ok or not name.strip():
-            return
-            
-        mode_idx = self.uds_extract_mode.currentIndex()
-        mode_map = {0: "NONE", 1: "ASCII", 2: "CALC", 3: "FORMULA"}
-        mode = mode_map.get(mode_idx, "NONE")
-        
-        item_dict = {
-            "name": name.strip(),
-            "did": did_str,
-            "request": req,
-            "expected": self.uds_expected.text().strip().upper(),
-            "mode": mode,
-            "offset": self.uds_extract_offset.value(),
-            "length": self.uds_extract_len.value(),
-            "endian": "little" if "小端" in self.uds_extract_endian.currentText() else "big",
-            "signed": self.uds_extract_signed.isChecked(),
-            "scale": self.uds_extract_scale.value(),
-            "offset_val": self.uds_extract_offset_val.value(),
-            "formula": self.uds_extract_formula.text().strip(),
-            "unit": self.uds_extract_unit.text().strip(),
-            "var_name": self.uds_extract_var.text().strip(),
-        }
-        
-        if not hasattr(self, "uds_dict_mgr"):
-            from core.uds_dictionary import UDSDictionaryManager
-            self.uds_dict_mgr = UDSDictionaryManager()
-            
-        self.uds_dict_mgr.add_or_update_item(item_dict)
-        self._reload_uds_templates_combo()
-        
-        for i in range(self.combo_uds_templates.count()):
-            if name.strip() in self.combo_uds_templates.itemText(i):
-                self.combo_uds_templates.setCurrentIndex(i)
-                break
-        QMessageBox.information(self, "保存成功", f"模板【{name.strip()}】已成功存入本地字典库！")
+    def _capture_signature(self,uds=False):
+        driver=getattr(self.device_manager,'pcan',None)
+        common=(id(driver),id(getattr(driver,'bus',None)),getattr(driver,'channel',None),
+            getattr(driver,'nominal_bitrate',None),getattr(driver,'data_bitrate',None),getattr(driver,'fd_enabled',None),
+            json.dumps(self.recipe_can_binding or {},sort_keys=True),self.can_physical_channel.currentData(),
+            self.category_combo.currentText(),self.device_combo.currentText(),self.action_combo.currentText())
+        if uds:
+            return common+(self.uds_request.text(),self.uds_tx_id.text(),self.uds_rx_id.text(),
+                self.uds_can_type.currentIndex(),self.uds_timeout.value(),id(self._uds_edit_item))
+        return common+(self.c_id.text(),self.c_wait_id.text(),self.c_data.text(),self.c_type.currentIndex(),
+            self.c_dlc.value(),self.c_timeout.value(),self.c_rx_format.currentIndex(),self.c_rx_prefix.text())
 
-    def _on_import_did_csv(self):
-        """从外部 CSV 字典批量导入 DID 配置"""
-        path, _ = QFileDialog.getOpenFileName(
-            self, "导入 DID 字典 CSV 表格", "", "CSV 表格 (*.csv);;所有文件 (*.*)"
-        )
-        if not path:
-            return
-        if not hasattr(self, "uds_dict_mgr"):
-            from core.uds_dictionary import UDSDictionaryManager
-            self.uds_dict_mgr = UDSDictionaryManager()
-            
-        count = self.uds_dict_mgr.import_from_csv(path)
-        self._reload_uds_templates_combo()
-        QMessageBox.information(self, "导入完成", f"成功从 CSV 导入 {count} 条 DID 模板！")
+    def _capture_can_response(self):
+        try:
+            binding=self.recipe_can_binding or {}
+            if binding.get('enabled') is False:raise ValueError('请先在配方中绑定CAN设备')
+            driver=getattr(self.device_manager,'pcan',None)
+            if driver is None or not driver.is_connected:raise ValueError('请先连接配方指定的CAN设备')
+            expected=binding.get('channel','')
+            if expected and expected.startswith('ZLG_CAN')!=str(driver.channel).startswith('ZLG_CAN'):
+                raise ValueError('当前连接设备与配方不一致，请先应用配方配置')
+            physical=self.can_physical_channel.currentData() or 0
+            if not physical and expected.startswith('ZLG_CAN'):physical=int(expected.removeprefix('ZLG_CAN'))
+            if physical:
+                from devices.can_channel_view import CANChannelView
+                driver=CANChannelView(driver,physical)
+            receive_only=self.action_combo.currentText()=='接收指定帧ID'
+            from core.can_frame_config import can_id,response_matcher
+            tx=can_id(self.c_id.text());rx=tx if receive_only else can_id(self.c_wait_id.text())
+            matcher=response_matcher(rx,('auto','standard','extended')[self.c_rx_format.currentIndex()],self.c_rx_prefix.text().strip())
+            if not all(0<=i<=0x1FFFFFFF for i in (tx,rx)):raise ValueError('CAN ID超出有效范围')
+            data=bytes.fromhex(self.c_data.text())
+            channel=self.c_channel.value();kind=self.c_type.currentIndex();dlc=self.c_dlc.value();timeout=self.c_timeout.value()/1000
+            signature=self._capture_signature()
+            from ui.device_task import DeviceTask
+            if not hasattr(self,'_can_capture_task'):self._can_capture_task=DeviceTask(self)
+            if self._can_capture_task.isRunning():return
+            def capture():
+                if receive_only:
+                    import time
+                    return driver.wait_for_message(rx,predicate=matcher,timeout=timeout,since_time=time.time())
+                return driver.send_and_wait_response(channel,tx,kind,dlc,data,rx,timeout,matcher=matcher)
+            def complete(ok,result):
+                self.can_parser.capture.setEnabled(True)
+                if signature!=self._capture_signature():
+                    QMessageBox.information(self,'抓取结束','设备或请求参数已修改，本次响应未覆盖当前样例，请重新抓取。');return
+                if not ok or not result:
+                    QMessageBox.warning(self,'抓取失败',str(result) if not ok else '等待响应超时');return
+                self.can_parser.enabled.setChecked(True)
+                self.can_parser.sample.setText(bytes(result['data']).hex(' ').upper())
+            self.can_parser.capture.setEnabled(False)
+            if not self._can_capture_task.run(capture,complete):self.can_parser.capture.setEnabled(True)
+        except Exception as exc:
+            QMessageBox.warning(self,'无法抓取',str(exc))
 
     def _on_live_sniff_clicked(self):
+        if (self.recipe_can_binding or {}).get('enabled') is False:
+            QMessageBox.warning(self, '未绑定 CAN 卡', '当前配方不使用 CAN，不能发送在线请求。请先在配方中选择 CAN 卡。')
+            return
         """在线抓取 (Sniff)：向真实硬件发送请求并抓取真实回包，瞬间生成真实方块"""
         req_str = self.uds_request.text().strip().upper()
+        if req_str == '@SECURITY':
+            QMessageBox.information(self, 'DLL安全解锁', '此行为自动Seed/Key解锁，不能用普通PDU嗅探。请在CAN调试的“安全访问 DLL”分页执行，或运行当前UDS工步。')
+            return
         if not req_str:
             QMessageBox.warning(self, "提示", "请先输入请求 PDU (例如 22 01 01)")
             return
@@ -2297,6 +2533,16 @@ class StepDialog(QDialog):
         resp_hex = None
         if can_tool and getattr(can_tool, "is_connected", False):
             try:
+                binding = self.recipe_can_binding or {}
+                expected = binding.get('channel', '')
+                if expected and (str(can_tool.channel).startswith('ZLG_CAN') != expected.startswith('ZLG_CAN')):
+                    raise ValueError('当前已连接CAN卡与配方不一致，请先应用配方CAN配置')
+                physical = self.can_physical_channel.currentData() or 0
+                if not physical and expected.startswith('ZLG_CAN'):
+                    physical = int(expected.removeprefix('ZLG_CAN'))
+                if physical:
+                    from devices.can_channel_view import CANChannelView
+                    can_tool = CANChannelView(can_tool, physical)
                 req_bytes = bytes.fromhex(req_str)
                 client = can_tool.create_uds_client(
                     tx_id=int(self.uds_tx_id.text().strip(), 0),
@@ -2305,25 +2551,36 @@ class StepDialog(QDialog):
                     brs=self.uds_can_type.currentIndex() == 2,
                     timeout=max(0.001, self.uds_timeout.value() / 1000.0),
                 )
-                response = client.request(req_bytes[0], req_bytes[1:])
-                if response.positive and response.raw:
-                    resp_hex = response.raw.hex(" ").upper()
-                elif not response.positive:
-                    raise RuntimeError(response.error or response.nrc_name or "ECU 返回否定响应")
+                from ui.device_task import DeviceTask
+                signature=self._capture_signature(uds=True)
+                if not hasattr(self,'_uds_capture_task'):self._uds_capture_task=DeviceTask(self)
+                if self._uds_capture_task.isRunning():return
+                def capture():
+                    response=client.request(req_bytes[0],req_bytes[1:])
+                    if not response.positive:raise RuntimeError(response.error or response.nrc_name or 'ECU返回否定响应')
+                    if not response.raw:raise RuntimeError('未收到有效响应数据')
+                    return response.raw.hex(' ').upper()
+                def complete(ok,value):
+                    self.btn_live_sniff.setEnabled(True);self.btn_live_sniff.setText('📡 在线抓取 (Sniff)')
+                    if not ok:
+                        QMessageBox.warning(self,'抓取失败',str(value));return
+                    if signature!=self._capture_signature(uds=True):
+                        QMessageBox.information(self,'抓取结束','设备、通道或请求参数已修改，本次响应未覆盖当前解析样例，请重新抓取。');return
+                    self._uds_response_preview=value
+                    self._sync_byte_grid_from_pdu()
+                self.btn_live_sniff.setEnabled(False);self.btn_live_sniff.setText('正在抓取…')
+                if not self._uds_capture_task.run(capture,complete):
+                    self.btn_live_sniff.setEnabled(True);self.btn_live_sniff.setText('📡 在线抓取 (Sniff)')
+                return
             except Exception as e:
-                QMessageBox.warning(self, "嗅探失败", f"实机通信发生异常: {e}\n将使用仿真数据生成方块。")
+                QMessageBox.warning(self, "嗅探失败", f"实机通信发生异常: {e}")
+                return
                 
         if not resp_hex:
-            prefix = self._uds_positive_response_prefix(req_str)
-            off = self.uds_extract_offset.value()
-            length = self.uds_extract_len.value()
-            target_len = max(off + length, 8)
-            mock_bytes = bytearray.fromhex(prefix) if prefix else bytearray([0x62, 0x01, 0x01])
-            while len(mock_bytes) < target_len:
-                mock_bytes.append(0x12 if len(mock_bytes) % 2 == 0 else 0x34)
-            resp_hex = mock_bytes.hex(" ").upper()
+            QMessageBox.warning(self, '未抓取到响应', '请确认配方CAN连接和请求参数。没有真实响应时不会生成期望结果。')
+            return
             
-        self.uds_expected.setText(resp_hex)
+        self._uds_response_preview = resp_hex
         self._sync_byte_grid_from_pdu()
         QMessageBox.information(self, "抓取成功", f"已成功获取响应数据报文：\n{resp_hex}\n下方方块已自动生成，请直接滑动拖拽选区！")
 
@@ -2336,32 +2593,31 @@ class StepDialog(QDialog):
             self._refresh_byte_grid_preview()
 
     def _sync_byte_grid_from_pdu(self):
-        """解析 PDU 并在方块上展示，若数据不足自动进行虚拟补齐 (Auto-Mock Padding)"""
-        text = self.uds_expected.text().strip() or self.uds_request.text().strip()
+        """Only display response bytes; never fabricate padding or use TX as RX."""
+        text = getattr(self, '_uds_response_preview', '')
+        if not text and not hasattr(self,'uds_workbench'):
+            text = self.uds_expected.text().strip()
         if hasattr(self, "uds_byte_grid"):
             tokens = [t for t in text.replace(",", " ").split() if t]
             off = self.uds_extract_offset.value()
             length = self.uds_extract_len.value()
             
-            if length > 0 and (off + length) > len(tokens):
-                min_needed = off + length
-            elif len(tokens) <= 3 and tokens:
-                min_needed = max(off + length, 8)
-            else:
-                min_needed = len(tokens)
-            
-            if tokens and len(tokens) < min_needed:
-                padded = list(tokens)
-                while len(padded) < min_needed:
-                    padded.append("00")
-                display_hex = " ".join(padded)
-            else:
-                display_hex = text
+            display_hex = text
                 
             self.uds_byte_grid.set_hex_string(display_hex)
             if length > 0 or off > 0:
                 self.uds_byte_grid.set_selection(off, length, emit_signal=False)
             self._refresh_byte_grid_preview()
+
+    def _uds_selection_menu(self, pos):
+        from PySide6.QtWidgets import QMenu
+        offset, length, chunk = self.uds_byte_grid.get_selected_range()
+        if not chunk:
+            return
+        menu = QMenu(self.uds_byte_grid)
+        for label, index in [('HEX', 4), ('ASCII', 1), ('BCD', 5), ('数值计算', 2), ('自定义公式', 3)]:
+            menu.addAction('选区设为 ' + label, lambda checked=False, i=index: self.uds_extract_mode.setCurrentIndex(i))
+        menu.exec(self.uds_byte_grid.mapToGlobal(pos))
 
     def _on_byte_grid_range_selected(self, offset: int, length: int, chunk: bytes):
         self.uds_extract_offset.blockSignals(True)
@@ -2372,7 +2628,27 @@ class StepDialog(QDialog):
         self.uds_extract_len.blockSignals(False)
         self._refresh_byte_grid_preview(offset, length, chunk)
 
+    def _update_uds_expected_result(self, *_):
+        if self.is_loading or not hasattr(self, 'uds_sync_expected') or not self.uds_sync_expected.isChecked():
+            return
+        preview = getattr(self, '_uds_response_preview', '')
+        if not preview:
+            return
+        from core.uds_parser import parse_uds_rule_string, parse_uds_response_data
+        rule = parse_uds_rule_string(self._get_uds_extract_rule_string())
+        result = parse_uds_response_data(bytes.fromhex(preview), rule)
+        if result.get('success'):
+            self.uds_result_expected.setText(str(result['value']))
+            self.lbl_byte_phys.setText(str(result['display']))
+        else:
+            self.uds_result_expected.clear()
+        self.uds_result_expected.setToolTip('来自当前真实响应和提取规则；可取消同步后修改。' if result.get('success') else str(result.get('error', '')))
+
     def _refresh_byte_grid_preview(self, offset=None, length=None, chunk=None):
+        self._update_uds_expected_result()
+        if hasattr(self, 'uds_segments'):
+            self.uds_segments.refresh(bytes.fromhex(getattr(self, '_uds_response_preview', '') or ''))
+            self.uds_byte_grid.set_segment_ranges(self.uds_segments.rules if self.uds_segments.enabled.isChecked() else [])
         if not hasattr(self, "uds_byte_grid"):
             return
         if offset is None or length is None or chunk is None:
@@ -2403,31 +2679,22 @@ class StepDialog(QDialog):
             self.lbl_byte_int.setText("整数: 长字节(超64位)")
 
         # 换算物理值预览
-        mode_idx = self.uds_extract_mode.currentIndex()
-        if mode_idx == 1: # ASCII
-            ascii_text = chunk.decode("utf-8", errors="ignore").replace("\x00", "").strip()
-            self.lbl_byte_phys.setText(f"ASCII: \"{ascii_text}\"")
-        elif mode_idx == 2 and raw_int is not None: # CALC
-            scale = self.uds_extract_scale.value()
-            off_val = self.uds_extract_offset_val.value()
-            unit = self.uds_extract_unit.text().strip()
-            phys = round(raw_int * scale + off_val, 4)
-            unit_str = f" {unit}" if unit else ""
-            self.lbl_byte_phys.setText(f"物理值: {phys}{unit_str}")
-        elif mode_idx == 3 and raw_int is not None: # FORMULA
-            expr = self.uds_extract_formula.text().strip() or "val"
-            unit = self.uds_extract_unit.text().strip()
-            try:
-                phys = round(float(eval(expr, {"__builtins__": None}, {"val": raw_int, "round": round, "abs": abs})), 4)
-                unit_str = f" {unit}" if unit else ""
-                self.lbl_byte_phys.setText(f"公式值: {phys}{unit_str}")
-            except Exception:
-                self.lbl_byte_phys.setText("公式计算异常")
-        else:
-            if raw_int is not None:
-                self.lbl_byte_phys.setText(f"原始数值: {raw_int}")
+        from core.uds_parser import parse_uds_rule_string, parse_uds_response_data
+        rule = parse_uds_rule_string(self._get_uds_extract_rule_string())
+        if rule:
+            if rule['mode'] == 'COMBINE':
+                result = parse_uds_response_data(bytes.fromhex(getattr(self, '_uds_response_preview', '') or ''), rule)
             else:
-                self.lbl_byte_phys.setText("换算物理值: --")
+                rule.update(offset=0, length=0)
+                result = parse_uds_response_data(chunk, rule)
+            if result.get('success'):
+                display = ('ASCII: ' + json.dumps(result['value'], ensure_ascii=False)
+                           if rule['mode'] == 'ASCII' else str(result['display']))
+                self.lbl_byte_phys.setText(display)
+            else:
+                self.lbl_byte_phys.setText(str(result.get('error', '--')))
+        else:
+            self.lbl_byte_phys.setText(str(raw_int) if raw_int is not None else '--')
 
     def _on_uds_extract_mode_changed(self, idx):
         # 0: 无提取, 1: ASCII, 2: CALC, 3: FORMULA
@@ -2449,7 +2716,60 @@ class StepDialog(QDialog):
 
         self._refresh_byte_grid_preview()
 
+    def _on_uds_multi_toggled(self, enabled):
+        if enabled and not self.is_loading and not self.uds_segments.rules and self.uds_extract_mode.currentIndex():
+            self._add_uds_segment()
+
+    def _add_uds_segment(self, index=None, replace=False):
+        if index is not None:
+            self.uds_extract_mode.setCurrentIndex(index)
+        if not self.uds_segments.enabled.isChecked():
+            return
+        from core.uds_parser import parse_uds_rule_string
+        rule = parse_uds_rule_string(self._get_uds_single_extract_rule_string())
+        if not rule:
+            QMessageBox.warning(self, '解析分段', '请先选择当前段的解析格式、起始位置和长度。')
+            return
+        rule.pop('var_name', None)
+        try:
+            if replace:
+                self.uds_segments.replace(rule)
+            else:
+                self.uds_segments.append(rule)
+        except ValueError as exc:
+            QMessageBox.warning(self, '解析分段', str(exc))
+
+    def _load_uds_segment_for_edit(self, rule):
+        from core.uds_parser import format_uds_rule_string
+        var_name = self.uds_extract_var.text()
+        self._set_uds_single_extract_from_rule_string(format_uds_rule_string(rule))
+        self.uds_extract_var.setText(var_name)
+
     def _get_uds_extract_rule_string(self):
+        if hasattr(self, 'uds_segments') and self.uds_segments.enabled.isChecked() and self.uds_segments.rules:
+            from core.uds_parser import format_uds_rule_string
+            return format_uds_rule_string(self.uds_segments.config(self.uds_extract_var.text().strip()))
+        return self._get_uds_single_extract_rule_string()
+
+    def _set_uds_extract_from_rule_string(self, rule_str):
+        from core.uds_parser import parse_uds_rule_string, format_uds_rule_string
+        rule = parse_uds_rule_string(rule_str)
+        was_loading = self.is_loading
+        self.is_loading = True
+        try:
+            combined = bool(rule and rule.get('mode') == 'COMBINE')
+            self.uds_segments.enabled.setChecked(combined or not rule_str or rule_str == '--')
+            self.uds_segments.load(rule if combined else {})
+            if combined:
+                self._set_uds_single_extract_from_rule_string(format_uds_rule_string(rule['segments'][0]))
+                self.uds_extract_var.setText(rule.get('var_name', ''))
+            else:
+                self._set_uds_single_extract_from_rule_string(rule_str)
+        finally:
+            self.is_loading = was_loading
+        self._refresh_byte_grid_preview()
+
+    def _get_uds_single_extract_rule_string(self):
         idx = self.uds_extract_mode.currentIndex()
         if idx == 0:
             return ""
@@ -2460,6 +2780,10 @@ class StepDialog(QDialog):
 
         if idx == 1:
             return format_uds_rule_string({"mode": "ASCII", "offset": offset, "length": length, "var_name": var_name})
+        elif idx == 4:
+            return format_uds_rule_string({'mode':'HEX','offset':offset,'length':length,'var_name':var_name})
+        elif idx == 5:
+            return format_uds_rule_string({'mode':'BCD','offset':offset,'length':length,'var_name':var_name})
         elif idx == 2:
             endian = "little" if "小端" in self.uds_extract_endian.currentText() else "big"
             signed = self.uds_extract_signed.isChecked()
@@ -2480,7 +2804,7 @@ class StepDialog(QDialog):
             })
         return ""
 
-    def _set_uds_extract_from_rule_string(self, rule_str):
+    def _set_uds_single_extract_from_rule_string(self, rule_str):
         if not rule_str or rule_str == "--":
             self.uds_extract_mode.setCurrentIndex(0)
             self.uds_extract_var.clear()
@@ -2505,6 +2829,10 @@ class StepDialog(QDialog):
 
         if mode == "ASCII":
             self.uds_extract_mode.setCurrentIndex(1)
+        elif mode == 'HEX':
+            self.uds_extract_mode.setCurrentIndex(4)
+        elif mode == 'BCD':
+            self.uds_extract_mode.setCurrentIndex(5)
         elif mode in ("CALC", "NUMERIC"):
             self.uds_extract_mode.setCurrentIndex(2)
             self.uds_extract_endian.setCurrentIndex(1 if rule.get("endian") == "little" else 0)
@@ -2525,19 +2853,63 @@ class StepDialog(QDialog):
             self.uds_byte_grid.set_selection(off, length, emit_signal=False)
             self._refresh_byte_grid_preview()
 
-    def _append_uds_table_row(self, name, request, expected, rule_str=""):
+    def _uds_rule_text(self, item):
+        return (item.data(Qt.UserRole + 50) or item.text()) if item else ''
+
+    def _set_uds_rule_item(self, item, rule_text):
+        from core.uds_parser import parse_uds_rule_string
+        item.setData(Qt.UserRole + 50, rule_text)
+        parsed = parse_uds_rule_string(rule_text)
+        if parsed and parsed['mode'] == 'COMBINE':
+            summary = ' + '.join(f"{r['mode']}[{r['offset']}:{r['length']}]" for r in parsed['segments'])
+            item.setText(f"组合{len(parsed['segments'])}段：{summary}")
+            item.setToolTip(summary)
+        else:
+            item.setText(rule_text or '--')
+            item.setToolTip(rule_text)
+
+    def _append_uds_table_row(self, name, request, expected, rule_str="", expected_result=""):
         row = self.uds_table.rowCount()
         self.uds_table.insertRow(row)
         rule_display = rule_str.strip() if rule_str.strip() else "--"
-        values = [name, request.upper(), expected.upper(), "校验" if expected else "不校验", rule_display]
+        values = [name, request.upper(), expected.upper(), "校验" if expected else "不校验", rule_display, expected_result]
         for column, value in enumerate(values):
             item = QTableWidgetItem(value)
-            if column in (3, 4):
+            if column == 0:
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setCheckState(Qt.Checked)
+            if column == 3:
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-            if column == 4 and rule_display != "--":
-                item.setToolTip(f"UDS提取规则: {rule_display}")
+            if column == 4:
+                self._set_uds_rule_item(item, rule_display)
             self.uds_table.setItem(row, column, item)
+        output = QTableWidgetItem()
+        output.setFlags((output.flags() | Qt.ItemIsUserCheckable) & ~Qt.ItemIsEditable)
+        output.setCheckState(Qt.Unchecked)
+        if request.strip() == '@SECURITY':
+            output.setFlags(output.flags() & ~Qt.ItemIsEnabled)
+        output.setToolTip('勾选此行作为本工步唯一最终输出；不勾选时兼容原有汇总方式。')
+        self.uds_table.setItem(row, 6, output)
+        self._set_uds_row_options(row, {})
         self.uds_table.selectRow(row)
+
+    def _set_uds_row_options(self, row, options):
+        options={key:options.get(key,default) for key,default in (('address','default'),('suppress',False),('check',True),('response_sample',''))}
+        self.uds_table.item(row,0).setData(Qt.UserRole,options)
+        self.uds_table.item(row,3).setText('校验' if options['check'] and self.uds_table.item(row,2).text().strip() else '不校验')
+        for col,value in ((7,{'default':'跟随默认','physical':'物理地址','functional':'功能地址'}[options['address']]),
+                          (8,'是' if options['suppress'] else '否'),(9,'是' if options['check'] else '否')):
+            item=QTableWidgetItem(value);item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+            self.uds_table.setItem(row,col,item)
+
+    def _uds_row_metadata(self):
+        rows=[]
+        for row in range(self.uds_table.rowCount()):
+            if self.uds_table.item(row,1).text().strip():
+                rows.append(dict(self.uds_table.item(row,0).data(Qt.UserRole) or {},
+                    expected=self.uds_table.item(row,5).text(),output=self.uds_table.item(row,6).checkState()==Qt.Checked,
+                    enabled=self.uds_table.item(row,0).checkState()==Qt.Checked,name=self.uds_table.item(row,0).text()))
+        return rows
 
     def on_uds_service_changed(self, service):
         code = service.split(" ", 1)[0]
@@ -2575,26 +2947,112 @@ class StepDialog(QDialog):
             echoed[0] &= 0x7F
         return " ".join(f"{value:02X}" for value in positive + echoed)
 
+    @staticmethod
+    def _uds_is_read_request(request_text):
+        try:
+            return int(request_text.strip().split()[0], 16) in (0x19, 0x22, 0x23, 0x24)
+        except (ValueError, IndexError):
+            return False
+
     def on_uds_request_changed(self, request_text):
+        self._uds_response_preview = ''
+        if hasattr(self,'uds_workbench'):
+            self.uds_workbench.response_sample.clear()
+        if hasattr(self, 'uds_result_expected'):
+            self.uds_result_expected.clear()
+        suppress=getattr(getattr(self,'uds_workbench',None),'suppress',None)
+        if suppress is not None and suppress.isChecked():
+            self.uds_expected.clear()
+            return
         if not hasattr(self, "uds_auto_response") or not self.uds_auto_response.isChecked():
             return
-        self.uds_expected.setText(self._uds_positive_response_prefix(request_text))
+        self.uds_expected.setText('' if self._uds_is_read_request(request_text) else self._uds_positive_response_prefix(request_text))
 
     def add_uds_row(self):
+        if self._uds_edit_item is not None:
+            return self.save_uds_edited_row()
         request = self.uds_request.text().strip()
         expected = self.uds_expected.text().strip()
         if not request:
             return
         rule_str = self._get_uds_extract_rule_string()
-        self._append_uds_table_row(self.uds_service.currentText(), request, expected, rule_str)
+        expected_result = self.uds_result_expected.text()
+        if expected_result and not rule_str:
+            QMessageBox.warning(self, '期望结果', '请先选择ASCII、数值计算或公式模式，或清空期望结果。')
+            return
+        case=getattr(self,'_uds_case_name',None)
+        name=case[1] if case and case[0]==request else self.uds_service.currentText()
+        self._append_uds_table_row(name, request, expected, rule_str, expected_result)
+        self._set_uds_row_options(self.uds_table.rowCount()-1, self.uds_workbench.row_options())
         self.uds_request.clear()
         self.uds_expected.clear()
 
-    def load_uds_row(self, row, _column=0):
+    def _uds_edit_row(self):
+        from shiboken6 import isValid
+        item = self._uds_edit_item
+        return item.row() if item is not None and isValid(item) and item.tableWidget() is self.uds_table else -1
+
+    def cancel_uds_edit(self):
+        self._uds_edit_item = None
+        self.uds_edit_actions.hide()
+        self.uds_request.clear()
+        self.uds_expected.clear()
+        self.uds_result_expected.clear()
+        if hasattr(self,'uds_workbench'):self.uds_workbench.load_options({})
+        self._update_uds_navigation()
+
+    def save_uds_edited_row(self, *, show_list=True):
+        row = self._uds_edit_row()
         if row < 0:
+            QMessageBox.warning(self, '无法保存', '原行已删除，请重新选择需要编辑的行。')
+            self.cancel_uds_edit()
+            return False
+        request = self.uds_request.text().strip().upper()
+        expected = self.uds_expected.text().strip().upper()
+        rule = self._get_uds_extract_rule_string()
+        result = self.uds_result_expected.text()
+        if not request or request == '@SECURITY' or (result and not rule):
+            QMessageBox.warning(self, '参数不完整', '请填写请求PDU；期望结果需配置提取规则。DLL解锁请在安全解锁页配置。')
+            return False
+        name = self.uds_service.currentText()
+        if name == '自定义':
+            name = self.uds_table.item(row, 0).text()
+        for column, value in enumerate([name, request, expected, '校验' if expected else '不校验', rule or '--', result]):
+            if column == 4:
+                self._set_uds_rule_item(self.uds_table.item(row, column), value)
+            else:
+                self.uds_table.item(row, column).setText(value)
+        self._set_uds_row_options(row,self.uds_workbench.row_options())
+        self.cancel_uds_edit()
+        self.uds_table.selectRow(row)
+        if show_list:
+            self.uds_tabs.setCurrentIndex(2)
+        return True
+
+    def _on_uds_row_clicked(self, row, column):
+        if column in (0,6) or QApplication.keyboardModifiers() & (Qt.ControlModifier | Qt.ShiftModifier):
             return
+        self.load_uds_row(row, column)
+
+    def load_uds_row(self, row, _column=0):
+        if row < 0 or row >= self.uds_table.rowCount():
+            return
+        if self._uds_edit_item is not None:
+            if self._uds_edit_row() == row:
+                self.uds_tabs.setCurrentIndex(2)
+                return
+            if not self.save_uds_edited_row(show_list=False):
+                return
         name_item = self.uds_table.item(row, 0)
         request_item = self.uds_table.item(row, 1)
+        if request_item and request_item.text().strip() == '@SECURITY':
+            self.uds_tabs.setCurrentIndex(1)
+            return
+        if request_item and request_item.text().strip().startswith('@DELAY '):
+            value,ok=QInputDialog.getInt(self,'修改延时','延时（ms）',int(request_item.text().split()[1]),0,3600000)
+            if ok:
+                request_item.setText(f'@DELAY {value}');name_item.setText(f'延时 {value}ms')
+            return
         expected_item = self.uds_table.item(row, 2)
         rule_item = self.uds_table.item(row, 4)
         if name_item:
@@ -2602,55 +3060,78 @@ class StepDialog(QDialog):
             self.uds_service.setCurrentIndex(index if index >= 0 else self.uds_service.count() - 1)
         self.uds_request.setText(request_item.text() if request_item else "")
         self.uds_expected.setText(expected_item.text() if expected_item else "")
-        rule_str = rule_item.text() if rule_item else ""
+        rule_str = self._uds_rule_text(rule_item)
         self._set_uds_extract_from_rule_string(rule_str)
-
-    def update_uds_row(self):
-        row = self.uds_table.currentRow()
-        if row < 0:
-            self.add_uds_row()
-            return
-        request = self.uds_request.text().strip().upper()
-        expected = self.uds_expected.text().strip().upper()
-        if not request:
-            return
-        rule_str = self._get_uds_extract_rule_string()
-        rule_display = rule_str.strip() if rule_str.strip() else "--"
-        values = [self.uds_service.currentText(), request, expected, "校验" if expected else "不校验", rule_display]
-        for column, value in enumerate(values):
-            item = QTableWidgetItem(value)
-            if column in (3, 4):
-                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-            if column == 4 and rule_display != "--":
-                item.setToolTip(f"UDS提取规则: {rule_display}")
-            self.uds_table.setItem(row, column, item)
+        item = self.uds_table.item(row, 5)
+        self.uds_result_expected.setText(item.text() if item else '')
+        self.uds_workbench.load_options(name_item.data(Qt.UserRole) or {})
+        self._uds_edit_item = name_item
+        self.uds_edit_actions.show()
         self.uds_table.selectRow(row)
+        self.uds_tabs.setCurrentIndex(2)
+        self._update_uds_navigation()
+
+    def _on_uds_table_item_changed(self, item):
+        if item.column() == 6 and item.checkState() == Qt.Checked:
+            self.uds_table.blockSignals(True)
+            try:
+                for row in range(self.uds_table.rowCount()):
+                    other = self.uds_table.item(row, 6)
+                    if row != item.row() and other:
+                        other.setCheckState(Qt.Unchecked)
+            finally:
+                self.uds_table.blockSignals(False)
+        if item.column() == 2:
+            status = self.uds_table.item(item.row(), 3)
+            if status is not None:
+                status.setText("校验" if item.text().strip() else "不校验")
+        elif item.column() == 4:
+            item.setToolTip(f"UDS提取规则: {item.text()}" if item.text().strip() != "--" else "")
 
     def delete_uds_row(self):
-        row = self.uds_table.currentRow()
-        if row >= 0:
+        rows = sorted({index.row() for index in self.uds_table.selectionModel().selectedRows()}, reverse=True)
+        for row in rows:
             self.uds_table.removeRow(row)
+        if self._uds_edit_item is not None and self._uds_edit_row() < 0:
+            self.cancel_uds_edit()
+        self._update_uds_navigation()
+        if rows and self.uds_table.rowCount():
+            self.uds_table.selectRow(min(min(rows), self.uds_table.rowCount()-1))
+
+    def _uds_context_menu(self, position):
+        from PySide6.QtWidgets import QMenu
+        index = self.uds_table.indexAt(position)
+        if index.isValid() and not self.uds_table.selectionModel().isRowSelected(index.row()):
+            self.uds_table.selectRow(index.row())
+        menu = QMenu(self.uds_table)
+        edit = menu.addAction('编辑选中行', lambda: self.load_uds_row(self.uds_table.currentRow()))
+        edit.setEnabled(len(self.uds_table.selectionModel().selectedRows()) == 1)
+        delete = menu.addAction('删除选中行', self.delete_uds_row)
+        delete.setEnabled(bool(self.uds_table.selectionModel().selectedRows()))
+        clear = menu.addAction('清空列表', self.clear_uds_rows)
+        clear.setEnabled(self.uds_table.rowCount() > 0)
+        menu.exec(self.uds_table.viewport().mapToGlobal(position))
 
     def clear_uds_rows(self):
+        self.cancel_uds_edit()
         self.uds_table.setRowCount(0)
+        self._uds_load_error = ''
 
     def move_uds_row(self, offset):
         row = self.uds_table.currentRow()
         target = row + offset
         if row < 0 or target < 0 or target >= self.uds_table.rowCount():
             return
-        values = [self.uds_table.item(row, column).text() if self.uds_table.item(row, column) else ""
-                  for column in range(self.uds_table.columnCount())]
+        items = [self.uds_table.takeItem(row, column) for column in range(self.uds_table.columnCount())]
+        self.uds_table.blockSignals(True)
         self.uds_table.removeRow(row)
         self.uds_table.insertRow(target)
-        for column, value in enumerate(values):
-            item = QTableWidgetItem(value)
-            if column in (3, 4):
-                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-            if column == 4 and values[4] != "--":
-                item.setToolTip(f"UDS提取规则: {values[4]}")
-            self.uds_table.setItem(target, column, item)
+        for column, item in enumerate(items):
+            if item is not None:
+                self.uds_table.setItem(target, column, item)
+        self.uds_table.blockSignals(False)
         self.uds_table.selectRow(target)
+        self._update_uds_navigation()
 
     def _uds_script(self):
         lines = []
@@ -2660,7 +3141,7 @@ class StepDialog(QDialog):
             rule_item = self.uds_table.item(row, 4)
             request = request_item.text().strip() if request_item else ""
             expected = expected_item.text().strip() if expected_item else ""
-            rule_str = rule_item.text().strip() if rule_item else ""
+            rule_str = self._uds_rule_text(rule_item).strip()
             if request:
                 line = f"{request} => {expected}" if expected else request
                 if rule_str and rule_str != "--":
@@ -2669,14 +3150,40 @@ class StepDialog(QDialog):
         return "\n".join(lines)
 
     def get_data(self):
+        from core.read_until import attach
         device = self.device_combo.currentText()
         action = self.action_combo.currentText()
+        if device in ('写入变量','读取变量'):
+            return dict(device=device,action=action,params=self.variable_step_form.params(),type='读取变量',
+                is_judgment=self.cb_judgment.isChecked(),fail_strategy=self.fail_strategy_combo.currentText(),
+                name=device+'：'+self.variable_step_form.key.currentText())
+        if action in ('启动周期报文列表','停止周期报文列表'):
+            c=self.can_periodic_form.config()
+            return dict(device=device,action=action,
+                params=self.can_periodic_form.params()+f' / PCH:{self.can_physical_channel.currentData() or 0}',
+                type='CAN交互',is_judgment=self.cb_judgment.isChecked(),fail_strategy=self.fail_strategy_combo.currentText(),
+                name=action+'：'+c['name'])
+        if device == 'UDS 2E 三字段写入':
+            return dict(device=device,action=action,
+                params=self.uds_field_write_form.params()+f' / PCH:{self.can_physical_channel.currentData() or 0}',
+                type='CAN交互',is_judgment=self.cb_judgment.isChecked(),
+                fail_strategy=self.fail_strategy_combo.currentText(),name='UDS 2E 三字段写入')
+        if 'CANDBC' in device:
+            from core.dbc_signals import encode_step
+            config=self.dbc_form.config()
+            read_wait=self.read_until.config()
+            if read_wait and config['output']=='choice':raise ValueError('枚举文字输出不能等待数值范围，请取消范围等待或改为物理数值')
+            params=attach(encode_step(config),read_wait)
+            params+=f' / PCH:{self.can_physical_channel.currentData() or 0}'
+            return dict(device=device,action=action,params=params,type='CANDBC交互',
+                        is_judgment=self.cb_judgment.isChecked(),fail_strategy=self.fail_strategy_combo.currentText(),
+                        name=f'CANDBC {config["message"]}.{config["signal"]}')
         key=device_key(device);spec=action_spec(key,action)
         if spec:
             values=self.device_step_form.values()
             summary='，'.join(f'{field.label}={values[field.key]}' for field in spec.fields if field.key!='variable')
             return {'device':device,'action':action,
-                    'params':encode_device_step(key,spec.key,values),
+                    'params':attach(encode_device_step(key,spec.key,values), self.read_until.config() if spec.read else None),
                     'type':'读取仪表' if spec.read else '设置仪表',
                     'is_judgment':self.cb_judgment.isChecked(),
                     'fail_strategy':self.fail_strategy_combo.currentText(),
@@ -2688,9 +3195,6 @@ class StepDialog(QDialog):
         
         if "MES" in device:
             step_type = "MES过站校验"
-        elif "同步屏障" in device:
-            step_type = "同步屏障"
-            params.append("Barrier")
         elif "瑞萨" in device or "rfp-cli" in device:
             if "烧录" in action or "执行烧录工程" in action:
                 step_type = "设置仪表"
@@ -2745,25 +3249,33 @@ class StepDialog(QDialog):
                 params.append(f"UNIT:{self.read_unit.currentText()}")
         elif idx == 4: # Easy320 / Relay
             step_type = "继电器控制"
-            selected = [str(i+1) for i, cb in enumerate(self.easy320_checks) if cb.isChecked()]
-            params.append(",".join(selected))
-        elif idx == 8: # Aging Board Relay
-            step_type = "继电器控制"
-            selected = [str(i+1) for i, cb in enumerate(self.aging_relay_checks) if cb.isChecked()]
+            selected = [str(cb.property('coil_index')+1) for cb in self.easy320_checks if cb.isChecked()]
             params.append(",".join(selected))
         elif idx == 1: # CAN
+            from core.can_frame_config import can_id,response_matcher
+            frame_id=can_id(self.c_id.text())
+            if "发送" not in action:
+                rx=frame_id if action=='接收指定帧ID' else can_id(self.c_wait_id.text())
+                frame_format=('auto','standard','extended')[self.c_rx_format.currentIndex()]
+                prefix=self.c_rx_prefix.text().strip()
+                response_matcher(rx,frame_format,prefix)
+                params.append(f'RX_FORMAT:{frame_format}')
+                if prefix:params.append(f'RX_PREFIX:{bytes.fromhex(prefix).hex(" ").upper()}')
+                parser = self.can_parser.encoded()
+                if parser:
+                    params.append(f"PARSE:{parser}")
             if action == "接收指定帧ID":
                 step_type = "CAN接收"
-                params.append(f"ID:{self.c_id.text().strip()}")
+                params.append(f"ID:0x{frame_id:X}")
                 params.append(f"TYPE:{self.c_type.currentIndex()}")
                 params.append(f"CH:{self.c_channel.value()}")
                 params.append(f"TIMEOUT:{self.c_timeout.value()}")
             else:
                 step_type = "CAN发送" if "发送" in action else "CAN交互"
-                params.append(f"ID:{self.c_id.text().strip()}")
+                params.append(f"ID:0x{frame_id:X}")
                 params.append(f"DATA:{self.c_data.text().strip()}")
                 if "发送" not in action:
-                    params.append(f"WAIT_ID:{self.c_wait_id.text().strip()}")
+                    params.append(f"WAIT_ID:0x{rx:X}")
                     params.append(f"TIMEOUT:{self.c_timeout.value()}")
                 params.append(f"TYPE:{self.c_type.currentIndex()}")
                 params.append(f"DLC:{self.c_dlc.value()}")
@@ -2793,20 +3305,11 @@ class StepDialog(QDialog):
                     params.append(f"PARAM4:{self.eol_param4.value()}")
                 if "0x10" in eol_action:
                     if hasattr(self, "eol_diff_ambient") and self.eol_diff_ambient.isChecked():
-                        params.append(f"DIFF_AMBIENT:1")
-                    if hasattr(self, "eol_temp_convert") and self.eol_temp_convert.isChecked():
-                        params.append(f"CONVERT_TEMP:1")
+                        params.append("DIFF_AMBIENT:1")
                 if "0x07 CSC批量读取" in eol_action and hasattr(self, "eol_fix_adjacent"):
                     args_kv = self._split_params(args_val, is_args_level=True)
-                    if self.eol_fix_adjacent.isChecked():
-                        args_kv["FIX_ADJACENT"] = "1"
-                    else:
-                        args_kv.pop("FIX_ADJACENT", None)
-                    if hasattr(self, "eol_compensate_random"):
-                        if self.eol_compensate_random.isChecked():
-                            args_kv["COMPENSATE"] = "1"
-                        else:
-                            args_kv.pop("COMPENSATE", None)
+                    args_kv.pop("FIX_ADJACENT", None)
+                    args_kv.pop("COMPENSATE", None)
                     args_val = ",".join(f"{k}:{v}" for k, v in args_kv.items())
                 if args_val: params.append(f"ARGS:{args_val}")
                 
@@ -2869,6 +3372,8 @@ class StepDialog(QDialog):
             if self.cb_e2_verify_diff.isChecked():
                 params.append("VERIFY_DIFF:1")
         elif idx == 13: # UDS 顺序交互列表
+            if self._uds_load_error:
+                raise ValueError('UDS配置未能完整载入：' + self._uds_load_error + '；请检查原配方或清空列表重建。')
             step_type = "CAN交互"
             uds_text = self._uds_script()
             encoded = base64.urlsafe_b64encode(uds_text.encode("utf-8")).decode("ascii")
@@ -2879,6 +3384,21 @@ class StepDialog(QDialog):
             params.append(f"CYCLES:{self.uds_cycles.value()}")
             params.append(f"INTERVAL:{self.uds_interval.value()}")
             params.append(f"LIST64:{encoded}")
+            from core.uds_result_config import encode as encode_results, decode as validate_results
+            metadata = self._uds_row_metadata()
+            result_config = encode_results(metadata)
+            validate_results(result_config, uds_text.splitlines())
+            params.append(f'UDSMETA64:{result_config}')
+            from core.uds_sequence import encode_settings,validate_sequence
+            sequence_settings=self.uds_workbench.config()
+            validate_sequence(uds_text.splitlines(),metadata,sequence_settings)
+            params.append('UDSCFG64:' + encode_settings(sequence_settings))
+            security = self.uds_security.config()
+            if security:
+                from core.seedkey import encode
+                params.append('SEC64:' + encode(security))
+            elif any(row=='@SECURITY' and config.get('enabled',True) for row,config in zip(uds_text.splitlines(),metadata)):
+                raise ValueError('DLL解锁行需要配置安全访问DLL')
         elif idx == 12: # APP 刷写
             if "查找" in action:
                 step_type = "APP刷写配置"
@@ -2891,6 +3411,9 @@ class StepDialog(QDialog):
                 step_type = "APP刷写"
                 params.append(f"HOST:{self.app_flash_program.text().strip()}")
                 params.append(f"TIMEOUT:{self.app_flash_timeout.value()}")
+                tx_id, rx_id = self._app_flash_monitor_ids()
+                params.append(f'FLASH_TX_ID:0x{tx_id:X}')
+                params.append(f'FLASH_RX_ID:0x{rx_id:X}')
         elif idx == 2: # 等待
             step_type = "等待"
             params.append(f"{self.w_time.value()}ms")
@@ -2911,7 +3434,13 @@ class StepDialog(QDialog):
             elif "关闭" in action: params.append("关闭")
             else: params.append("--")
 
+        if idx in (1, 7, 13):
+            # CAN, EOL and UDS use one recipe-bound adapter and an explicit physical channel.
+            physical = self.can_physical_channel.currentData() or 0
+            params.append(f'PCH:{physical}')
         params_str = " / ".join(params) if params else "--"
+        if idx == 3:
+            params_str = attach(params_str, self.read_until.config())
         
         return {
             'device': device,
@@ -2922,6 +3451,25 @@ class StepDialog(QDialog):
             'fail_strategy': self.fail_strategy_combo.currentText(),
             'name': f"{device}-{action} ({params_str})"
         }
+
+    def _add_security_unlock_row(self):
+        try:
+            if self.uds_security.config() is None:
+                raise ValueError('请先勾选并配置安全访问DLL')
+        except (ValueError, OSError) as exc:
+            QMessageBox.warning(self, '安全访问配置错误', str(exc))
+            return
+        self._append_uds_table_row('DLL安全解锁', '@SECURITY', '')
+
+    def _app_flash_monitor_ids(self):
+        try:
+            tx_id = int(self.app_flash_tx_id.text().strip(), 16)
+            rx_id = int(self.app_flash_rx_id.text().strip(), 16)
+        except ValueError as exc:
+            raise ValueError('刷写请求和响应 ID 必须为十六进制，例如 0x7E4。') from exc
+        if not all(0 <= value <= 0x1FFFFFFF for value in (tx_id, rx_id)) or tx_id == rx_id:
+            raise ValueError('刷写 ID 应在 0–0x1FFFFFFF 范围内，且请求和响应 ID 不能相同。')
+        return tx_id, rx_id
 
     def _adjust_opteeq_project_popup_width(self):
         """根据当前全部工程名称的最长像素宽度，自适应扩展下拉弹出框的最小宽度，彻底杜绝文本截断"""

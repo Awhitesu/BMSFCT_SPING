@@ -1,11 +1,10 @@
-import json
 import threading
 import unittest
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock,patch
 from types import SimpleNamespace
-from core.device_steps import ACTIONS,DEVICES,encode,decode,execute,validate
+from core.device_steps import ACTIONS,encode,decode,execute
 from core.measurement_units import MeasurementValue
 from devices.manager import DeviceManager
 
@@ -58,6 +57,7 @@ class DeviceSequenceTests(unittest.TestCase):
 
     def test_generator_selects_channel_and_load(self):
         d=self.manager.dg2052=driver();d.configure.return_value={'频率(Hz)':'1000'}
+        d.output_control.return_value={'输出':'ON'}
         self.assertEqual(self.run_step('dg2052','configure',channel=2,state='ON'),(True,'PASS'))
         self.assertEqual(d.configure.call_args.args[0],2)
         d.output_control.assert_called_once_with(2,True)
@@ -88,6 +88,8 @@ class DeviceSequenceTests(unittest.TestCase):
         for kind in ('insulation','resistor','relay','hv','hsd','dmm'):
             with self.subTest(kind=kind):
                 d=driver();d.setting={'kind':kind}
+                d.set_resistance.side_effect=lambda value,channel=1:value
+                d.set_relay.return_value=[True]
                 self.manager.get_rn_board=Mock(return_value=d)
                 action='resistance' if kind in ('insulation','resistor') else 'on'
                 self.assertEqual(self.run_step(kind,action),(True,'PASS'))
@@ -101,6 +103,7 @@ class DeviceSequenceTests(unittest.TestCase):
 
     def test_insulation_zero_is_off_and_on_requires_resistance(self):
         d=driver();d.setting={'kind':'insulation'};self.manager.get_rn_board=Mock(return_value=d)
+        d.set_resistance_output.return_value={'output':False,'resistance':0}
         self.assertEqual(self.run_step('insulation','off',board=2),(True,'PASS'))
         d.set_resistance_output.assert_called_once_with(False,0)
         with self.assertRaises(ValueError):encode('insulation','on',{'resistance':0})
@@ -156,8 +159,10 @@ class DeviceSequenceTests(unittest.TestCase):
 
     def test_scope_single_capture_cancel_stops(self):
         d=self.manager.tbs2102b=driver()
+        stopped = threading.Event()
+        d.apply.side_effect = lambda commands: stopped.set()
         with self.assertRaises(RuntimeError):
-            execute(self.manager,encode('tbs2102b','single',{}),{},self.logs.append,cancelled=lambda:True)
+            execute(self.manager,encode('tbs2102b','single',{}),{},self.logs.append,cancelled=stopped.is_set)
         d.command.assert_called_once_with('ACQ:STATE OFF')
 
     def test_invalid_schema_rejects_nan_and_bad_channel(self):
@@ -172,7 +177,9 @@ class DeviceSequenceTests(unittest.TestCase):
         one=manager.get_rn_board('resistor6')
         self.assertIs(manager.get_rn_board('resistor6'),one)
         cfg['rn_boards']['resistor6']['ip']='192.168.1.98'
-        two=manager.get_rn_board('resistor6');self.assertIsNot(one,two)
+        two=manager.get_rn_board('resistor6');self.assertIs(one,two)
+        self.assertEqual(one.ip,'192.168.1.98')
+        self.assertFalse(one.is_connected)
         self.assertEqual(two.ip,'192.168.1.98')
         with self.assertRaises(ValueError):manager.get_rn_board('resistor1')
 

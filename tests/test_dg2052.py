@@ -8,7 +8,8 @@ class GeneratorTests(unittest.TestCase):
         driver = DG2052()
         driver.command = Mock()
         driver.query = Mock(return_value='0,"No error"')
-        driver.read_channel = Mock(return_value={'输出': 'OFF'})
+        driver.read_channel = Mock(return_value={'输出': 'OFF', '波形': 'SIN', '幅值单位': 'VPP',
+            '幅值': '1', '偏置(V)': '0', '频率(Hz)': '1000', '负载(Ω)': '9.9E37'})
         driver.configure(2, '正弦波', 1000, 1, 0, 'INF')
         commands = [call.args[0] for call in driver.command.call_args_list]
         self.assertIn(':SOUR2:FREQ 1000', commands)

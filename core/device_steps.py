@@ -159,6 +159,9 @@ for kind,label,count,channels in BOARD_SPECS:
                  Action('state','读取指定继电器状态',(board,channel,VARIABLE),True,
                         '回读控制状态；不是触点实际电气反馈。')]
     actions[0]=Action('connect','连接检测',(board,),help='使用本类板卡调试页保存的板号、IP、端口及Unit ID；不更改输出。')
+    if kind == 'resistor':
+        global_channel = integer('global_channel','全局通道（0使用原板号）',0,0,36)
+        actions = [Action(a.key,a.label,a.fields+(global_channel,) if a.key in ('resistance','read_resistance') else a.fields,a.read,a.help) for a in actions]
     ACTIONS[kind]=tuple(actions)
 
 for device in ('dut_power','hv_source'):
@@ -171,7 +174,8 @@ ACTIONS['simulator']=(Action('connect','连接检测'),
     Action('off','关闭指定通道',(integer('channel','全局通道',1),)),
     Action('all_on','开启整套设备（电压校验）'),Action('all_off','关闭整套设备'),
     Action('range','设置指定通道量程',(integer('channel','全局通道',1),
-        choice('range','量程',[(x,x) for x in ('AUTO','HIGH','LOW')]))),
+        choice('range','量程',[(x,x) for x in ('AUTO','HIGH','LOW')])),
+        help='切换量程会短暂关闭并恢复原先开启的通道。LOW前先将限流设为不超过1 mA；原先关闭的通道保持关闭。'),
     Action('current_limit','设置指定通道限流',(integer('channel','全局通道',1),CURRENT)),
     Action('voltage','读取指定通道电压',(integer('channel','全局通道',1),VARIABLE),True),
     Action('current','读取指定通道电流',(integer('channel','全局通道',1),VARIABLE),True))
@@ -225,7 +229,7 @@ def validate(device,action,values):
 def encode(device,action,values):
     spec,values=validate(device,action,values)
     readable={f.label:values[f.key] for f in spec.fields}
-    return PREFIX+json.dumps({'设备':DEVICES[device][1],'动作':spec.label,'参数':readable},ensure_ascii=False,separators=(',',':'))
+    return PREFIX+json.dumps({'schema_version':2,'device_id':device,'action_id':spec.key,'values':values,'设备':DEVICES[device][1],'动作':spec.label,'参数':readable},ensure_ascii=False,separators=(',',':'))
 
 
 def is_device_step(text):
@@ -240,6 +244,9 @@ def decode(text):
         spec,values=validate(data['device'],data['action'],data['values'])
         return data['device'],spec,values
     data=json.loads(str(text)[len(PREFIX):])
+    if data.get('schema_version') == 2:
+        spec,values=validate(data['device_id'],data['action_id'],data['values'])
+        return data['device_id'],spec,values
     key=device_key(data['设备']);spec=action_spec(key,data['动作'])
     if not spec:raise ValueError('设备或动作不支持')
     readable=data['参数'];labels={f.label:f.key for f in spec.fields}
@@ -255,12 +262,15 @@ def checked(result,driver):
 
 
 def measurement(value,unit):
+    if value is None or isinstance(value,bool):
+        raise ValueError('测量数据缺失或类型无效')
     value=float(value)
     if not math.isfinite(value) or abs(value)>=9e37:raise ValueError('测量超量程或无效')
     return MeasurementValue(value,unit)
 
 
 def execute(manager,text,variables,logger,cancelled=lambda:False):
+    _ensure_active(cancelled)
     device,spec,p=decode(text)
     action=spec.key
     if getattr(manager,'is_virtual',False) is True:
@@ -280,20 +290,29 @@ def execute(manager,text,variables,logger,cancelled=lambda:False):
                     if not reply:raise ConnectionError('电池模拟器身份查询无响应')
             result='PASS'
         elif action in ('all_on','all_off'):
-            checked(manager.broadcast_output(action=='all_on',logger),manager);result='PASS'
+            checked(manager.broadcast_output(action=='all_on',logger,cancelled=cancelled),manager);result='PASS'
         else:
             sim,ch=manager._get_sim_and_ch(p['channel'])
             if not sim:raise ValueError('全局通道不存在或模拟器未启用')
-            if action in ('on','off'):checked(sim.output_control(ch,action=='on',logger),sim);result='PASS'
-            elif action=='range':checked(sim.set_range(ch,p['range'],logger),sim);result='PASS'
-            elif action=='current_limit':checked(sim.set_current_limit(ch,p['current'],logger),sim);result='PASS'
+            if action in ('on','off','range','current_limit'):
+                from core.simulator_control import control_simulator
+                operation={'on':'output','off':'output','range':'range','current_limit':'current'}[action]
+                value=(action=='on') if operation=='output' else p['range'] if operation=='range' else p['current']
+                control_simulator(sim,operation,[ch],value,logger=logger,cancelled=cancelled);result='PASS'
             else:
-                value=(sim.measure_voltage(ch,logger) if action=='voltage' else sim.measure_current(ch,logger))
-                if value<0:raise ValueError('模拟器测量失败')
+                from core.simulator_control import read_simulator
+                value=read_simulator(sim,action,ch,logger,cancelled)
+                if value<0 and (action=='voltage' or not callable(getattr(type(sim),'read_stable',None))):raise ValueError('模拟器测量失败')
                 result=measurement(value,'V' if action=='voltage' else 'mA')
     else:
         if device in {kind for kind,_,_,_ in BOARD_SPECS}:
-            driver=manager.get_rn_board(f"{device}{p['board']}")
+            if device == 'resistor' and p.get('global_channel',0):
+                route = manager.resistor_routes().get(p['global_channel'])
+                if not route: raise ValueError('全局电阻通道未配置或未启用')
+                driver,local_channel = route
+                p = dict(p,channel=local_channel)
+            else:
+                driver=manager.get_rn_board(f"{device}{p['board']}")
         else:
             enable_key={'dut_power':'dut_pwr','hv_source':'hv'}.get(device,device)
             if not manager.is_enabled(enable_key):raise ValueError('设备未启用，请在硬件管理中心启用')
@@ -304,36 +323,68 @@ def execute(manager,text,variables,logger,cancelled=lambda:False):
         # Never acquire their internal Lock around connect/query calls.
         internal=lock if isinstance(lock,type(threading.RLock())) else nullcontext()
         with manager.device_step_lock(device+str(p.get('board',''))),internal:
+            _ensure_active(cancelled)
             if not driver.is_connected:checked(driver.connect(),driver)
+            _ensure_active(cancelled)
             if action=='connect':
                 _check_connection(driver,device,logger);result='PASS'
-            elif device=='it6333b':result=_supply(driver,action,p)
+            elif device=='it6333b':result=_supply(driver,action,p,cancelled)
             elif device=='dmm34461':
                 value,unit=driver.measure(p['function'],p['range'] or 'AUTO')
                 result=measurement(value,unit)
-            elif device=='dg2052':result=_generator(driver,action,p,logger)
+            elif device=='dg2052':result=_generator(driver,action,p,logger,cancelled)
             elif device=='tbs2102b':result=_scope(driver,action,p,logger,variables,cancelled)
             elif device in ('dut_power','hv_source'):
-                checked(driver.output_control(action=='on',logger),driver);result='PASS'
+                from core.instrument_control import control_power
+                control_power(driver, 'output_control', action == 'on', logger=logger, cancelled=cancelled)
+                result='PASS'
             elif device=='easy320':
                 states=driver.read_relays(32)
                 if len(states)<p['channel']:raise ValueError('继电器状态回读不完整')
                 result=measurement(int(states[p['channel']-1]),'')
-            else:result=_board(driver,action,p)
+            else:result=_board(driver,action,p,cancelled)
     if p.get('variable'):variables[p['variable']]=result
     logger(f'{DEVICES[device][1]} / {spec.label} => {result} {getattr(result,"unit","")}')
     return True,result
 
 
-def _supply(driver,action,p):
+def _ensure_active(cancelled):
+    if cancelled():
+        raise RuntimeError('测试已停止，未执行后续设备操作')
+
+
+def _configure_output(driver, configure, output, state, cancelled):
+    try:
+        _ensure_active(cancelled)
+        configure()
+        _ensure_active(cancelled)
+    except Exception as original:
+        # An explicitly requested OFF still runs when configuration fails or
+        # cancellation arrives. An ON must never follow either failure.
+        if state == 'OFF':
+            try:
+                checked(output(False), driver)
+            except Exception as stop_error:
+                raise RuntimeError(f'参数设置失败：{original}；关闭输出也未确认：{stop_error}') from original
+        raise
+    if state != 'KEEP':
+        checked(output(state == 'ON'), driver)
+    return 'PASS'
+
+
+def _supply(driver,action,p,cancelled=lambda:False):
+    from core.instrument_control import control_power
     ch=p['channel']
+    def control(action, value):
+        return control_power(driver, action, value, channel=ch, cancelled=cancelled)
     if action=='configure':
-        checked(driver.set_current(ch,p['current']),driver)
-        checked(driver.set_voltage(ch,p['voltage']),driver)
-        if p['state']!='KEEP':checked(driver.output_control(ch,p['state']=='ON'),driver)
-        return 'PASS'
+        def configure():
+            control('set_current',p['current'])
+            _ensure_active(cancelled)
+            control('set_voltage',p['voltage'])
+        return _configure_output(driver,configure,lambda state:control('output_control',state),p['state'],cancelled)
     if action in ('on','off'):
-        checked(driver.output_control(ch,action=='on'),driver);return 'PASS'
+        control('output_control',action=='on');return 'PASS'
     voltage,current,state=driver.read_channel(ch)
     return measurement({'voltage':voltage,'current':current,'state':int(state)}[action],
                        {'voltage':'V','current':'A','state':''}[action])
@@ -356,15 +407,19 @@ def _check_connection(driver,device,logger):
     logger(f'连接检测实际回读：{reply}')
 
 
-def _generator(driver,action,p,logger):
+def _generator(driver,action,p,logger,cancelled=lambda:False):
+    from core.instrument_control import control_generator
     ch=p['channel']
+    def output(state):
+        return control_generator(driver,'output',ch,state=state,cancelled=cancelled)
     if action=='configure':
-        actual=checked(driver.configure(ch,p['waveform'],p['frequency'],p['amplitude'],p['offset'],p['load']),driver)
-        logger('信号发生器参数回读：'+json.dumps(actual,ensure_ascii=False))
-        if p['state']!='KEEP':checked(driver.output_control(ch,p['state']=='ON'),driver)
-        return 'PASS'
+        def configure():
+            actual=control_generator(driver,'configure',ch,
+                parameters=(p['waveform'],p['frequency'],p['amplitude'],p['offset'],p['load']),cancelled=cancelled)
+            logger('信号发生器参数回读：'+json.dumps(actual,ensure_ascii=False))
+        return _configure_output(driver,configure,output,p['state'],cancelled)
     if action in ('on','off'):
-        checked(driver.output_control(ch,action=='on'),driver);return 'PASS'
+        output(action=='on');return 'PASS'
     commands={'frequency':(f':SOUR{ch}:FREQ?','Hz'),
               'amplitude':(f':SOUR{ch}:VOLT?','Vpp'),
               'offset':(f':SOUR{ch}:VOLT:OFFS?','V'),
@@ -379,16 +434,17 @@ def _generator(driver,action,p,logger):
     return measurement(reply,unit)
 
 
-def _board(driver,action,p):
+def _board(driver,action,p,cancelled=lambda:False):
+    from core.board_control import control_board
     ch=p.get('channel',1)
-    if action=='resistance':driver.set_resistance(p['resistance'],ch);return 'PASS'
+    if action=='resistance':control_board(driver,'resistance',channel=ch,resistance=p['resistance'],cancelled=cancelled);return 'PASS'
     if action=='read_resistance':return measurement(driver.read_resistance(ch),'Ω')
     if driver.setting['kind']=='insulation':
         if action=='state':return measurement(int(driver.read_insulation()['output']),'')
-        driver.set_resistance_output(action=='on',p.get('resistance',0));return 'PASS'
+        control_board(driver,'insulation',state=action=='on',resistance=p.get('resistance',0),cancelled=cancelled);return 'PASS'
     if action=='state':return measurement(int(driver.read_coils()[ch-1]),'')
-    if action in ('all_on','all_off'):driver.all_relays(action=='all_on')
-    else:driver.set_relay(ch,action=='on')
+    if action in ('all_on','all_off'):control_board(driver,'all_relays',state=action=='all_on',cancelled=cancelled)
+    else:control_board(driver,'relay',channel=ch,state=action=='on',cancelled=cancelled)
     return 'PASS'
 
 
@@ -407,7 +463,7 @@ def _scope(driver,action,p,logger,variables,cancelled):
             p['holdoff'],p['polarity'],p['when'],p['width'],p['lower'],p['upper'])
         logger('触发请求/实际回读：'+json.dumps(report,ensure_ascii=False))
         for key,target in report['requested'].items():
-            actual=report['actual'][key]
+            actual=float(measurement(report['actual'][key],'V'))
             variables[f'SCOPE_{source}_{key.upper()}']=actual
             if abs(actual-target)>p['tolerance']+1e-12:
                 raise ValueError(f'触发{key}请求{target:g}V，实际{actual:g}V，超过允许偏差{p["tolerance"]:g}V')
@@ -425,8 +481,12 @@ def _scope(driver,action,p,logger,variables,cancelled):
                 if driver.command('ACQ:STATE?').upper() in ('0','OFF'):return 'PASS'
                 if time.monotonic()>=deadline:raise TimeoutError('等待示波器单次触发超时')
                 time.sleep(.1)
-        except Exception:
-            driver.command('ACQ:STATE OFF');raise
+        except Exception as original:
+            try:
+                driver.command('ACQ:STATE OFF')
+            except Exception as stop_error:
+                raise RuntimeError(f'{original}；停止采集也失败：{stop_error}') from original
+            raise
     if action=='measure':
         driver.apply([f'MEASUREMENT:IMMED:SOURCE1 {source}',f'MEASUREMENT:IMMED:TYPE {p["measurement"]}'])
         return measurement(driver.command('MEASUREMENT:IMMED:VALUE?'),driver.command('MEASUREMENT:IMMED:UNITS?').strip('"'))

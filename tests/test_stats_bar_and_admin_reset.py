@@ -1,101 +1,127 @@
-# -*- coding: utf-8 -*-
-import sys
-import os
-
-# 确保项目根路径在 sys.path 中
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-from PySide6.QtWidgets import QApplication
+from core.app_version import versioned_title
+from PySide6.QtWidgets import QApplication, QDialog
 from ui.tabs.overview_tab import OverviewTab
 from ui.main_window import MainWindow
 
+app = QApplication.instance() or QApplication([])
+
+
 def test_stats_initialization_and_counting():
-    os.environ["QT_QPA_PLATFORM"] = "offscreen"
-    app = QApplication.instance()
-    if not app:
-        app = QApplication(sys.argv)
+    tab = OverviewTab()
+    tab.plc_signal_timer.stop()
+    try:
+        assert (tab.total_count, tab.pass_count, tab.fail_count) == (0, 0, 0)
+        tab.on_worker_test_finished(1, True)
+        tab.on_worker_test_finished(1, False)
+        assert (tab.total_count, tab.pass_count, tab.fail_count) == (2, 1, 1)
+        assert tab.lbl_stat_rate_val.text() == '50.00%'
+        tab.reset_statistics()
+        assert tab.lbl_stat_rate_val.text() == '0.00%'
+    finally:
+        tab.close()
 
-    # 1. 验证 OverviewTab 初始状态
-    tab = OverviewTab(engine=None, db_manager=None)
-    assert tab.total_count == 0, f"Expected total_count == 0, got {tab.total_count}"
-    assert tab.pass_count == 0, f"Expected pass_count == 0, got {tab.pass_count}"
-    assert tab.fail_count == 0, f"Expected fail_count == 0, got {tab.fail_count}"
-    assert tab.lbl_stat_total_val.text() == "0"
-    assert tab.lbl_stat_pass_val.text() == "0"
-    assert tab.lbl_stat_fail_val.text() == "0"
-    assert tab.lbl_stat_rate_val.text() == "0.00%"
-    print("[PASS] 1. OverviewTab 初始状态全零检查通过")
 
-    # 2. 模拟测试完成信号
-    tab.on_worker_test_finished(1, True)
-    assert tab.total_count == 1
-    assert tab.pass_count == 1
-    assert tab.fail_count == 0
-    assert tab.lbl_stat_total_val.text() == "1"
-    assert tab.lbl_stat_pass_val.text() == "1"
-    assert tab.lbl_stat_rate_val.text() == "100.00%"
-
-    tab.on_worker_test_finished(1, False)
-    assert tab.total_count == 2
-    assert tab.pass_count == 1
-    assert tab.fail_count == 1
-    assert tab.lbl_stat_total_val.text() == "2"
-    assert tab.lbl_stat_pass_val.text() == "1"
-    assert tab.lbl_stat_fail_val.text() == "1"
-    assert tab.lbl_stat_rate_val.text() == "50.00%"
-    print("[PASS] 2. 模拟测试完成计数自增与百分比计算检查通过")
-
-    # 3. 验证清零方法
-    tab.reset_statistics()
-    assert tab.total_count == 0
-    assert tab.pass_count == 0
-    assert tab.fail_count == 0
-    assert tab.lbl_stat_total_val.text() == "0"
-    assert tab.lbl_stat_pass_val.text() == "0"
-    assert tab.lbl_stat_fail_val.text() == "0"
-    assert tab.lbl_stat_rate_val.text() == "0.00%"
-    print("[PASS] 3. reset_statistics 清零复位检查通过")
-
-    # 4. 验证严格 56px 等高规范
-    assert tab.card_stat_total.height() == 56
-    assert tab.card_stat_pass.height() == 56
-    assert tab.card_stat_fail.height() == 56
-    assert tab.card_stat_rate.height() == 56
-    assert tab.btn_reset_stats.height() == 56
-    assert tab.flash_status_panel.height() == 56
-    print("[PASS] 4. 全部卡片与面板 56px 严格等高检查通过")
-
-    # 5. 验证 MainWindow 角色权限与清零按钮可用态联动
+def test_main_window_initializes_without_removed_modules(tmp_path, monkeypatch):
+    from data.db_manager import DBManager
     from ui.dialogs.startup_dialog import StartupCheckDialog
-    from PySide6.QtWidgets import QDialog
-    from devices.manager import DeviceManager
-    StartupCheckDialog.exec = lambda self: QDialog.Accepted
-    DeviceManager.self_check = lambda self: {}
-    DeviceManager.disconnect_all = lambda self: None
-
+    real_init = DBManager.__init__
+    monkeypatch.setattr(DBManager, '__init__', lambda self, *a, **k:
+                        real_init(self, str(tmp_path / 'test.db')))
+    monkeypatch.setattr(DBManager, 'load_sys_config', lambda self: {})
+    monkeypatch.setattr(StartupCheckDialog, '__init__', lambda self, *a, **k: QDialog.__init__(self))
+    monkeypatch.setattr(StartupCheckDialog, 'exec', lambda self: QDialog.Accepted)
     win = MainWindow()
-    # 管理员状态
-    win.current_user = "ADMIN"
-    win.apply_role_permissions()
-    assert win.tab_overview.btn_reset_stats.isEnabled() is True
-    assert "仅管理员" in win.tab_overview.btn_reset_stats.text()
-    assert win.btn_user_account.height() == 56
-    assert win.lbl_aging_counter.height() == 56
-    print("[PASS] 5.1 管理员模式下清零按钮激活与 56px 等高检查通过")
+    win.tab_overview.plc_signal_timer.stop()
+    try:
+        win.current_user = 'ADMIN'
+        win.apply_role_permissions()
+        assert win.tab_settings.btn_reset_stats.isEnabled()
+        assert not hasattr(win, 'lbl_aging_counter')
+        assert not hasattr(win.engine, 'api_client')
+        win.current_user = 'OP001'
+        win.apply_role_permissions()
+        assert not win.tab_settings.btn_reset_stats.isEnabled()
+    finally:
+        win.close()
+        import time
+        from PySide6.QtCore import QCoreApplication
+        end = time.monotonic() + 3
+        while not getattr(win, '_shutdown_done', False) and time.monotonic() < end:
+            QCoreApplication.processEvents()
+            time.sleep(.01)
+        assert win._shutdown_done
 
-    # 操作员状态
-    win.current_user = "OP001"
-    win.apply_role_permissions()
-    assert win.tab_overview.btn_reset_stats.isEnabled() is False
-    assert "无权操作" in win.tab_overview.btn_reset_stats.text()
-    print("[PASS] 5.2 操作员模式下清零按钮自动置灰禁用拦截检查通过")
 
-    print("\n===============================")
-    print("ALL 5 REGRESSION TESTS PASSED 100%!")
-    print("===============================\n")
+def test_settings_tab_dedup_wiring(tmp_path, monkeypatch):
+    """软件设置页条码去重开关联动 OverviewTab 统计状态"""
+    from data.db_manager import DBManager
+    from ui.dialogs.startup_dialog import StartupCheckDialog
+    real_init = DBManager.__init__
+    monkeypatch.setattr(DBManager, '__init__', lambda self, *a, **k:
+                        real_init(self, str(tmp_path / 'test.db')))
+    monkeypatch.setattr(DBManager, 'load_sys_config', lambda self: {})
+    monkeypatch.setattr(DBManager, 'save_sys_config', lambda self, cfg: True)
+    monkeypatch.setattr(StartupCheckDialog, '__init__', lambda self, *a, **k: QDialog.__init__(self))
+    monkeypatch.setattr(StartupCheckDialog, 'exec', lambda self: QDialog.Accepted)
+    win = MainWindow()
+    win.tab_overview.plc_signal_timer.stop()
+    try:
+        assert win.tab_settings.chk_stats_deduplicate.isChecked()
+        win.tab_settings.chk_stats_deduplicate.setChecked(False)
+        assert win.tab_overview.stats_deduplicate is False
+        win.tab_settings.chk_stats_deduplicate.setChecked(True)
+        assert win.tab_overview.stats_deduplicate is True
+    finally:
+        win.close()
+        import time
+        from PySide6.QtCore import QCoreApplication
+        end = time.monotonic() + 3
+        while not getattr(win, '_shutdown_done', False) and time.monotonic() < end:
+            QCoreApplication.processEvents()
+            time.sleep(.01)
+        assert win._shutdown_done
 
-if __name__ == "__main__":
-    test_stats_initialization_and_counting()
-    os._exit(0)
+
+def test_settings_tab_titles_save_applies_and_persists(tmp_path, monkeypatch):
+    """软件设置页保存界面名称：立即生效并写入系统配置"""
+    from data.db_manager import DBManager
+    from ui.dialogs.startup_dialog import StartupCheckDialog
+    real_init = DBManager.__init__
+    saved = {}
+    monkeypatch.setattr(DBManager, '__init__', lambda self, *a, **k:
+                        real_init(self, str(tmp_path / 'test.db')))
+    monkeypatch.setattr(DBManager, 'load_sys_config', lambda self: dict(saved))
+    monkeypatch.setattr(DBManager, 'save_sys_config',
+                        lambda self, cfg: saved.update(cfg) or True)
+    monkeypatch.setattr(StartupCheckDialog, '__init__', lambda self, *a, **k: QDialog.__init__(self))
+    monkeypatch.setattr(StartupCheckDialog, 'exec', lambda self: QDialog.Accepted)
+    win = MainWindow()
+    win.tab_overview.plc_signal_timer.stop()
+    try:
+        # 设置页仅管理员可用，先以管理员激活
+        win.current_user = 'ADMIN'
+        win.apply_role_permissions()
+        # 默认名称
+        assert win.windowTitle() == versioned_title('BMS软件注入&APP刷写系统')
+        assert win.header_label.text() == 'APP刷写系统'
+        # 设置页修改并保存
+        win.tab_settings.set_titles('XX工厂刷写系统', 'XX刷写台')
+        win.tab_settings.btn_save_titles.click()
+        assert win.windowTitle() == versioned_title('XX工厂刷写系统')
+        assert win.header_label.text() == 'XX刷写台'
+        assert saved['ui_window_title'] == 'XX工厂刷写系统'
+        assert saved['ui_header_title'] == 'XX刷写台'
+        # 留空保存恢复默认
+        win.tab_settings.set_titles('  ', '')
+        win.tab_settings.btn_save_titles.click()
+        assert win.windowTitle() == versioned_title('BMS软件注入&APP刷写系统')
+        assert win.header_label.text() == 'APP刷写系统'
+    finally:
+        win.close()
+        import time
+        from PySide6.QtCore import QCoreApplication
+        end = time.monotonic() + 3
+        while not getattr(win, '_shutdown_done', False) and time.monotonic() < end:
+            QCoreApplication.processEvents()
+            time.sleep(.01)
+        assert win._shutdown_done

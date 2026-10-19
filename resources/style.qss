@@ -39,8 +39,9 @@ QTabBar::tab:selected {
 }
 QTabBar::tab:hover:!selected { background-color: #1e293b; color: #dbeafe; }
 QTabBar::tab:disabled { background-color: #0f172a; color: #475569; }
+QTabBar::scroller { width: 64px; }
 QTabBar QToolButton {
-    min-width: 28px; min-height: 28px; background-color: #151e2e;
+    background-color: #151e2e;
     color: #dbeafe; border: 1px solid #334155; border-radius: 4px;
 }
 
@@ -54,6 +55,7 @@ QPushButton:focus { border-color: #60a5fa; }
 QPushButton:pressed { background-color: #1e3a5f; }
 QPushButton:checked { background-color: #2563eb; border-color: #60a5fa; }
 QPushButton:disabled { background-color: #172033; color: #64748b; border-color: #263449; }
+QPushButton[multilineTile="true"] { min-height: 56px; padding: 6px 8px; }
 QPushButton#btnStop, QPushButton[buttonRole="danger"] {
     background-color: #b91c1c; border-color: #ef4444; color: white;
 }
@@ -96,9 +98,29 @@ QComboBox QAbstractItemView::item:hover {
 QComboBox QAbstractItemView::item:selected {
     background-color: #2563eb; background: #2563eb; color: #ffffff;
 }
-QSpinBox::up-button, QDoubleSpinBox::up-button,
-QSpinBox::down-button, QDoubleSpinBox::down-button {
-    width: 22px; background-color: #1e293b; border-left: 1px solid #334155;
+/* Explicit glyphs: styling the native buttons otherwise hides platform arrows. */
+QAbstractSpinBox { padding-right: 34px; }
+QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {
+    subcontrol-origin: border; width: 28px;
+    background-color: #243247; border-left: 1px solid #475569;
+}
+QAbstractSpinBox::up-button {
+    subcontrol-position: top right; border-bottom: 1px solid #475569;
+    border-top-right-radius: 5px;
+}
+QAbstractSpinBox::down-button {
+    subcontrol-position: bottom right; border-bottom-right-radius: 5px;
+}
+QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover { background-color: #365277; }
+QAbstractSpinBox::up-button:pressed, QAbstractSpinBox::down-button:pressed { background-color: #2563eb; }
+QAbstractSpinBox::up-button:disabled, QAbstractSpinBox::down-button:disabled { background-color: #172033; }
+QAbstractSpinBox::up-arrow { image: url(resources/spin_plus.svg); width: 14px; height: 14px; }
+QAbstractSpinBox::down-arrow { image: url(resources/spin_minus.svg); width: 14px; height: 14px; }
+QAbstractSpinBox::up-arrow:disabled, QAbstractSpinBox::up-arrow:off {
+    image: url(resources/spin_plus_disabled.svg);
+}
+QAbstractSpinBox::down-arrow:disabled, QAbstractSpinBox::down-arrow:off {
+    image: url(resources/spin_minus_disabled.svg);
 }
 
 QTreeView, QTreeWidget, QTableView, QTableWidget, QListView, QListWidget {

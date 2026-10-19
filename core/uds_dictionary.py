@@ -353,7 +353,7 @@ class UDSDictionaryManager:
                 request = norm_row.get("request") or norm_row.get("请求", f"22 {did}".strip())
                 expected = norm_row.get("expected") or norm_row.get("期望响应", f"62 {did}".strip())
                 mode = (norm_row.get("mode") or norm_row.get("模式", "CALC")).upper()
-                if mode not in ("ASCII", "CALC", "FORMULA"):
+                if mode not in ("ASCII", "HEX", "CALC", "FORMULA"):
                     mode = "CALC"
 
                 try:

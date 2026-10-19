@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                                 QLineEdit, QPushButton, QComboBox)
-from PySide6.QtCore import Qt
+
 
 class TestItemDialog(QDialog):
     """
@@ -35,7 +35,7 @@ class TestItemDialog(QDialog):
         # 1. 增加标准类型判定
         layout.addWidget(QLabel("标准类型:"))
         self.type_combo = QComboBox()
-        self.type_combo.addItems(["数值", "字符串", "不判断"])
+        self.type_combo.addItems(["数值", "字符串", "变量", "不判断"])
         layout.addWidget(self.type_combo)
         
         # 2. 判定下限/期望值
@@ -44,6 +44,31 @@ class TestItemDialog(QDialog):
         self.min_edit = QLineEdit()
         self.min_edit.setPlaceholderText("请输入下限数值...")
         layout.addWidget(self.min_edit)
+        self.variable_combo=QComboBox()
+        self.variable_combo.setEditable(True)
+        self.variable_combo.setPlaceholderText('选择或输入期望变量名')
+        tree=getattr(parent,'step_tree',None) or getattr(parent,'tree',None) or getattr(parent,'recipe_tree',None)
+        if tree is None and parent is not None:
+            from PySide6.QtWidgets import QTreeWidget
+            trees=parent.findChildren(QTreeWidget)
+            tree=trees[0] if trees else None
+        names=set()
+        if tree is not None:
+            from core.uds_field_write import decode
+            import re
+            for i in range(tree.topLevelItemCount()):
+                item=tree.topLevelItem(i)
+                for j in range(item.childCount()):
+                    match=re.search(r'WRITE64:([^\s]+)',item.child(j).text(2))
+                    if match:
+                        try:
+                            name=decode(match[1]).get('variable','')
+                            if name:names.add(name)
+                        except (ValueError,TypeError):pass
+        from ui.widgets.variable_step_form import catalog
+        names.update(catalog(parent)[1] if parent is not None else set())
+        self.variable_combo.addItems(sorted(names));self.variable_combo.setCurrentIndex(-1)
+        layout.addWidget(self.variable_combo)
         
         # 3. 判定上限
         self.lbl_max = QLabel("判定上限 (Max):")
@@ -75,6 +100,7 @@ class TestItemDialog(QDialog):
             self.max_edit.setText(str(data.get('max', '') if data.get('max') is not None and data.get('max') != "--" else ''))
             self.unit_edit.setText(data.get('unit', '') if data.get('unit') is not None and data.get('unit') != "NULL" else '')
             self.retry_combo.setCurrentText(data.get('retry_count', '不复测'))
+            if data.get('standard_type')=='变量':self.variable_combo.setCurrentText(str(data.get('min','')))
         self.on_type_changed(self.type_combo.currentText())
         
         layout.addStretch()
@@ -92,7 +118,11 @@ class TestItemDialog(QDialog):
         layout.addLayout(btn_layout)
 
     def on_type_changed(self, text):
-        if text == "字符串":
+        self.variable_combo.setVisible(text=='变量')
+        if text == '变量':
+            self.lbl_min.setText('期望字符串变量（运行时精确匹配）:')
+            self.lbl_min.show();self.min_edit.hide();self.lbl_max.hide();self.max_edit.hide()
+        elif text == "字符串":
             self.lbl_min.setText("期望字符串 (精确匹配):")
             self.min_edit.setPlaceholderText("请输入期待的精确匹配字符串，例如 PASS...")
             self.lbl_min.show()
@@ -113,9 +143,11 @@ class TestItemDialog(QDialog):
             self.max_edit.show()
 
     def get_data(self):
-        is_str = self.type_combo.currentText() == "字符串"
+        is_var=self.type_combo.currentText()=='变量'
+        is_str = self.type_combo.currentText() in ("字符串","变量")
         is_none = self.type_combo.currentText() == "不判断"
         mn = "" if is_none else self.min_edit.text().strip()
+        if is_var:mn=self.variable_combo.currentText().strip()
         mx = "" if (is_str or is_none) else self.max_edit.text().strip()
         unit_val = self.unit_edit.text().strip()
         

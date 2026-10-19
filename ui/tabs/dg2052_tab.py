@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QGridLayout, QLabel, QLineE
                               QTabWidget, QPlainTextEdit, QScrollArea)
 from ui.tabs.multimeter_tab import MeterTask
 from devices.rigol_dg2052 import DG2052
+from core.instrument_control import control_generator, connect_instrument, instrument_transaction
 
 
 class DG2052Tab(QWidget):
@@ -62,8 +63,8 @@ class DG2052Tab(QWidget):
                 grid.addWidget(control, row, 1)
             self.button(grid, '应用参数', lambda _, c=ch: self.apply(c), 5, 0)
             self.button(grid, '回读参数', lambda _, c=ch: self.run(f'CH{c}回读', lambda d: d.read_channel(c), c), 5, 1)
-            self.button(grid, '开启输出', lambda _, c=ch: self.run(f'CH{c}开启', lambda d: d.output_control(c, True), c), 6, 0)
-            self.button(grid, '关闭输出', lambda _, c=ch: self.run(f'CH{c}关闭', lambda d: d.output_control(c, False), c), 6, 1)
+            self.button(grid, '开启输出', lambda _, c=ch: self.run(f'CH{c}开启', lambda d: control_generator(d, 'output', c, state=True), c), 6, 0)
+            self.button(grid, '关闭输出', lambda _, c=ch: self.run(f'CH{c}关闭', lambda d: control_generator(d, 'output', c, state=False), c), 6, 1)
             reading = QLabel('待回读')
             reading.setWordWrap(True)
             body.addLayout(grid)
@@ -119,17 +120,17 @@ class DG2052Tab(QWidget):
     def connect_device(self):
         ip, port,mode = self.ip.text().strip(), self.port.value(),self.connect_mode.currentData()
         def connect(d):
-            d.ip, d.port = ip, port
-            d.connect_mode=mode
-            if not d.connect():
-                raise ConnectionError(d.last_error)
-            return d.identity
+            with instrument_transaction(d):
+                d.ip, d.port = ip, port
+                d.connect_mode=mode
+                connect_instrument(d)
+                return d.identity
         self.run('连接', connect)
 
     def apply(self, ch):
         wave, freq, amp, offset, load, _ = self.channels[ch]
         args = (ch, wave.currentText(), freq.value(), amp.value(), offset.value(), load.currentData())
-        self.run(f'CH{ch}应用', lambda d: d.configure(*args), ch)
+        self.run(f'CH{ch}应用', lambda d: control_generator(d, 'configure', ch, parameters=args[1:]), ch)
 
     def send_scpi(self):
         command = self.scpi.text()
@@ -150,5 +151,5 @@ class DG2052Tab(QWidget):
                 parent = parent.parent()
 
     def shutdown(self):
-        if self.task and self.task.isRunning():
+        if self.task:
             self.task.wait()

@@ -1,9 +1,12 @@
+from devices.rn_board import shared_board
 import ipaddress
+from copy import deepcopy
 from PySide6.QtCore import Qt,QTimer
+from core.board_control import control_board
 from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QTabWidget,QTableWidget,
     QTableWidgetItem,QLineEdit,QSpinBox,QComboBox,QLabel,QPushButton,QHeaderView,QMessageBox,
     QGridLayout,QScrollArea,QGroupBox)
-from devices.rn_board import board_settings, RNBoard
+from devices.rn_board import board_settings
 from ui.device_task import DeviceTask
 
 
@@ -23,6 +26,7 @@ class BoardDebugTab(QWidget):
         self.channel_values={}
         self.channel_widgets=[]
         self.settings=[s for s in board_settings(manager.db_manager.load_sys_config() or {}) if kind is None or s['kind']==kind]
+        self._loaded_settings = deepcopy(self.settings)
         layout=QVBoxLayout(self)
         self.tabs=QTabWidget()
         layout.addWidget(self.tabs)
@@ -36,11 +40,12 @@ class BoardDebugTab(QWidget):
                          '单通道，按每块板标签选择5MΩ或30MΩ，1kΩ步进；协议不能自动区分量程。' if kind=='insulation' else
                          f'每块{self.settings[0]["channels"]}路继电器，支持单路和批量控制、状态回读。'))
         self.config=QTableWidget(len(self.settings),7)
+        self.config.setStyleSheet('QTableWidget::item { padding: 0px; }')
         self.config.setHorizontalHeaderLabels(['启用','板卡','IP','端口','Unit ID','通道数','电阻协议/量程'])
         self.config.verticalHeader().setVisible(False)
         self.config.verticalHeader().setDefaultSectionSize(54)
         self.config.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        self.config.horizontalHeader().setSectionResizeMode(2,QHeaderView.Stretch)
+        self.config.horizontalHeader().setSectionResizeMode(2,QHeaderView.ResizeToContents)
         self.fields=[]
         for row,s in enumerate(self.settings):
             item=QTableWidgetItem(); item.setFlags(Qt.ItemIsEnabled|Qt.ItemIsUserCheckable)
@@ -48,6 +53,7 @@ class BoardDebugTab(QWidget):
             for col,value in ((1,s['name']),(5,s['channels'])):
                 item=QTableWidgetItem(str(value)); item.setFlags(item.flags()&~Qt.ItemIsEditable); self.config.setItem(row,col,item)
             ip=QLineEdit(s['ip']); port=QSpinBox(); port.setRange(1,65535); port.setValue(s['port'])
+            ip.setMinimumWidth(150)
             unit=QSpinBox(); unit.setRange(0,255); unit.setValue(s['unit'])
             profile=QComboBox()
             if s['kind']=='insulation':
@@ -120,11 +126,29 @@ class BoardDebugTab(QWidget):
         button=QPushButton(text); button.setMinimumHeight(42); button.clicked.connect(callback)
         row.addWidget(button); self.buttons.append(button); return button
 
+    def reload_saved_config(self):
+        settings = [s for s in board_settings(self.manager.db_manager.load_sys_config() or {})
+                    if self.kind is None or s['kind'] == self.kind]
+        if settings == self._loaded_settings:
+            return
+        self.settings = settings
+        self._loaded_settings = deepcopy(settings)
+        self.boards.clear()
+        for row, (s, fields) in enumerate(zip(settings, self.fields)):
+            ip, port, unit, profile = fields
+            self.config.item(row,0).setCheckState(Qt.Checked if s['enabled'] else Qt.Unchecked)
+            ip.setText(s['ip']); port.setValue(s['port']); unit.setValue(s['unit'])
+            profile.setCurrentIndex(max(0, profile.findData(s['limit'])))
+            sequence = self.config.cellWidget(row,1)
+            if s['kind'] == 'resistor' and sequence is not None:
+                sequence.setValue(s['number'])
+        self.rebuild()
+
     def rebuild(self):
         selected=self.select.currentData(); self.select.blockSignals(True); self.select.clear()
         for setting in self.settings:
             if setting['enabled']:
-                self.boards[setting['key']]=RNBoard(setting)
+                self.boards[setting['key']]=shared_board(self.manager,setting)
                 self.select.addItem(setting['name'],setting['key'])
         index=self.select.findData(selected); self.select.setCurrentIndex(max(0,index)); self.select.blockSignals(False)
         self.refresh()
@@ -153,8 +177,9 @@ class BoardDebugTab(QWidget):
                 group.setTitle('')
                 state.hide()
                 apply=QPushButton(f'K{channel:02d}\n未回读'); read=QPushButton(); read.hide()
+                apply.setProperty('multilineTile',True)
                 apply.setCheckable(True); apply.setMinimumHeight(72)
-                apply.clicked.connect(lambda checked=False,c=channel:self.run(f'K{c}控制',lambda b:b.set_relay(c,checked)))
+                apply.clicked.connect(lambda checked=False,c=channel:self.run(f'K{c}控制',lambda b:control_board(b,'relay',channel=c,state=checked)))
                 self.relay_buttons.append(apply)
             for button in (apply,read): button.setMinimumHeight(40)
             grid.addWidget(apply,2,0,1,2 if self.kind!='resistor' else 1); grid.addWidget(read,2,1)
@@ -166,12 +191,17 @@ class BoardDebugTab(QWidget):
 
     def refresh(self):
         board=self.current(); self.results.setRowCount(0)
+        cancelled_pending=bool(self.pending_action and (self.pending_action[2] is not board
+                               or self.pending_action[3]!=board.setting))
+        if cancelled_pending:self.pending_action=None
         if not board:
             self.status.setText('请在板卡配置页填写IP并启用设备。')
         else:
             s=board.setting; self.relay.setRange(1,s['channels']); self.resistance.setMaximum(s['limit'])
             self.resistance.setSingleStep(10 if s['kind']=='resistor' else 1000)
             self.status.setText(f'{s["name"]} · {board.ip}:{board.port} · '+('已连接' if board.is_connected else '未连接'))
+        if cancelled_pending:
+            self.status.setText(self.status.text()+'；已取消前一板卡的排队操作')
         self.build_channels(board)
         for button in self.buttons: button.setEnabled(bool(board))
         resistor=board and board.setting['kind'] in ('resistor','insulation')
@@ -190,12 +220,13 @@ class BoardDebugTab(QWidget):
         if self.relay_buttons and (not board or not board.is_connected):
             self.show_relay_states(None)
 
-    def run(self,label,action,poll=False):
+    def run(self,label,action,poll=False,expected_setting=None):
         board=self.current()
         if self.closing or not board: return
+        setting=dict(board.setting) if expected_setting is None else dict(expected_setting)
         if self.task and self.task.isRunning():
             if not poll and self.polling:
-                self.pending_action=(label,action)
+                self.pending_action=(label,action,board,setting)
                 self.update_controls(True)
             return
         self.polling=poll
@@ -203,7 +234,14 @@ class BoardDebugTab(QWidget):
             for button in self.buttons: button.setEnabled(False)
             self.update_controls(True)
             self.select.setEnabled(False); self.save_button.setEnabled(False)
-        self.task.run(lambda:action(board),lambda ok,value:self.result(label,ok,value) if not poll or board is self.current() else None)
+        def invoke():
+            # The shared object can be reconfigured in place by another view.
+            # Check the clicked target under the same lock as the actual I/O.
+            with board._lock:
+                if board.setting!=setting:
+                    raise RuntimeError('板卡连接配置已变化，请重新确认后操作')
+                return action(board)
+        self.task.run(invoke,lambda ok,value:self.result(label,ok,value) if not poll or board is self.current() else None)
 
     def finish(self):
         self.polling=False
@@ -214,8 +252,11 @@ class BoardDebugTab(QWidget):
         self.res_button.setEnabled(bool(resistor and board.setting['limit']))
         self.update_controls()
         if self.pending_action and not self.closing:
-            label,action=self.pending_action; self.pending_action=None
-            self.run(label,action)
+            label,action,target,setting=self.pending_action; self.pending_action=None
+            if target is self.current() and target.setting==setting:
+                self.run(label,action,expected_setting=setting)
+            else:
+                self.status.setText('已取消排队操作：板卡选择或连接配置已改变')
 
     def poll_relays(self):
         if not self.isVisible() or self.tabs.currentIndex()!=1: return
@@ -238,6 +279,8 @@ class BoardDebugTab(QWidget):
 
     def showEvent(self,event):
         super().showEvent(event)
+        if hasattr(self, 'poll_timer') and not self.task.isRunning():
+            self.reload_saved_config()
         if hasattr(self,'poll_timer') and self.kind in ('relay','hv','hsd','dmm'):
             self.poll_timer.start()
 
@@ -285,26 +328,31 @@ class BoardDebugTab(QWidget):
 
     def disconnect_board(self): self.run('断开',lambda b:b.disconnect())
     def relay_action(self,state):
-        ch=self.relay.value(); self.run('单路继电器',lambda b:b.set_relay(ch,state))
-    def all_action(self,state): self.run('批量继电器',lambda b:b.all_relays(state))
+        ch=self.relay.value(); self.run('单路继电器',lambda b:control_board(b,'relay',channel=ch,state=state))
+    def all_action(self,state): self.run('批量继电器',lambda b:control_board(b,'all_relays',state=state))
     def res_action(self):
         value=self.resistance.value()
         def action(b):
-            b.set_resistance(value)
+            control_board(b,'resistance',resistance=value)
             return b.read_insulation() if b.setting['kind']=='insulation' else b.read_resistance()
         self.run('设定/回读阻值Ω',action)
     def res_channel_action(self,channel,value):
-        self.run(f'CH{channel}设定/回读',lambda b:{'channel':channel,'resistance':b.set_resistance(value,channel)})
+        self.run(f'CH{channel}设定/回读',lambda b:{'channel':channel,'resistance':control_board(b,'resistance',channel=channel,resistance=value)})
     def read_channel(self,channel):
         self.run(f'CH{channel}回读',lambda b:{'channel':channel,'resistance':b.read_resistance(channel)})
     def output_action(self,enabled):
-        value=self.resistance.value(); self.run('开启输出' if enabled else '关闭输出',lambda b:b.set_resistance_output(enabled,value))
+        value=self.resistance.value(); self.run('开启输出' if enabled else '关闭输出',lambda b:control_board(b,'insulation',state=enabled,resistance=value))
     def read(self): self.run('回读',lambda b:b.read_resistances() if b.setting['kind']=='resistor' else b.read_insulation() if b.setting['kind']=='insulation' else b.read_coils())
     def info(self): self.run('设备信息',lambda b:b.read_registers(0x100,5))
 
     def save(self):
         if self.task and self.task.isRunning(): return
         cfg=dict(self.manager.db_manager.load_sys_config() or {}); saved=dict(cfg.get('rn_boards', {})); addresses=set()
+        current = [s for s in board_settings(cfg) if self.kind is None or s['kind'] == self.kind]
+        if current != self._loaded_settings:
+            self.reload_saved_config()
+            QMessageBox.warning(self, '配置已更新', '硬件管理中心或其他页面已修改板卡配置，已刷新显示，请核对后再保存。')
+            return
         for s in board_settings(cfg):
             if self.kind and s['kind']!=self.kind and s['enabled']:
                 addresses.add((s['ip'],s['port']))
@@ -317,7 +365,7 @@ class BoardDebugTab(QWidget):
                     ipaddress.IPv4Address(address[0])
                     if address in addresses: raise ValueError('已启用板卡IP/端口重复')
                     addresses.add(address)
-                saved[s['key']]=dict(ip=address[0],port=port.value(),unit=unit.value(),enabled=enabled,limit=profile.currentData())
+                saved[s['key']]=dict(saved.get(s['key'], {}), ip=address[0],port=port.value(),unit=unit.value(),enabled=enabled,limit=profile.currentData())
                 if s['kind']=='resistor':
                     sequence=self.config.cellWidget(row,1)
                     number=sequence.value() if sequence else s['number']
@@ -329,6 +377,7 @@ class BoardDebugTab(QWidget):
         cfg['rn_boards']=saved
         if not self.manager.db_manager.save_sys_config(cfg):
             QMessageBox.warning(self,'保存失败','板卡配置未保存'); return
+        self._loaded_settings = [s for s in board_settings(cfg) if self.kind is None or s['kind'] == self.kind]
         boards=list(self.boards.values())
         self.save_button.setEnabled(False);self.select.setEnabled(False)
         def apply():
@@ -343,4 +392,4 @@ class BoardDebugTab(QWidget):
     def shutdown(self):
         self.closing=True; self.poll_timer.stop(); self.pending_action=None
         self.task.shutdown()
-        for board in self.boards.values(): board.disconnect()
+        # Shared connections belong to DeviceManager, not this view.

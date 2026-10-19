@@ -1,16 +1,51 @@
 {
     "name": "DJ2513_Aging66666",
-    "recipe_number": 0,
+    "recipe_number": 7,
+    "project_no": "",
+    "model_name": "",
+    "dbc": null,
     "plc_recipe_register": 0,
-    "sn_regex": "^\\d{4}$",
+    "sn_regex": "^HTTPS://Y2WM\\.CN/99\\.1000\\.1/AC1012590000[A-Z0-9]{21}$",
     "can_config": {
-        "channel": "PCAN_USBBUS1",
+        "channel": "ZLG_CAN1",
         "mode": "CAN-FD + BRS",
         "nominal_bitrate": 500000,
-        "data_bitrate": 2000000
+        "data_bitrate": 2000000,
+        "zlg": {
+            "ip": "192.168.1.106",
+            "port": 8000,
+            "send_channel": 1,
+            "channels": [
+                {
+                    "enabled": true,
+                    "nominal": 500000,
+                    "data": 2000000,
+                    "termination": false
+                },
+                {
+                    "enabled": true,
+                    "nominal": 500000,
+                    "data": 2000000,
+                    "termination": false
+                },
+                {
+                    "enabled": true,
+                    "nominal": 500000,
+                    "data": 2000000,
+                    "termination": false
+                },
+                {
+                    "enabled": true,
+                    "nominal": 500000,
+                    "data": 2000000,
+                    "termination": false
+                }
+            ]
+        }
     },
     "items": [
         {
+            "step_id": "81a4f72fb85e48e1905342762c733578",
             "name": "BMS上电",
             "mode": "范围判定",
             "min": "230",
@@ -20,6 +55,7 @@
             "unit": "mA",
             "sub_steps": [
                 {
+                    "step_id": "0e64ecb4d73245c48e7b058786b4e00c",
                     "name": "IT6722A 被测物供电电源 (IT6722A DUT Power)-设置参数 (12.0V / 1.0A / 开启输出)",
                     "action": "设置参数",
                     "params": "12.0V / 1.0A / 开启输出",
@@ -29,6 +65,7 @@
                     "fail_strategy": "失败停止"
                 },
                 {
+                    "step_id": "bd029bb7c01a4051a3158cf37a476ecc",
                     "name": "Easy320 继电器 (Easy320)-闭合勾选通道 (6,7)",
                     "action": "闭合勾选通道",
                     "params": "6,7",
@@ -38,6 +75,7 @@
                     "fail_strategy": "失败停止"
                 },
                 {
+                    "step_id": "6fd012f714194f08900cee74e7898804",
                     "name": "等待 (Wait)-固定延时 (2000ms)",
                     "action": "固定延时",
                     "params": "2000ms",
@@ -47,6 +85,7 @@
                     "fail_strategy": "失败停止"
                 },
                 {
+                    "step_id": "8bdf9a50cad24550bb06873f049fb5a3",
                     "name": "IT6722A 被测物供电电源 (IT6722A DUT Power)-回读数据 (读取电流 / UNIT:mA)",
                     "action": "回读数据",
                     "params": "读取电流 / UNIT:mA",
@@ -54,44 +93,14 @@
                     "type": "读取仪表",
                     "is_judgment": true,
                     "fail_strategy": "失败停止"
-                }
-            ]
-        },
-        {
-            "name": "设备初始化",
-            "mode": "字符串比对",
-            "min": "SOKJ0101E68.05_01.68.05.hex",
-            "max": "--",
-            "standard_type": "字符串",
-            "retry_count": "不复测",
-            "unit": "NULL",
-            "sub_steps": [
+                },
                 {
-                    "name": "APP刷写-查找刷写文件 (HOST:D:\\BMSTest\\BMS_General.exe / INI:config.ini / SECTION:App / KEY:addr / APPNAME:)",
-                    "action": "查找刷写文件",
-                    "params": "HOST:D:\\BMSTest\\BMS_General.exe / INI:config.ini / SECTION:App / KEY:addr / APPNAME:",
-                    "device": "APP刷写",
-                    "type": "APP刷写配置",
-                    "is_judgment": false,
-                    "fail_strategy": "失败停止"
-                }
-            ]
-        },
-        {
-            "name": "刷写",
-            "mode": "字符串比对",
-            "min": "PASS",
-            "max": "--",
-            "standard_type": "字符串",
-            "retry_count": "不复测",
-            "unit": "NULL",
-            "sub_steps": [
-                {
-                    "name": "APP刷写-启动刷写 (HOST:D:\\BMSTest\\BMS_General.exe / TIMEOUT:300)",
-                    "action": "启动刷写",
-                    "params": "HOST:D:\\BMSTest\\BMS_General.exe / TIMEOUT:300",
-                    "device": "APP刷写",
-                    "type": "APP刷写",
+                    "step_id": "975495f92a1d47d7b4c716c3e5edecd7",
+                    "name": "写入变量：123",
+                    "action": "写入变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAid3JpdGUiLCAia2V5IjogIjEyMyIsICJzb3VyY2UiOiAibGFzdCIsICJpbnB1dCI6ICJ0ZXh0IiwgInNlcGFyYXRvciI6ICIxIiwgInNlZ21lbnRzIjogW119",
+                    "device": "写入变量",
+                    "type": "读取变量",
                     "is_judgment": false,
                     "fail_strategy": "失败停止"
                 }

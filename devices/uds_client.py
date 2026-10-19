@@ -1,4 +1,5 @@
 import threading
+import math
 import time
 from dataclasses import dataclass
 from typing import Callable, Optional
@@ -55,10 +56,26 @@ class ISOTPTransport:
         self.can_fd = bool(can_fd)
         self.brs = bool(brs)
         self.timeout = float(timeout)
+        if not math.isfinite(self.timeout) or self.timeout <= 0:
+            raise ValueError('ISO-TP timeout must be finite and positive')
         self.padding = int(padding) & 0xFF
         self.block_size = int(block_size) & 0xFF
         self.st_min = int(st_min) & 0xFF
-        self._lock = threading.RLock()
+        shared = getattr(driver, '_request_lock', None)
+        self._lock = shared if isinstance(shared, type(threading.RLock())) else threading.RLock()
+        self._response_since = None
+        self.extended_id = None
+        self.flow_control_tx_id = None
+        self.cancel_event = None
+        self.logger = None
+
+    def _check_cancelled(self):
+        if self.cancel_event is not None and self.cancel_event.is_set():
+            raise RuntimeError('UDS已停止，未发送后续ISO-TP帧')
+
+    def _trace(self, text):
+        if self.logger is not None:
+            self.logger(text)
 
     @property
     def frame_length(self):
@@ -70,33 +87,57 @@ class ISOTPTransport:
             return self.driver.CAN_TYPE_CLASSIC
         return self.driver.CAN_TYPE_FD_BRS if self.brs else self.driver.CAN_TYPE_FD
 
-    def _send_frame(self, payload):
+    def _send_frame(self, payload, flow_control=False):
+        self._check_cancelled()
         raw = bytes(payload)
         frame_len = 8 if not self.can_fd else min(64, max(8, len(raw)))
         dlc = self.driver.length_to_dlc(frame_len)
-        return self.driver.send_can_message(0, self.tx_id, self.can_type, dlc,
-                                            raw.ljust(frame_len, bytes([self.padding])))
+        # FD lengths above eight must round to a legal DLC before padding.
+        frame_len = next(size for size in (8, 12, 16, 20, 24, 32, 48, 64) if size >= frame_len)
+        extra = {} if self.extended_id is None else {'extended_id':self.extended_id}
+        tx_id=self.flow_control_tx_id if flow_control and self.flow_control_tx_id is not None else self.tx_id
+        self._trace(f'ISO-TP TX ID=0x{tx_id:X} TYPE={self.can_type} DLC={dlc} LEN={frame_len} DATA={raw.ljust(frame_len, bytes([self.padding])).hex(" ").upper()}')
+        return self.driver.send_can_message(0, tx_id, self.can_type, dlc,
+                                            raw.ljust(frame_len, bytes([self.padding])),**extra)
 
     def _wait_frame(self, deadline, predicate=None):
+        self._check_cancelled()
         remain = deadline - time.monotonic()
         if remain <= 0:
             return None
-        return self.driver.wait_for_message(
-            self.rx_id, timeout=remain, since_time=time.time() - self.timeout - 0.1,
-            consume=True, predicate=predicate,
-        )
+        def matches(message):
+            if self.extended_id is not None and message.get('is_extended_id') is not None and message['is_extended_id']!=self.extended_id:
+                return False
+            return predicate(message) if predicate else True
+        while remain > 0:
+            self._check_cancelled()
+            message = self.driver.wait_for_message(
+                self.rx_id, timeout=min(remain, .05) if self.cancel_event is not None else remain,
+                since_time=self._response_since, consume=True, predicate=matches,
+            )
+            if message is not None:
+                self._trace(f'ISO-TP RX ID=0x{self.rx_id:X} DATA={bytes(message.get("data", b"")).hex(" ").upper()}')
+                return message
+            if self.cancel_event is None:
+                return None
+            remain = deadline - time.monotonic()
+        return None
 
     @staticmethod
     def _stmin_seconds(value):
-        if value <= 0x7F:
+        if 0 <= value <= 0x7F:
             return value / 1000.0
         if 0xF1 <= value <= 0xF9:
             return (value - 0xF0) / 10000.0
-        return 0.0
+        raise ValueError('Reserved ISO-TP separation time')
 
     def send(self, payload: bytes):
         payload = bytes(payload)
         with self._lock:
+            self._check_cancelled()
+            if not payload:
+                raise ValueError('ISO-TP payload cannot be empty')
+            self._response_since = time.time()
             self.driver.clear_rx_history(self.rx_id)
             sf_capacity = self.frame_length - (2 if self.can_fd else 1)
             if len(payload) <= 7:
@@ -116,21 +157,7 @@ class ISOTPTransport:
             if not self._send_frame(header + payload[:first_size]):
                 raise RuntimeError(self.driver.last_error or "ISO-TP first frame send failed")
 
-            deadline = time.monotonic() + self.timeout
-            fc = self._wait_frame(deadline, lambda m: bytes(m.get("data", b""))[:1] and
-                                  (bytes(m["data"])[0] >> 4) == 3)
-            if not fc:
-                raise TimeoutError("ISO-TP flow-control timeout")
-            fc_data = bytes(fc["data"])
-            flow_status = fc_data[0] & 0x0F
-            while flow_status == 1:
-                fc = self._wait_frame(deadline, lambda m: (bytes(m.get("data", b"\x00"))[0] >> 4) == 3)
-                if not fc:
-                    raise TimeoutError("ISO-TP flow-control WAIT timeout")
-                fc_data = bytes(fc["data"]); flow_status = fc_data[0] & 0x0F
-            if flow_status != 0:
-                raise RuntimeError("ISO-TP receiver overflow")
-            bs, delay = fc_data[1], self._stmin_seconds(fc_data[2])
+            bs, delay = self._wait_flow_control()
             offset, sequence, sent_in_block = first_size, 1, 0
             while offset < len(payload):
                 chunk = payload[offset:offset + self.frame_length - 1]
@@ -138,15 +165,31 @@ class ISOTPTransport:
                     raise RuntimeError(self.driver.last_error or "ISO-TP consecutive frame send failed")
                 offset += len(chunk); sequence = (sequence + 1) & 0x0F; sent_in_block += 1
                 if delay:
-                    time.sleep(delay)
+                    if self.cancel_event is not None:
+                        if self.cancel_event.wait(delay):
+                            self._check_cancelled()
+                    else:
+                        time.sleep(delay)
                 if bs and sent_in_block >= bs and offset < len(payload):
-                    fc = self._wait_frame(deadline, lambda m: (bytes(m.get("data", b"\x00"))[0] >> 4) == 3)
-                    if not fc:
-                        raise TimeoutError("ISO-TP block flow-control timeout")
-                    fc_data = bytes(fc["data"])
-                    if (fc_data[0] & 0x0F) != 0:
-                        raise RuntimeError("ISO-TP invalid flow-control status")
-                    bs, delay, sent_in_block = fc_data[1], self._stmin_seconds(fc_data[2]), 0
+                    bs, delay = self._wait_flow_control()
+                    sent_in_block = 0
+
+    def _wait_flow_control(self):
+        deadline = time.monotonic() + self.timeout
+        while True:
+            frame = self._wait_frame(deadline, lambda msg: bool(bytes(msg.get('data', b''))[:1])
+                                     and bytes(msg['data'])[0] >> 4 == 3)
+            if frame is None:
+                raise TimeoutError('ISO-TP flow-control timeout')
+            data = bytes(frame['data'])
+            if len(data) < 3:
+                raise RuntimeError('Incomplete ISO-TP flow control')
+            status = data[0] & 0xf
+            if status == 0:
+                self._trace(f'ISO-TP FC CTS BS={data[1]} STmin=0x{data[2]:02X}')
+                return data[1], self._stmin_seconds(data[2])
+            if status != 1:
+                raise RuntimeError('ISO-TP receiver overflow or invalid flow control')
 
     def receive(self, timeout=None):
         with self._lock:
@@ -161,15 +204,26 @@ class ISOTPTransport:
                 length = data[0] & 0x0F
                 start = 1
                 if length == 0:
+                    if not self.can_fd or len(data) < 2:
+                        raise RuntimeError('Invalid ISO-TP single-frame header')
                     length, start = data[1], 2
+                if length <= 0 or length > len(data) - start:
+                    raise RuntimeError('Incomplete ISO-TP single frame')
                 return data[start:start + length]
 
+            if len(data) < 2:
+                raise RuntimeError('Incomplete ISO-TP first-frame header')
             length = ((data[0] & 0x0F) << 8) | data[1]
             start = 2
             if length == 0:
+                if len(data) < 6:
+                    raise RuntimeError('Incomplete ISO-TP extended length')
                 length, start = int.from_bytes(data[2:6], "big"), 6
+            if length <= len(data) - start:
+                raise RuntimeError('Invalid ISO-TP first-frame length')
             result = bytearray(data[start:])
-            self._send_frame(bytes([0x30, self.block_size, self.st_min]))
+            if not self._send_frame(bytes([0x30, self.block_size, self.st_min]),flow_control=True):
+                raise RuntimeError('ISO-TP flow-control send failed')
             expected, block_count = 1, 0
             while len(result) < length:
                 msg = self._wait_frame(deadline, lambda m: bytes(m.get("data", b""))[:1] and
@@ -177,16 +231,21 @@ class ISOTPTransport:
                 if not msg:
                     raise TimeoutError("ISO-TP consecutive frame timeout")
                 frame = bytes(msg["data"])
+                if len(frame) < 2:
+                    raise RuntimeError('Empty ISO-TP consecutive frame')
                 if (frame[0] & 0x0F) != expected:
                     raise RuntimeError(f"ISO-TP sequence error: expected {expected}, got {frame[0] & 0x0F}")
                 result.extend(frame[1:]); expected = (expected + 1) & 0x0F; block_count += 1
                 if self.block_size and block_count >= self.block_size and len(result) < length:
-                    self._send_frame(bytes([0x30, self.block_size, self.st_min])); block_count = 0
+                    if not self._send_frame(bytes([0x30, self.block_size, self.st_min]),flow_control=True):
+                        raise RuntimeError('ISO-TP flow-control send failed')
+                    block_count = 0
             return bytes(result[:length])
 
     def request(self, payload: bytes, timeout=None):
-        self.send(payload)
-        return self.receive(timeout)
+        with self._lock:
+            self.send(payload)
+            return self.receive(timeout)
 
 
 class UDSClient:
@@ -196,27 +255,50 @@ class UDSClient:
         self.transport = transport
         self.p2_timeout = float(p2_timeout)
         self.p2_star_timeout = float(p2_star_timeout)
+        if not all(math.isfinite(t) and t > 0 for t in (self.p2_timeout, self.p2_star_timeout)):
+            raise ValueError('UDS timeout must be finite and positive')
+        shared = getattr(transport, '_lock', None)
+        self._lock = shared if isinstance(shared, type(threading.RLock())) else threading.RLock()
 
     def request(self, service_id: int, data=b"", suppress_positive_response=False):
-        sid = int(service_id) & 0xFF
+        with self._lock:
+            return self._request(service_id, data, suppress_positive_response)
+
+    def _request(self, service_id, data, suppress_positive_response):
+        sid = int(service_id)
+        if not 0 <= sid <= 0xff:
+            raise ValueError('UDS service ID must be 0..255')
         payload = bytes([sid]) + bytes(data)
         self.transport.send(payload)
         if suppress_positive_response:
             return UDSResponse(sid, b"", True, sid + 0x40, b"")
-        deadline = time.monotonic() + self.p2_star_timeout
+        deadline = time.monotonic() + max(self.p2_timeout, self.p2_star_timeout)
         timeout = self.p2_timeout
         while time.monotonic() < deadline:
             try:
                 raw = self.transport.receive(timeout)
             except TimeoutError as exc:
                 return UDSResponse(sid, b"", False, error=str(exc))
-            if len(raw) >= 3 and raw[0] == 0x7F:
+            if raw and raw[0] == 0x7F:
+                if len(raw) < 3 or raw[1] != sid:
+                    return UDSResponse(sid, raw, False, error='Unexpected negative UDS response service')
                 if raw[2] == 0x78:
                     timeout = min(self.p2_star_timeout, max(0.01, deadline - time.monotonic()))
                     continue
                 return UDSResponse(sid, raw, False, 0x7F, raw[3:], raw[2])
             expected = (sid + 0x40) & 0xFF
             if raw and raw[0] == expected:
+                # Check echoes that identify the requested operation, not only SID.
+                echo_length = {0x22:2, 0x2E:2, 0x2F:2, 0x31:3, 0x36:1}.get(sid, 0)
+                subfunctions = {0x10, 0x11, 0x19, 0x27, 0x28, 0x2C, 0x3E, 0x83, 0x85, 0x86, 0x87}
+                if sid in subfunctions:
+                    echo_length = 1
+                if echo_length:
+                    expected_echo = bytes(data[:echo_length])
+                    if sid in subfunctions or sid == 0x31:
+                        expected_echo = bytes([expected_echo[0] & 0x7f]) + expected_echo[1:] if expected_echo else b''
+                    if len(expected_echo) != echo_length or raw[1:1+echo_length] != expected_echo:
+                        return UDSResponse(sid, raw, False, error='UDS response echo does not match request')
                 return UDSResponse(sid, raw, True, raw[0], raw[1:])
             return UDSResponse(sid, raw, False, raw[0] if raw else 0,
                                raw[1:] if raw else b"", error="Unexpected UDS response")

@@ -47,13 +47,16 @@ class ZLGTests(unittest.TestCase):
             if path == b'0/add_dynamic_data':
                 captured.append((pointer._obj.key, pointer._obj.value))
             else:
-                captured.append((path, pointer.value))
+                self.assertIsInstance(pointer._obj, ctypes.c_uint)
+                captured.append((path, pointer._obj.value))
             return 1
         bus.dll.ZCAN_SetValue.side_effect = set_value
         bus.configure_channel(500000, 2000000, True)
         self.assertEqual(captured, [(b'DYNAMIC_CONFIG_CAN2_NOMINALBAUD', b'500000'),
             (b'DYNAMIC_CONFIG_CAN2_DATABAUD', b'2000000'),
-            (b'DYNAMIC_CONFIG_CAN2_USERES', b'1'), (b'0/apply_dynamic_data', b'0')])
+            (b'DYNAMIC_CONFIG_CAN2_USERES', b'1'), (b'0/apply_dynamic_data', 0)])
+        bus.configure_channel(500000, 2000000, True, persist=True)
+        self.assertEqual(captured[-1], (b'0/apply_dynamic_data', 1))
         captured.clear()
         settings = [dict(enabled=i != 1, nominal=500000, data=2000000, termination=i == 3) for i in range(4)]
         bus.configure_channels(settings)
@@ -92,6 +95,13 @@ class ZLGTests(unittest.TestCase):
         self.assertEqual(bytes(frame.data), bytes(range(64)))
         bus.send(can.Message(arbitration_id=0x123, is_extended_id=False, data=b'AB'))
         self.assertEqual(bus.dll.ZCAN_Transmit.call_args.args[1]._obj.frame.can_dlc, 2)
+        bus.send(can.Message(arbitration_id=0x123, is_extended_id=False,
+                             is_remote_frame=True, dlc=8))
+        remote = bus.dll.ZCAN_Transmit.call_args.args[1]._obj.frame
+        self.assertEqual(remote.can_id, 0x40000123)
+        self.assertEqual(remote.can_dlc, 8)
+        with self.assertRaises(ValueError):
+            bus.send(can.Message(arbitration_id=0x123, is_extended_id=False, data=bytes(9)))
         bus.dll.ZCAN_GetReceiveNum.side_effect = [0, 1]
         def receive(handle, pointer, count, wait):
             pointer._obj.frame.can_id = 0x80001234

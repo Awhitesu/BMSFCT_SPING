@@ -61,6 +61,7 @@ class RNBoard:
                 if self.info[1] != expected or (self.setting['kind'] not in ('resistor','insulation') and self.info[3] != self.setting['channels']):
                     raise ValueError(f'板卡类型或通道数量不匹配: ID=0x{self.info[1]:04X}, 通道={self.info[3]}')
                 self.last_error = ''
+                self._ever_connected = True
                 return True
             except Exception as exc:
                 self.last_error = str(exc)
@@ -109,6 +110,8 @@ class RNBoard:
         return [bool(data[1+i//8] & (1<<(i%8))) for i in range(count)]
 
     def set_relay(self, channel, state):
+        if type(channel) is not int or state not in (True, False):
+            raise ValueError('继电器通道或状态无效')
         if self.setting['kind'] in ('resistor','insulation') or not 1<=channel<=self.setting['channels']:
             raise ValueError('继电器通道错误')
         payload=struct.pack('>HH',channel-1,0xff00 if state else 0)
@@ -119,6 +122,8 @@ class RNBoard:
             return states
 
     def all_relays(self, state):
+        if state not in (True, False):
+            raise ValueError('继电器状态必须为开或关')
         if self.setting['kind'] in ('resistor','insulation'): raise ValueError('不是继电器板')
         count=self.setting['channels']
         values=bytes(sum((1<<(i%8)) for i in range(byte*8,min(count,byte*8+8))) if state else 0
@@ -176,3 +181,28 @@ class RNBoard:
         if self.setting['kind']!='insulation': raise ValueError('不是绝缘板')
         with self._lock:
             return {'resistance':self.read_resistance(),'output':bool(self.read_registers(0x104,1)[0]&1)}
+
+
+def shared_board(manager, setting):
+    """Return the same connection and transaction lock to every consumer."""
+    getter = getattr(type(manager), 'get_rn_board', None)
+    if getter:
+        getter = manager.get_rn_board
+    if getter:
+        return getter(setting['key'], setting=setting)
+    # Lightweight managers used by isolated debug windows/tests.
+    import threading
+    if '_rn_shared_guard' not in vars(manager):
+        manager._rn_shared_guard = threading.RLock()
+        manager.rn_boards = {}
+    with manager._rn_shared_guard:
+        board = manager.rn_boards.get(setting['key'])
+        if board is not None and board.setting != setting:
+            with board._lock:
+                board.disconnect()
+                board.setting = setting
+                board.ip, board.port = setting["ip"], setting["port"]
+        if board is None:
+            board = RNBoard(setting)
+            manager.rn_boards[setting['key']] = board
+        return board

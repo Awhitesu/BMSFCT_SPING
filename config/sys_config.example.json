@@ -1,0 +1,302 @@
+{
+    "dut_pwr_com": "COM3",
+    "dut_pwr_baudrate": 9600,
+    "hv_ip": "",
+    "sim1_ip": "",
+    "easy320_ip": "",
+    "ca550_com": "COM92",
+    "mes_url": "http://10.38.2.36/api/epro/iot/moveInCheck",
+    "mes_equipment_no": "GS-APP-08",
+    "mes_timeout": 10.0,
+    "pcan_enabled": false,
+    "pcan_channel": "PCAN_USBBUS1",
+    "pcan_nominal_bitrate": 500000,
+    "pcan_data_bitrate": 2000000,
+    "hv_enabled": false,
+    "hv_port": 7000,
+    "dut_pwr_enabled": false,
+    "sim1_enabled": false,
+    "sim1_port": 7000,
+    "easy320_enabled": false,
+    "easy320_port": 502,
+    "opteeq_enabled": false,
+    "opteeq_ip": "",
+    "opteeq_port": 10023,
+    "e2_rfp_enabled": false,
+    "e2_rfp_cli_path": "",
+    "e2_device_family": "RH850",
+    "e2_interface": "",
+    "e2_speed": "",
+    "e2_target_voltage": "",
+    "ca550_enabled": false,
+    "ca550_baudrate": 9600,
+    "ai_api_key": "",
+    "ai_base_url": "",
+    "ai_model": "kimi-k3",
+    "zlg_enabled": false,
+    "zlg_ip": "",
+    "zlg_port": 8000,
+    "zlg_sdk_enabled": false,
+    "zlg_sdk_path": "zlgcan(20260806)/zlgcan_x64",
+    "it6333b_enabled": false,
+    "it6333b_com": "COM4",
+    "it6333b_baudrate": 9600,
+    "dg2052_enabled": false,
+    "dg2052_ip": "",
+    "dg2052_port": 5555,
+    "tbs2102b_enabled": false,
+    "tbs2102b_ip": "",
+    "sim1_number": 1,
+    "sim1_channels": 24,
+    "sim2_enabled": false,
+    "sim2_number": 2,
+    "sim2_channels": 24,
+    "sim2_ip": "",
+    "sim2_port": 7000,
+    "sim3_enabled": false,
+    "sim3_number": 3,
+    "sim3_channels": 24,
+    "sim3_ip": "",
+    "sim3_port": 7000,
+    "sim4_enabled": false,
+    "sim4_number": 4,
+    "sim4_channels": 24,
+    "sim4_ip": "",
+    "sim4_port": 7000,
+    "sim5_enabled": false,
+    "sim5_number": 5,
+    "sim5_channels": 24,
+    "sim5_ip": "",
+    "sim5_port": 7000,
+    "sim6_enabled": false,
+    "sim6_number": 6,
+    "sim6_channels": 6,
+    "sim6_ip": "",
+    "sim6_port": 7000,
+    "dmm34461_enabled": false,
+    "dmm34461_ip": "",
+    "dmm34461_port": 5025,
+    "rn_boards": {
+        "insulation1": {
+            "ip": "",
+            "port": 502,
+            "unit": 1,
+            "enabled": false,
+            "limit": 5000000
+        },
+        "insulation2": {
+            "ip": "",
+            "port": 502,
+            "unit": 1,
+            "enabled": false,
+            "limit": 5000000
+        },
+        "resistor1": {
+            "ip": "",
+            "port": 502,
+            "unit": 1,
+            "enabled": false,
+            "limit": 1500000
+        },
+        "resistor2": {
+            "ip": "",
+            "port": 502,
+            "unit": 1,
+            "enabled": false,
+            "limit": 1500000
+        },
+        "resistor3": {
+            "ip": "",
+            "port": 502,
+            "unit": 1,
+            "enabled": false,
+            "limit": 1500000
+        },
+        "resistor4": {
+            "ip": "",
+            "port": 502,
+            "unit": 1,
+            "enabled": false,
+            "limit": 1500000
+        },
+        "resistor5": {
+            "ip": "",
+            "port": 502,
+            "unit": 1,
+            "enabled": false,
+            "limit": 1500000
+        },
+        "resistor6": {
+            "ip": "",
+            "port": 502,
+            "unit": 1,
+            "enabled": false,
+            "limit": 1500000
+        },
+        "hsd1": {
+            "ip": "",
+            "port": 502,
+            "unit": 1,
+            "enabled": false,
+            "limit": 0
+        },
+        "hsd2": {
+            "ip": "",
+            "port": 502,
+            "unit": 1,
+            "enabled": false,
+            "limit": 0
+        },
+        "relay1": {
+            "ip": "",
+            "port": 502,
+            "unit": 1,
+            "enabled": false,
+            "limit": 0
+        },
+        "hv1": {
+            "ip": "",
+            "port": 502,
+            "unit": 1,
+            "enabled": false,
+            "limit": 0
+        },
+        "dmm1": {
+            "ip": "",
+            "port": 502,
+            "unit": 1,
+            "enabled": false,
+            "limit": 0
+        },
+        "dmm2": {
+            "ip": "",
+            "port": 502,
+            "unit": 1,
+            "enabled": false,
+            "limit": 0
+        }
+    },
+    "easy320_channels": [
+        {
+            "do": "DO0",
+            "name": "平推气缸",
+            "index": 0
+        },
+        {
+            "do": "DO1",
+            "name": "上升气缸",
+            "index": 1
+        },
+        {
+            "do": "DO2",
+            "name": "下降气缸",
+            "index": 2
+        },
+        {
+            "do": "DO3",
+            "name": "",
+            "index": 3
+        },
+        {
+            "do": "DO4",
+            "name": "",
+            "index": 4
+        },
+        {
+            "do": "DO5",
+            "name": "",
+            "index": 5
+        },
+        {
+            "do": "DO6",
+            "name": "",
+            "index": 6
+        },
+        {
+            "do": "DO7",
+            "name": "",
+            "index": 7
+        },
+        {
+            "do": "DO10",
+            "name": "",
+            "index": 8
+        },
+        {
+            "do": "DO11",
+            "name": "",
+            "index": 9
+        },
+        {
+            "do": "DO12",
+            "name": "",
+            "index": 10
+        },
+        {
+            "do": "DO13",
+            "name": "",
+            "index": 11
+        },
+        {
+            "do": "DO14",
+            "name": "",
+            "index": 12
+        },
+        {
+            "do": "DO15",
+            "name": "",
+            "index": 13
+        },
+        {
+            "do": "DO16",
+            "name": "",
+            "index": 14
+        },
+        {
+            "do": "DO17",
+            "name": "",
+            "index": 15
+        },
+        {
+            "do": "DO20",
+            "name": "",
+            "index": 16
+        },
+        {
+            "do": "DO21",
+            "name": "",
+            "index": 17
+        },
+        {
+            "do": "DO22",
+            "name": "",
+            "index": 18
+        },
+        {
+            "do": "DO23",
+            "name": "",
+            "index": 19
+        },
+        {
+            "do": "DO24",
+            "name": "",
+            "index": 20
+        },
+        {
+            "do": "DO25",
+            "name": "",
+            "index": 21
+        },
+        {
+            "do": "DO26",
+            "name": "",
+            "index": 22
+        },
+        {
+            "do": "DO27",
+            "name": "",
+            "index": 23
+        }
+    ],
+    "stats_deduplicate_barcode": false
+}

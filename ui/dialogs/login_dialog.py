@@ -37,7 +37,11 @@ class LoginDialog(QDialog):
         layout.setContentsMargins(34, 28, 34, 28)
         layout.setSpacing(16)
 
-        title = QLabel("APP刷写系统")
+        from core.app_titles import load_titles
+        _window_title, header_title = load_titles(self.db_manager)
+        from ui.widgets.eliding_label import ElidingLabel
+        title = ElidingLabel(header_title)
+        title.setTextFormat(Qt.PlainText)
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet(
             "font-size: 24px; font-weight: 700; color: #f8fafc; "
@@ -140,6 +144,9 @@ class LoginDialog(QDialog):
             self.btn_login.setEnabled(True)
 
         if verified:
+            from ui.dialogs.password_change import ensure_initial_password_changed
+            if not ensure_initial_password_changed(self.db_manager, username, password, self):
+                return
             self.selected_user = username
             self.edit_pwd.clear()
             self.accept()

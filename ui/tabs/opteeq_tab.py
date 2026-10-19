@@ -4,19 +4,9 @@ import threading
 import time
 
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QFrame, QGridLayout, QGroupBox,
-    QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox,
-    QTabWidget, QTextEdit, QVBoxLayout, QWidget,
-)
+from PySide6.QtWidgets import QCheckBox, QFileDialog, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox, QTabWidget, QTextEdit, QVBoxLayout, QWidget
 
-from core.burn_recorder import (
-    compare_and_diff_data,
-    extract_source_data_bytes,
-    generate_source_address_data_image,
-    parse_opj_metadata,
-    record_burn_event,
-)
+from core.burn_recorder import generate_source_address_data_image, parse_opj_metadata, record_burn_event
 from ui.dialogs.step_dialog import SmartProjectComboBox
 
 
@@ -44,6 +34,8 @@ class OpteeQTab(QWidget):
         self._has_auto_read = False
         self._current_meta = {}
         self._init_ui()
+        from ui.layout_safety import protect_form_layout
+        protect_form_layout(self)
         self.operation_finished.connect(self._finish_operation)
         self.log_message.connect(self._append_log)
         self.remote_projects_loaded.connect(self._on_remote_projects_loaded)
@@ -51,7 +43,7 @@ class OpteeQTab(QWidget):
         self.metadata_loaded.connect(self._on_metadata_loaded)
         self.burn_record_updated.connect(self._on_burn_record_updated)
         self.status_timer = QTimer(self)
-        self.status_timer.timeout.connect(self.refresh_connection_state)
+        self.status_timer.timeout.connect(lambda: self.refresh_connection_state() if self.isVisible() else None)
         self.status_timer.start(1000)
         self.refresh_connection_state()
 
@@ -287,7 +279,6 @@ class OpteeQTab(QWidget):
         layout.addWidget(self.sub_tabs, 1)
 
     def refresh_connection_state(self):
-        if not self.isVisible(): return
         connected = bool(self.programmer and self.programmer.is_connected)
         self.lbl_connection.setText("●  已连接" if connected else "●  未连接")
         color = "#22C55E" if connected else "#FF4D5A"
@@ -305,7 +296,7 @@ class OpteeQTab(QWidget):
         self.btn_export_remote.setEnabled(can_operate and has_valid_project)
 
         # 设备在线且尚未自动加载时，触发一次自动获取下载器内置工程
-        if connected and not self._has_auto_read and not self._running:
+        if self.isVisible() and connected and not self._has_auto_read and not self._running:
             self._has_auto_read = True
             QTimer.singleShot(100, self.read_remote_projects)
         elif not connected:
@@ -434,7 +425,6 @@ class OpteeQTab(QWidget):
         if self.preview_task.isRunning():
             self.preview_timer.start(300);return
         text=self._preview_text
-        family=self.combo_family.currentText() if hasattr(self,'combo_family') else ''
 
         text = str(text).strip()
         if not text or text.startswith("（"):
@@ -462,7 +452,6 @@ class OpteeQTab(QWidget):
         self.preview_task.run(task,lambda *_:None)
 
     def _on_metadata_loaded(self, meta: dict):
-        if meta.get("project_name") != self.combo_project.currentText().strip():return
         if meta.get('project_name') != self.combo_project.currentText().strip():
             return
         self._current_meta = meta
@@ -478,7 +467,7 @@ class OpteeQTab(QWidget):
     def _record_burn_and_emit(self, project: str, success: bool, state: str, duration: float, deep_diff: bool = True):
         # 运行结束重新绑定当前工程，不能使用异步预览留下的旧元数据。
         import tempfile
-        from core.burn_recorder import verify_project_readback
+        pass
         with tempfile.TemporaryDirectory(prefix='sg400_project_') as folder:
             path = project
             if not os.path.isfile(path):
@@ -515,7 +504,6 @@ class OpteeQTab(QWidget):
         diff_details = None
         source_bytes, read_bytes, start_addr = b"", b"", 0
         # 仅当烧录成功、勾选了逐字节校验、且当前工程具备有效的物理扇区时才触发硬件回读
-        has_sectors = bool(self._current_meta.get("valid") and self._current_meta.get("sectors"))
         if success and deep_diff:
             try:
                 source_bytes, read_bytes, start_addr, diff_details = verify_project_readback(

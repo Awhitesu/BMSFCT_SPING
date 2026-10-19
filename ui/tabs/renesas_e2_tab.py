@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
 )
 
 from core.burn_recorder import (
-    compare_and_diff_data,
     record_burn_event,
 )
 from ui.dialogs.step_dialog import SmartProjectComboBox
@@ -34,6 +33,7 @@ class RenesasE2Tab(QWidget):
         self.programmer = device_manager.e2_rfp
         self._running = False
         self.preview_task=DeviceTask(self)
+        self.presence_task=DeviceTask(self)
         self.preview_timer=QTimer(self)
         self.preview_timer.setSingleShot(True)
         self.preview_timer.timeout.connect(self._load_project_preview)
@@ -41,12 +41,14 @@ class RenesasE2Tab(QWidget):
 
         self._current_meta = {}
         self._init_ui()
+        from ui.layout_safety import protect_form_layout
+        protect_form_layout(self)
         self.operation_finished.connect(self._finish_operation)
         self.log_message.connect(self._append_log)
         self.metadata_loaded.connect(self._on_metadata_loaded)
         self.burn_record_updated.connect(self._on_burn_record_updated)
         self.status_timer = QTimer(self)
-        self.status_timer.timeout.connect(self.refresh_connection_state)
+        self.status_timer.timeout.connect(self.poll_presence)
         self.status_timer.start(1000)
         self.refresh_connection_state()
 
@@ -116,7 +118,8 @@ class RenesasE2Tab(QWidget):
         self.lbl_device_state.setStyleSheet("font-size:14px; font-weight:bold; color:#00E5FF;")
         header_layout.addWidget(self.lbl_device_state)
 
-        self.btn_query = QPushButton("🔄 查询状态")
+        self.btn_query = QPushButton("🔄 检测E2")
+        self.btn_query.setToolTip("检测实体E2的USB在位状态及上次操作结果；不连接或复位目标MCU。")
         self.btn_query.setMinimumWidth(120)
         self.btn_query.clicked.connect(self.query_state)
         header_layout.addWidget(self.btn_query)
@@ -281,18 +284,31 @@ class RenesasE2Tab(QWidget):
         layout.addWidget(self.sub_tabs, 1)
 
     def refresh_connection_state(self):
-        if not self.isVisible(): return
-        connected = bool(self.programmer and self.programmer.is_connected)
-        self.lbl_connection.setText("●  已连接" if connected else "●  未连接")
-        color = "#22C55E" if connected else "#FF4D5A"
+        ready = bool(self.programmer and self.programmer.tool_ready)
+        present = bool(ready and self.programmer.is_connected)
+        checked = bool(self.programmer and self.programmer.presence_checked)
+        text = 'E2已识别' if present else ('E2未连接' if checked else '连接未验证')
+        self.lbl_connection.setText('●  ' + text if ready else '●  工具未就绪')
+        self.lbl_connection.setToolTip(
+            "Windows已识别到可用E2 USB设备；目标MCU连接未验证。烧录、校验和回读分别以实际执行结果为准。"
+            if present else (str(getattr(self.programmer, 'presence_error', '') or '请先初始化工具并检测E2的USB连接。'))
+        )
+        color = "#FFC107" if present else "#FF4D5A"
         self.lbl_connection.setStyleSheet(
             f"color:{color}; border:1px solid {color}; border-radius:6px; "
             "padding:7px 14px; font-weight:bold;"
         )
-        can_operate = connected and not self._running
-        self.btn_query.setEnabled(can_operate)
+        can_operate = present and not self._running
+        self.btn_query.setEnabled(ready and not self._running)
         self.btn_run.setEnabled(can_operate)
         self.btn_browse.setEnabled(not self._running)
+
+    def poll_presence(self):
+        if (not self.isVisible() or self._running or self.presence_task.isRunning()
+                or not self.programmer or not self.programmer.tool_ready):
+            return
+        self.presence_task.run(self.programmer.refresh_presence,
+                               lambda _ok, _value: self.refresh_connection_state())
 
     def _save_conn_params(self):
         if not self.programmer:
@@ -315,12 +331,12 @@ class RenesasE2Tab(QWidget):
                 pass
 
     def _require_initialized_connection(self):
-        if self.programmer and self.programmer.is_connected:
+        if self.programmer and self.programmer.tool_ready:
             return True
         QMessageBox.warning(
-            self, "瑞萨 E2 未连接",
-            "请先在“硬件管理中心”初始化瑞萨 E2 下载器 (rfp-cli)。\n"
-            "调试页不会另建连接或自动重连。",
+            self, "瑞萨烧录工具未就绪",
+            "请先在“硬件管理中心”初始化本机 rfp-cli 工具。\n"
+            "调试页不会另建目标连接或自动重连。",
         )
         return False
 
@@ -345,11 +361,16 @@ class RenesasE2Tab(QWidget):
             return
         self._running = True
         self.refresh_connection_state()
-        self.log_message.emit("正在查询瑞萨 E2 (rfp-cli) 状态…")
+        self.log_message.emit("正在检测E2 USB在位状态；目标连接不做启动检测…")
 
         def task():
             state = self.programmer.query_state()
-            self.operation_finished.emit(state != "Lost", state)
+            display = "E2 USB已识别（目标连接未验证）" if state == "Ready" else state
+            if state in ("Pass", "Error"):
+                display = f"上次操作：{state}（目标连接未验证）"
+            if state == 'Lost':
+                display = self.programmer.last_error or 'E2未连接'
+            self.operation_finished.emit(state not in ("Lost", "Error"), display)
 
         threading.Thread(target=task, daemon=True).start()
 
@@ -428,22 +449,18 @@ class RenesasE2Tab(QWidget):
             diagnosis = "rfp-cli 执行超时，疑似芯片未供电或引脚接触不良"
 
         diff_details = None
-        # 烧录成功且勾选逐字节校验时，经 rfp-cli 物理回读首段数据
+        source_bytes = readback_bytes = b""
+        base_address = 0
         if success and deep_diff:
             try:
-                import tempfile
-                tmp = os.path.join(tempfile.gettempdir(), f"e2_readback_{time.time_ns()}.bin")
-                if self.programmer.read_chip(0, 256, tmp) and os.path.isfile(tmp):
-                    with open(tmp, "rb") as f:
-                        rb_bytes = f.read()
-                    try:
-                        os.remove(tmp)
-                    except Exception:
-                        pass
-                    if rb_bytes:
-                        diff_details = compare_and_diff_data(rb_bytes, rb_bytes, base_address=0)
-            except Exception:
-                pass
+                from core.renesas_verify import verify_readback
+                source_bytes, readback_bytes, base_address, diff_details = verify_readback(self.programmer, project)
+                success = diff_details['is_match']
+                diagnosis = "源程序与回读数据逐字节一致" if success else "源程序与回读数据不一致"
+            except Exception as exc:
+                success = False
+                diagnosis = f"逐字节校验未完成: {exc}"
+                self.log_message.emit(diagnosis)
 
         try:
             res = record_burn_event({
@@ -460,11 +477,15 @@ class RenesasE2Tab(QWidget):
                 "diagnosis": diagnosis,
                 "hardware_log": hw_log,
                 "diff_details": diff_details,
+                "source_bytes": source_bytes,
+                "readback_bytes": readback_bytes,
+                "base_address": base_address,
             })
             res["act_crc"] = act_crc
             self.burn_record_updated.emit(res)
         except Exception as e:
             self.log_message.emit(f"生成留痕记录事件失败: {e}")
+        return success, (state if success else diagnosis)
 
     def _on_burn_record_updated(self, res: dict):
         match = res.get("match", False)
@@ -537,7 +558,9 @@ class RenesasE2Tab(QWidget):
             finally:
                 # 无论发生何种情况，必须确保留痕安全执行且 operation_finished 必定触发，释放按钮锁
                 try:
-                    self._record_burn_and_emit(project, success, state, duration, deep_diff=deep_diff_enabled)
+                    verified = self._record_burn_and_emit(project, success, state, duration, deep_diff=deep_diff_enabled)
+                    if isinstance(verified, tuple):
+                        success, state = verified
                 except Exception as log_err:
                     self.log_message.emit(f"留痕归档异常(已兜底隔离): {log_err}")
                 self.operation_finished.emit(success, state)
@@ -560,3 +583,4 @@ class RenesasE2Tab(QWidget):
         self.status_timer.stop()
         self.preview_timer.stop()
         self.preview_task.shutdown()
+        self.presence_task.shutdown()

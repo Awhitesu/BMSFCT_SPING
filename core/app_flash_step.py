@@ -140,7 +140,7 @@ def _record_state(content):
     """Use the latest complete state line; do not match words inside diagnostics."""
     states = []
     for line in content.splitlines():
-        match = re.match(r"^\s*(START|FLASH|PASS|FAIL)(?=$|[\s:：-])", line, re.IGNORECASE)
+        match = re.match(r"^\s*(START|FLASH|PASS|FAIL)(?=$|[\s:：-]|\.{3}|…)", line, re.IGNORECASE)
         if match:
             states.append(match.group(1).upper())
     return states[-1] if states else ""
@@ -167,14 +167,23 @@ def run_app_flash(
     last_content, record_state, record_error = "", "", ""
     subscribed = False
     monitor_error = ""
+    last_diagnostic_at = started - 5
+    last_diagnostic = None
 
     def notify(result="", phase=""):
-        if not progress_callback:
-            return
+        nonlocal last_diagnostic_at, last_diagnostic
         connected = bool(pcan is not None and getattr(pcan, "is_connected", False))
         if not connected and tracker.accepted:
             tracker.invalidate("PCAN连接中断，进度未知")
         status = tracker.snapshot()
+        status['monitor_ids'] = f'0x{request_id:X}/0x{response_id:X}'
+        status['can_interface'] = str(getattr(pcan, 'channel', 'CAN')) if pcan is not None else 'CAN'
+        diagnostic = (connected, status['received_frames'] > 0, status['last_can_age'] is not None,
+                      status['can_warning'])
+        now = time.monotonic()
+        if diagnostic != last_diagnostic or now-last_diagnostic_at >= 5 or result:
+            last_diagnostic, last_diagnostic_at = diagnostic, now
+            log(f"[APP刷写监听] 接口={status['can_interface']} 已连接={connected} 已订阅={subscribed} 接收={status['received_frames']}帧 目标ID={status['monitor_ids']} 已见ID={','.join(status['observed_ids']) or '无'} 匹配={'是' if status['last_can_age'] is not None else '否'} 提示={monitor_error or status['can_warning'] or '无'}")
         if not subscribed or not connected:
             status["can_warning"] = monitor_error or "PCAN未连接，仅显示Record状态"
             status["percent"] = None
@@ -188,11 +197,12 @@ def run_app_flash(
             "result": result, "record": last_content, "record_state": record_state,
             "record_error": record_error, "can_connected": connected,
         })
-        try:
-            progress_callback(status)
-        except Exception:
-            # A closed UI must not change the outcome of a running flash operation.
-            pass
+        if progress_callback:
+            try:
+                progress_callback(status)
+            except Exception:
+                # A closed UI must not change the outcome of a running flash operation.
+                pass
 
     def finish(success, result, phase):
         notify(result, phase)
@@ -208,6 +218,7 @@ def run_app_flash(
                 monitor_error = f"PCAN监听不可用: {exc}"
                 log(f"[APP刷写] {monitor_error}")
         notify(phase="准备启动刷写")
+        log(f'[APP刷写] 被动CAN监听：接口={getattr(pcan, "channel", "未配置")} 连接={bool(pcan is not None and getattr(pcan, "is_connected", False))} 订阅={subscribed} 请求ID=0x{request_id:X} 响应ID=0x{response_id:X}；最终判定以Record为准')
         if cancelled and cancelled():
             return finish(False, "STOPPED", "已停止监控，未确认上位机停止")
         raw_record_path = record_path.strip()

@@ -1,9 +1,7 @@
 import re
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QListWidget, QGroupBox, QMessageBox, QFrame, QWidget
-)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent,Qt
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QListWidget, QGroupBox, QMessageBox
+
 
 
 class AiBarcodeRuleDialog(QDialog):
@@ -16,10 +14,14 @@ class AiBarcodeRuleDialog(QDialog):
     4. 允许输入任意测试条码实时验证比对。
     5. 点击“确认应用规则到配方”即可自动将正则表达式填入配方设置。
     """
-    def __init__(self, parent=None, initial_regex="", default_samples=None):
+    def __init__(self, parent=None, initial_regex="", default_samples=None,scanner=None):
         super().__init__(parent)
+        self.scanner=scanner
+        self._scanner_owned=False
+        self._scan_target='sample'
         self.setWindowTitle("🤖 AI 条码样本推导与测试规则引擎")
-        self.setFixedSize(760, 680)
+        self.resize(860, 680)
+        self.setMinimumSize(480, 420)
         self.setStyleSheet("""
             QDialog {
                 background-color: #1A1A2E;
@@ -49,15 +51,17 @@ class AiBarcodeRuleDialog(QDialog):
             }
         """)
 
-        self.generated_regex = initial_regex or "^.+$"
-        self.samples = list(default_samples or [
-            "SCUx03XP010010B126091",
-            "SCUx03XP010010B126092",
-            "SCUx03XP020015B126093"
-        ])
+        self.generated_regex = initial_regex or ""
+        self.samples = list(default_samples or [])
 
         self._init_ui()
+        from ui.layout_safety import protect_form_layout
+        protect_form_layout(self)
         self._recalculate_ai_rule()
+        self.scan_input.installEventFilter(self)
+        self.verify_input.installEventFilter(self)
+        for button in self.findChildren(QPushButton):
+            button.setAutoDefault(False);button.setDefault(False)
 
     def _init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -103,6 +107,9 @@ class AiBarcodeRuleDialog(QDialog):
         input_layout.addWidget(btn_delete)
         input_layout.addWidget(btn_clear)
         main_layout.addLayout(input_layout)
+        self.lbl_scanner_status=QLabel('支持人工输入、粘贴或键盘扫码；串口扫码需先在硬件管理中心连接。')
+        self.lbl_scanner_status.setWordWrap(True);self.lbl_scanner_status.setTextFormat(Qt.PlainText)
+        main_layout.addWidget(self.lbl_scanner_status)
 
         # -------------------------------------------------------------
         # 3. 样本列表展示框
@@ -240,6 +247,53 @@ class AiBarcodeRuleDialog(QDialog):
 
         self.scan_input.setFocus()
 
+    def eventFilter(self,obj,event):
+        if event.type()==QEvent.FocusIn:
+            if obj is self.scan_input:self._scan_target='sample'
+            elif obj is self.verify_input:self._scan_target='verify'
+        return super().eventFilter(obj,event)
+
+    def showEvent(self,event):
+        super().showEvent(event)
+        if self._scanner_owned or self.scanner is None:return
+        if not self.scanner.config.get('scanner_enabled',False):
+            self.lbl_scanner_status.setText('串口扫码未启用；仍可人工输入、粘贴或键盘扫码。');return
+        if not self.scanner.port.isOpen():
+            self.lbl_scanner_status.setText('扫码器串口未连接，请先在硬件管理中心初始化；仍可人工输入。');return
+        self.scanner.barcode.connect(self._on_serial_barcode)
+        self.scanner.status.connect(self._on_scanner_status)
+        if self.scanner.begin_scan(self,continuous=True):
+            self._scanner_owned=True
+            self.lbl_scanner_status.setText('串口扫码已就绪：上框录入样本，下框验证规则；点击输入框切换，人工输入同样可用。')
+        else:
+            self.scanner.barcode.disconnect(self._on_serial_barcode)
+            self.scanner.status.disconnect(self._on_scanner_status)
+            self.lbl_scanner_status.setText('扫码器正被其他任务使用；仍可人工输入，结束其他扫码任务后重新打开本窗口。')
+
+    def _on_scanner_status(self,message):
+        if self._scanner_owned:self.lbl_scanner_status.setText(message)
+
+    def _on_serial_barcode(self,barcode):
+        if not self._scanner_owned or not self.isVisible() or self.scanner.owner is not self:return
+        if self._scan_target=='verify':
+            self.verify_input.setText(barcode)
+            self.lbl_scanner_status.setText('已扫码到测试条码框；也可直接编辑该条码。')
+        else:
+            # Preserve a partially typed manual sample; serial data is its own sample.
+            if barcode not in self.samples:
+                self.samples.append(barcode)
+                self._refresh_samples_list_ui();self._recalculate_ai_rule()
+                self.lbl_scanner_status.setText('已扫码添加样本，可继续扫码；人工输入后按回车或添加样本。')
+            else:self.lbl_scanner_status.setText('该条码样本已存在，请扫描其他样本。')
+
+    def hideEvent(self,event):
+        if self._scanner_owned:
+            self._scanner_owned=False
+            self.scanner.end_scan(self)
+            self.scanner.barcode.disconnect(self._on_serial_barcode)
+            self.scanner.status.disconnect(self._on_scanner_status)
+        super().hideEvent(event)
+
     def _refresh_samples_list_ui(self):
         self.samples_list_widget.clear()
         for idx, sample in enumerate(self.samples, 1):
@@ -266,6 +320,8 @@ class AiBarcodeRuleDialog(QDialog):
         curr_row = self.samples_list_widget.currentRow()
         if 0 <= curr_row < len(self.samples):
             self.samples.pop(curr_row)
+            if not self.samples:
+                self.generated_regex = ""
             self._refresh_samples_list_ui()
             self._recalculate_ai_rule()
 
@@ -273,13 +329,13 @@ class AiBarcodeRuleDialog(QDialog):
         if not self.samples:
             return
         self.samples.clear()
+        self.generated_regex = ""
         self._refresh_samples_list_ui()
         self._recalculate_ai_rule()
 
     def _recalculate_ai_rule(self):
         if not self.samples:
-            self.generated_regex = "^.+$"
-            self.lbl_regex_result.setText(self.generated_regex)
+            self.lbl_regex_result.setText(self.generated_regex or "请先扫描或输入真实条码样本")
             self.lbl_analysis_details.setText("前缀: 无 | 后缀: 无 | 变化号段: 无 | 样本数: 0 个")
             self._on_verify_text_changed(self.verify_input.text())
             return
@@ -311,7 +367,7 @@ class AiBarcodeRuleDialog(QDialog):
         # 多样本对比分析核心逻辑
         first = self.samples[0]
         min_len_sample = min(len(s) for s in self.samples)
-        
+
         # 1. 最长公共前缀 LCP
         lcp_len = 0
         for i in range(min_len_sample):
@@ -367,7 +423,7 @@ class AiBarcodeRuleDialog(QDialog):
 
         self.generated_regex = f"^{safe_prefix}{mid_regex}{safe_suffix}$"
         self.lbl_regex_result.setText(self.generated_regex)
-        
+
         prefix_desc = f"'{prefix}' ({len(prefix)}位)" if prefix else "无"
         suffix_desc = f"'{suffix}' ({len(suffix)}位)" if suffix else "无"
         mid_desc = f"{mid_pattern}[{mid_min_len}~{mid_max_len}]" if mid_pattern else "无"
@@ -377,7 +433,7 @@ class AiBarcodeRuleDialog(QDialog):
 
     def _on_verify_text_changed(self, text=""):
         verify_str = text.strip()
-        if not verify_str:
+        if not verify_str or not self.generated_regex:
             self.lbl_verify_status.setText("等待验证...")
             self.lbl_verify_status.setStyleSheet("color: #888888; font-size: 13px; font-weight: bold;")
             return

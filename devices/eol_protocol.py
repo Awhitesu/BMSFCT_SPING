@@ -47,7 +47,6 @@ class EOLProtocol:
             print(log_msg)
 
         def matcher(msg):
-            mid = msg.get('can_id')
             data = msg.get("data", b"")
             # 记录所有进入 matcher 的报文，排查 seen_index 是否正常
             # print(f"[MATCHER-TRACE] ID=0x{mid:X} DATA={data.hex(' ').upper()}")
@@ -248,7 +247,7 @@ class EOLProtocol:
         elif op_name == "EEPROM测试":
             try:
                 if logger:
-                    logger(f"[*] 启动特殊执行下3.5H EOL EEPROM 自动化回路校验测试...")
+                    logger("[*] 启动特殊执行下3.5H EOL EEPROM 自动化回路校验测试...")
 
                 # A. 提取 TX_ID, RX_ID 并进行安全转换
                 def _get_id(val, default):
@@ -489,7 +488,7 @@ class EOLProtocol:
                 # 将接收的数据与固定数据进行比对
                 if len(received_groups) < 1:
                     if logger:
-                        logger(f"[EEPROM STEP 3] 错误: 未收齐第 1 组回读数据")
+                        logger("[EEPROM STEP 3] 错误: 未收齐第 1 组回读数据")
                     return EOLResult(False, error="未完整回读数据", value="测试失败")
 
                 # 比对数据一致性
@@ -510,7 +509,6 @@ class EOLProtocol:
                 if logger:
                     logger("[EEPROM CLEANUP] 开始进行擦除恢复，将第 1 组地址块写入 FF FF FF FF...")
 
-                cleanup_success = True
                 for i in [1]:
                     tx_cleanup = bytes([self.REQUEST_PREFIX, 0x0A, 0x05, i, 0xFF, 0xFF, 0xFF, 0xFF])
                     
@@ -554,7 +552,6 @@ class EOLProtocol:
 
                     if not cleanup_group_success:
                         if logger: logger(f"[EEPROM CLEANUP] 警告: 未收到第 {i} 组恢复擦除的肯定响应 (已重试10次)")
-                        cleanup_success = False
 
                     # 间隔 80ms (防 Windows 计时器精度抖动，确保严格大于 50ms)
                     time.sleep(0.08)
@@ -575,7 +572,7 @@ class EOLProtocol:
         elif op_name == "绝缘测试":
             try:
                 if logger:
-                    logger(f"[*] 启动特殊执行下3.5H EOL 绝缘测试自动化校验...")
+                    logger("[*] 启动特殊执行下3.5H EOL 绝缘测试自动化校验...")
 
                 # A. 提取 TX_ID, RX_ID 并进行安全转换
                 def _get_id(val, default):
@@ -917,7 +914,7 @@ class EOLProtocol:
                             if logger: logger(f"[ADC HIGHSPEED] 4秒采集结束，共采集 {count} 次有效数据，最大值为: {max_val}")
                             return EOLResult(True, value=max_val)
                         else:
-                            if logger: logger(f"[ADC HIGHSPEED] 错误: 未能在4秒内采集到有效数据")
+                            if logger: logger("[ADC HIGHSPEED] 错误: 未能在4秒内采集到有效数据")
                             return EOLResult(False, error="4秒高频采样无有效数据", value=0.0)
                 except Exception as ex:
                     if logger: logger(f"[WARNING] ADC特殊采样解析异常: {ex}")
@@ -1111,7 +1108,7 @@ class EOLProtocol:
                     last_result.value = max_val
                     return last_result
                 else:
-                    log_fn(f"[WARNING] 最大值滤波采样期间未采集到任何有效物理数值，以最后一次返回作为兜底。")
+                    log_fn("[WARNING] 最大值滤波采样期间未采集到任何有效物理数值，以最后一次返回作为兜底。")
                     return last_result if last_result else EOLResult(False, error="采样期间全数失败")
 
             # --- 最接近设定值采样滤波机制 (支持 SAMPLES:10, TARGET:2.5) ---
@@ -1236,7 +1233,7 @@ class EOLProtocol:
                     last_result.value = closest_val
                     return last_result
                 else:
-                    log_fn(f"[WARNING] 最接近值滤波采样期间未采集到任何有效物理数值，以最后一次返回作为兜底。")
+                    log_fn("[WARNING] 最接近值滤波采样期间未采集到任何有效物理数值，以最后一次返回作为兜底。")
                     return last_result if last_result else EOLResult(False, error="采样期间全数失败")
 
             # --- 均值采样滤波机制 (支持 SAMPLES:10, INTERVAL:0.02) ---
@@ -1312,7 +1309,7 @@ class EOLProtocol:
                     last_result.value = round(avg_val, 3)
                     return last_result
                 else:
-                    log_fn(f"[WARNING] 均值滤波采样期间未采集到任何有效物理数值，以最后一次返回作为兜底。")
+                    log_fn("[WARNING] 均值滤波采样期间未采集到任何有效物理数值，以最后一次返回作为兜底。")
                     return last_result if last_result else EOLResult(False, error="采样期间全数失败")
 
             # --- 常规单次读取逻辑 ---

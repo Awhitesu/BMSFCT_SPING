@@ -2,6 +2,7 @@
 import math
 import socket
 import threading
+import time
 
 
 class Keysight34461A:
@@ -25,11 +26,15 @@ class Keysight34461A:
 
     def disconnect(self):
         with self._lock:
-            if self.sock:
-                self.sock.close()
+            sock = self.sock
             self.sock = None
             self._buffer = b''
             self.is_connected = False
+            if sock:
+                try:
+                    sock.close()
+                except OSError as exc:
+                    self.last_error = str(exc)
 
     def connect(self):
         with self._lock:
@@ -42,6 +47,7 @@ class Keysight34461A:
                 if self.MODEL not in self.identity.upper():
                     raise ValueError(f'设备型号不匹配：{self.identity}')
                 self.last_error = ''
+                self._ever_connected = True
                 return True
             except Exception as exc:
                 self.last_error = str(exc)
@@ -79,17 +85,41 @@ class Keysight34461A:
         return self.command(text)
 
     def measure(self, function, range_value='AUTO'):
-        command, unit = self.FUNCTIONS[function]
-        if command in ('DIOD', 'CONT'):
-            query = f'MEAS:{command}?'
-        else:
-            if range_value != 'AUTO':
-                number = float(range_value)
-                if not math.isfinite(number) or number <= 0:
-                    raise ValueError('量程必须为正数')
-                range_value = str(number)
-            query = f'MEAS:{command}? {range_value}'
-        value = float(self.query(query))
-        if not math.isfinite(value) or abs(value) >= 9e37:
-            raise ValueError('仪表超量程或测量无效')
-        return value, unit
+        with self._lock:
+            if function not in self.FUNCTIONS:
+                raise ValueError('Unsupported 34461A measurement function')
+            command,unit=self.FUNCTIONS[function]
+            if command in ('DIOD','CONT'):
+                query=f'MEAS:{command}?'
+            else:
+                if isinstance(range_value,bool):raise ValueError('Range must be AUTO or a positive number')
+                if str(range_value).strip().upper()=='AUTO':
+                    range_value='AUTO'
+                else:
+                    number=float(range_value)
+                    if not math.isfinite(number) or number<=0:
+                        raise ValueError('Range must be AUTO or a positive number')
+                    range_value=str(number)
+                query=f'MEAS:{command}? {range_value}'
+            started=time.perf_counter()
+            self.last_measurement=dict(status='pending',function=command,requested_range=range_value,unit=unit)
+            try:
+                raw=self.query(query)
+                self.last_measurement['raw']=raw
+                value=float(raw)
+                self.last_measurement['value']=value
+                if not math.isfinite(value):
+                    self.last_measurement['status']='invalid'
+                    raise ValueError(f'34461A invalid measurement: function={command}, range={range_value}, raw={raw}')
+                if abs(value)>=9e37:
+                    self.last_measurement['status']='overrange'
+                    raise ValueError(f'34461A overrange: function={command}, range={range_value}, raw={raw}')
+                self.last_measurement['status']='ok'
+                self.last_error=''
+                return value,unit
+            except Exception as exc:
+                if self.last_measurement['status']=='pending':self.last_measurement['status']='error'
+                self.last_error=str(exc)
+                raise
+            finally:
+                self.last_measurement['elapsed_s']=time.perf_counter()-started

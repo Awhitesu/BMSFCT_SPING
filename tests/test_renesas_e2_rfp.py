@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from devices.renesas_e2_rfp import RenesasE2Rfp
+from devices.windows_usb import UsbDevice
 
 
 class FakeProc:
@@ -40,6 +41,11 @@ class TestRenesasE2RfpDriver(unittest.TestCase):
             interface="FINE",
             speed="1000000",
         )
+        self.drv.tool_ready = True
+        probe = patch('devices.renesas_e2_rfp.present_usb_devices', return_value=[
+            UsbDevice(r'USB\VID_045B&PID_82A1\TEST_E2', True, 0)])
+        probe.start()
+        self.addCleanup(probe.stop)
 
     def test_build_flash_command(self):
         with patch("os.path.isfile", return_value=True):
@@ -65,7 +71,7 @@ class TestRenesasE2RfpDriver(unittest.TestCase):
         self.assertEqual(
             cmd,
             ["C:/rfp/rfp-cli.exe", "-d", "RH850", "-t", "e2", "-if", "FINE",
-             "-s", "1000000", "-read", "0x0", "256", "C:/tmp/out.bin"],
+             "-s", "1000000", "-read-bin", "0", "256", "C:/tmp/out.bin"],
         )
 
     def test_resolve_exe_configured_path(self):
@@ -83,7 +89,9 @@ class TestRenesasE2RfpDriver(unittest.TestCase):
                 patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="RFP CLI V3.15\n", stderr="")
             self.assertTrue(self.drv.connect())
+        self.assertTrue(self.drv.tool_ready)
         self.assertTrue(self.drv.is_connected)
+        self.assertEqual(self.drv.query_state(), "Ready")
         self.assertEqual(self.drv.last_error, "")
         mock_run.assert_called_once()
         self.assertEqual(mock_run.call_args[0][0], ["C:/rfp/rfp-cli.exe", "--version"])
@@ -103,9 +111,11 @@ class TestRenesasE2RfpDriver(unittest.TestCase):
         self.assertIn("未找到 rfp-cli.exe", drv.last_error)
 
     def test_query_state_lost_when_disconnected(self):
+        self.drv.tool_ready = False
         self.assertEqual(self.drv.query_state(), "Lost")
-        self.drv.is_connected = True
+        self.drv.tool_ready = True
         self.assertEqual(self.drv.query_state(), "Ready")
+        self.assertTrue(self.drv.is_connected)
 
     def test_run_project_success(self):
         fake = FakeProc(lines=["Connecting...\n", "Program OK\n"], returncode=0)
@@ -167,7 +177,7 @@ class TestRenesasE2RfpDriver(unittest.TestCase):
         self.assertIn("line2", log)
 
     def test_get_checksum_parses_output(self):
-        self.drv.is_connected = True
+        self.drv.tool_ready = True
         with patch("os.path.isfile", return_value=True), \
                 patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
@@ -176,9 +186,10 @@ class TestRenesasE2RfpDriver(unittest.TestCase):
         self.assertEqual(crc, "0x00ABCDEF")
 
     def test_disconnect(self):
-        self.drv.is_connected = True
+        self.drv.tool_ready = True
         self.assertTrue(self.drv.disconnect())
         self.assertFalse(self.drv.is_connected)
+        self.assertFalse(self.drv.tool_ready)
         self.assertEqual(self.drv.query_state(), "Lost")
 
 

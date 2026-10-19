@@ -19,9 +19,13 @@ class DG2052(Keysight34461A):
             manager,self._rm=self._rm,None
             try:
                 if instrument: instrument.close()
+            except Exception as exc:
+                self.last_error = str(exc)
             finally:
                 try:
                     if manager: manager.close()
+                except Exception as exc:
+                    self.last_error = str(exc)
                 finally:
                     super().disconnect()
                     self.transport=''
@@ -44,6 +48,7 @@ class DG2052(Keysight34461A):
                         if self.MODEL not in self.identity.upper(): raise ValueError(f'设备型号不匹配：{self.identity}')
                         self.transport=f'VISA / {resource}'+(' / pyvisa-py' if backend else '')
                         self.last_error=''
+                        self._ever_connected = True
                         return True
                     except Exception as exc:
                         errors.append(f'VISA{backend}: {exc}')
@@ -51,6 +56,7 @@ class DG2052(Keysight34461A):
             if self.connect_mode in ('AUTO','SOCKET') and not self.ip.upper().startswith('TCPIP'):
                 if super().connect():
                     self.transport=f'TCP Socket / {self.ip}:{self.port}'
+                    self._ever_connected = True
                     return True
                 errors.append(f'TCP Socket {self.ip}:{self.port}: {self.last_error}')
             self.last_error='；'.join(errors) or '连接方式或资源地址无效'
@@ -71,7 +77,7 @@ class DG2052(Keysight34461A):
 
     @staticmethod
     def channel(ch):
-        if ch not in (1, 2):
+        if type(ch) is not int or ch not in (1, 2):
             raise ValueError('DG2052 仅支持 CH1、CH2')
 
     def check_error(self):
@@ -101,10 +107,31 @@ class DG2052(Keysight34461A):
             for command in commands:
                 self.command(command)
                 self.check_error()
-            return self.read_channel(ch)
+            actual = self.read_channel(ch)
+            self.verify_configuration(actual, wave, frequency, amplitude, offset, load)
+            return actual
+
+    @staticmethod
+    def verify_configuration(actual, wave, frequency, amplitude, offset, load):
+        if actual.get('波形', '').upper()[:3] != wave[:3] or actual.get('幅值单位', '').upper() != 'VPP':
+            raise ValueError('波形或幅值单位回读不一致')
+        expected = [('幅值', amplitude), ('偏置(V)', offset)]
+        if wave not in ('NOIS', 'DC'):
+            expected.append(('频率(Hz)', frequency))
+        for name, target in expected:
+            value = float(actual[name])
+            if not math.isfinite(value) or not math.isclose(value, target, rel_tol=1e-6, abs_tol=1e-6):
+                raise ValueError(f'{name}回读不一致：设定{target}，回读{value}')
+        impedance = float(actual['负载(Ω)'])
+        if (not math.isfinite(impedance) or
+                (load == '50' and not math.isclose(impedance, 50, abs_tol=.01)) or
+                (load == 'INF' and impedance < 1e6)):
+            raise ValueError('负载回读不一致')
 
     def output_control(self, ch, state):
         self.channel(ch)
+        if state not in (True, False):
+            raise ValueError('输出状态必须为开或关')
         with self._lock:
             self.command(f':OUTP{ch} {"ON" if state else "OFF"}')
             self.check_error()

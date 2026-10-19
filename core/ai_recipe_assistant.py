@@ -7,7 +7,7 @@
 4. 返回新配方与人类可读的变更摘要，由界面预览、用户确认后才落盘。
 """
 
-import copy
+
 import json
 import re
 from typing import Any, Dict, List, Tuple
@@ -36,7 +36,7 @@ SYSTEM_PROMPT = """你是一名 BMS 测试配方编辑助手。用户会给你�
 - recipe_number: 整数，PLC 配方号
 - plc_recipe_register: 整数
 - sn_regex: 条码正则表达式字符串
-- can_config: {"channel": "PCAN_USBBUS1"~"PCAN_USBBUS16", "mode": "经典 CAN"|"CAN-FD"|"CAN-FD + BRS", "nominal_bitrate": int, "data_bitrate": int}
+- can_config: {"channel": "PCAN_USBBUS1"|"ZLG_CAN1"|"ZLG_CAN2"|"ZLG_CAN3"|"ZLG_CAN4", "mode": "经典 CAN"|"CAN-FD"|"CAN-FD + BRS", "nominal_bitrate": int, "data_bitrate": int}。只有PCAN和ZLG CANFDNET-400U两类卡，ZLG_CAN1–4是同一卡的物理通道。
 - items: 测试项数组，每项：
   - name: 测试项名称
   - mode: "范围判定"（数值类）或 "字符串比对"（字符串类）

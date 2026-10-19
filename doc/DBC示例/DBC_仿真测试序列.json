@@ -1,0 +1,221 @@
+{
+  "name": "DBC_仿真示例_请勿直接用于生产",
+  "project_no": "DBC-DEMO",
+  "model_name": "Simulation only",
+  "recipe_number": 0,
+  "sn_regex": "^DBC_DEMO_[0-9]+$",
+  "can_config": {
+    "channel": "PCAN_USBBUS1",
+    "mode": "经典 CAN",
+    "nominal_bitrate": 500000,
+    "data_bitrate": 2000000
+  },
+  "dbc": {
+    "name": "BMS_DBC_仿真示例.dbc",
+    "text": "VERSION \"BMSFCT simulation example - NOT a production protocol\"\r\nNS_ :\r\nBS_:\r\nBU_: BMS Tester\r\nBO_ 848 BMS_Status: 8 BMS\r\n SG_ PackVoltage : 0|16@1+ (0.1,0) [0|6553.5] \"V\" Tester\r\n SG_ PackCurrent : 16|16@1- (0.1,0) [-3276.8|3276.7] \"A\" Tester\r\n SG_ SOC : 32|8@1+ (0.4,0) [0|100] \"%\" Tester\r\n SG_ BmsState : 40|8@1+ (1,0) [0|3] \"\" Tester\r\n SG_ FaultCount : 48|8@1+ (1,0) [0|255] \"\" Tester\r\n SG_ AliveCounter : 56|8@1+ (1,0) [0|255] \"\" Tester\r\nBO_ 849 BMS_CellStats: 8 BMS\r\n SG_ MinCellVoltage : 0|16@1+ (0.001,0) [0|6] \"V\" Tester\r\n SG_ MaxCellVoltage : 16|16@1+ (0.001,0) [0|6] \"V\" Tester\r\n SG_ MaxTemperature : 32|8@1- (1,0) [-128|127] \"degC\" Tester\r\n SG_ MinTemperature : 40|8@1- (1,0) [-128|127] \"degC\" Tester\r\nVAL_ 848 BmsState 0 \"Sleep\" 1 \"Ready\" 2 \"Run\" 3 \"Fault\";\r\nCM_ \"SIMULATION ONLY. Replace signal definitions and test limits with approved project values.\";\r\n",
+    "sha256": "bc0dc9bf3e5f49260a29288cf797d6b5fef090d9879de2b0a9c1ad8115ce32c6"
+  },
+  "items": [
+    {
+      "name": "等待BMS就绪",
+      "min": "1",
+      "max": "1",
+      "standard_type": "数值",
+      "retry_count": "不复测",
+      "strategy": "任何NG停止",
+      "unit": "NULL",
+      "sub_steps": [
+        {
+          "name": "读取 BMS_Status.BmsState [0x350]",
+          "type": "CANDBC交互",
+          "device": "CANDBC 交互",
+          "action": "读取DBC信号",
+          "params": "DBC64:eyJtZXNzYWdlIjogIkJNU19TdGF0dXMiLCAic2lnbmFsIjogIkJtc1N0YXRlIiwgImZyYW1lX2lkIjogODQ4LCAiZXh0ZW5kZWQiOiBmYWxzZSwgInVuaXQiOiAiIiwgIm1pbmltdW0iOiAwLCAibWF4aW11bSI6IDMsICJoYXNfY2hvaWNlcyI6IHRydWUsICJsYWJlbCI6ICJCTVNfU3RhdHVzLkJtc1N0YXRlIFsweDM1MF0iLCAic2hhMjU2IjogImJjMGRjOWJmM2U1ZjQ5MjYwYTI5Mjg4Y2Y3OTdkNmI1ZmVmMDkwZDk4NzlkZTJiMGE5YzFhZDgxMTVjZTMyYzYiLCAib3V0cHV0IjogInZhbHVlIiwgInZhcmlhYmxlIjogIiIsICJ0aW1lb3V0IjogMywgImludGVydmFsIjogMC4wNSwgIm1heF9hZ2UiOiAwLjUsICJuZXdfZnJhbWUiOiB0cnVlfQ== / PCH:1 / RW:eyJtaW4iOiAxLjAsICJtYXgiOiAxLjAsICJ0aW1lb3V0IjogNSwgImludGVydmFsIjogMC4wNSwgImNvbnNlY3V0aXZlIjogMn0=",
+          "is_judgment": true,
+          "fail_strategy": "失败停止"
+        }
+      ]
+    },
+    {
+      "name": "BMS总电压",
+      "min": "340",
+      "max": "380",
+      "standard_type": "数值",
+      "retry_count": "不复测",
+      "strategy": "任何NG停止",
+      "unit": "V",
+      "sub_steps": [
+        {
+          "name": "读取 BMS_Status.PackVoltage [0x350]",
+          "type": "CANDBC交互",
+          "device": "CANDBC 交互",
+          "action": "读取DBC信号",
+          "params": "DBC64:eyJtZXNzYWdlIjogIkJNU19TdGF0dXMiLCAic2lnbmFsIjogIlBhY2tWb2x0YWdlIiwgImZyYW1lX2lkIjogODQ4LCAiZXh0ZW5kZWQiOiBmYWxzZSwgInVuaXQiOiAiViIsICJtaW5pbXVtIjogMCwgIm1heGltdW0iOiA2NTUzLjUsICJoYXNfY2hvaWNlcyI6IGZhbHNlLCAibGFiZWwiOiAiQk1TX1N0YXR1cy5QYWNrVm9sdGFnZSBbMHgzNTBdIiwgInNoYTI1NiI6ICJiYzBkYzliZjNlNWY0OTI2MGEyOTI4OGNmNzk3ZDZiNWZlZjA5MGQ5ODc5ZGUyYjBhOWMxYWQ4MTE1Y2UzMmM2IiwgIm91dHB1dCI6ICJ2YWx1ZSIsICJ2YXJpYWJsZSI6ICJCTVNfUGFja1ZvbHRhZ2UiLCAidGltZW91dCI6IDMsICJpbnRlcnZhbCI6IDAuMDUsICJtYXhfYWdlIjogMC41LCAibmV3X2ZyYW1lIjogdHJ1ZX0= / PCH:1 / RW:eyJtaW4iOiAzNDAuMCwgIm1heCI6IDM4MC4wLCAidGltZW91dCI6IDUsICJpbnRlcnZhbCI6IDAuMDUsICJjb25zZWN1dGl2ZSI6IDJ9",
+          "is_judgment": true,
+          "fail_strategy": "失败停止"
+        }
+      ]
+    },
+    {
+      "name": "静态总电流",
+      "min": "-1",
+      "max": "1",
+      "standard_type": "数值",
+      "retry_count": "不复测",
+      "strategy": "任何NG停止",
+      "unit": "A",
+      "sub_steps": [
+        {
+          "name": "读取 BMS_Status.PackCurrent [0x350]",
+          "type": "CANDBC交互",
+          "device": "CANDBC 交互",
+          "action": "读取DBC信号",
+          "params": "DBC64:eyJtZXNzYWdlIjogIkJNU19TdGF0dXMiLCAic2lnbmFsIjogIlBhY2tDdXJyZW50IiwgImZyYW1lX2lkIjogODQ4LCAiZXh0ZW5kZWQiOiBmYWxzZSwgInVuaXQiOiAiQSIsICJtaW5pbXVtIjogLTMyNzYuOCwgIm1heGltdW0iOiAzMjc2LjcsICJoYXNfY2hvaWNlcyI6IGZhbHNlLCAibGFiZWwiOiAiQk1TX1N0YXR1cy5QYWNrQ3VycmVudCBbMHgzNTBdIiwgInNoYTI1NiI6ICJiYzBkYzliZjNlNWY0OTI2MGEyOTI4OGNmNzk3ZDZiNWZlZjA5MGQ5ODc5ZGUyYjBhOWMxYWQ4MTE1Y2UzMmM2IiwgIm91dHB1dCI6ICJ2YWx1ZSIsICJ2YXJpYWJsZSI6ICJCTVNfUGFja0N1cnJlbnQiLCAidGltZW91dCI6IDMsICJpbnRlcnZhbCI6IDAuMDUsICJtYXhfYWdlIjogMC41LCAibmV3X2ZyYW1lIjogdHJ1ZX0= / PCH:1 / RW:eyJtaW4iOiAtMS4wLCAibWF4IjogMS4wLCAidGltZW91dCI6IDUsICJpbnRlcnZhbCI6IDAuMDUsICJjb25zZWN1dGl2ZSI6IDJ9",
+          "is_judgment": true,
+          "fail_strategy": "失败停止"
+        }
+      ]
+    },
+    {
+      "name": "SOC范围",
+      "min": "20",
+      "max": "100",
+      "standard_type": "数值",
+      "retry_count": "不复测",
+      "strategy": "任何NG停止",
+      "unit": "%",
+      "sub_steps": [
+        {
+          "name": "读取 BMS_Status.SOC [0x350]",
+          "type": "CANDBC交互",
+          "device": "CANDBC 交互",
+          "action": "读取DBC信号",
+          "params": "DBC64:eyJtZXNzYWdlIjogIkJNU19TdGF0dXMiLCAic2lnbmFsIjogIlNPQyIsICJmcmFtZV9pZCI6IDg0OCwgImV4dGVuZGVkIjogZmFsc2UsICJ1bml0IjogIiUiLCAibWluaW11bSI6IDAsICJtYXhpbXVtIjogMTAwLCAiaGFzX2Nob2ljZXMiOiBmYWxzZSwgImxhYmVsIjogIkJNU19TdGF0dXMuU09DIFsweDM1MF0iLCAic2hhMjU2IjogImJjMGRjOWJmM2U1ZjQ5MjYwYTI5Mjg4Y2Y3OTdkNmI1ZmVmMDkwZDk4NzlkZTJiMGE5YzFhZDgxMTVjZTMyYzYiLCAib3V0cHV0IjogInZhbHVlIiwgInZhcmlhYmxlIjogIkJNU19TT0MiLCAidGltZW91dCI6IDMsICJpbnRlcnZhbCI6IDAuMDUsICJtYXhfYWdlIjogMC41LCAibmV3X2ZyYW1lIjogdHJ1ZX0= / PCH:1",
+          "is_judgment": true,
+          "fail_strategy": "失败停止"
+        }
+      ]
+    },
+    {
+      "name": "最高单体电压",
+      "min": "2.5",
+      "max": "4.2",
+      "standard_type": "数值",
+      "retry_count": "不复测",
+      "strategy": "任何NG停止",
+      "unit": "V",
+      "sub_steps": [
+        {
+          "name": "读取 BMS_CellStats.MaxCellVoltage [0x351]",
+          "type": "CANDBC交互",
+          "device": "CANDBC 交互",
+          "action": "读取DBC信号",
+          "params": "DBC64:eyJtZXNzYWdlIjogIkJNU19DZWxsU3RhdHMiLCAic2lnbmFsIjogIk1heENlbGxWb2x0YWdlIiwgImZyYW1lX2lkIjogODQ5LCAiZXh0ZW5kZWQiOiBmYWxzZSwgInVuaXQiOiAiViIsICJtaW5pbXVtIjogMCwgIm1heGltdW0iOiA2LCAiaGFzX2Nob2ljZXMiOiBmYWxzZSwgImxhYmVsIjogIkJNU19DZWxsU3RhdHMuTWF4Q2VsbFZvbHRhZ2UgWzB4MzUxXSIsICJzaGEyNTYiOiAiYmMwZGM5YmYzZTVmNDkyNjBhMjkyODhjZjc5N2Q2YjVmZWYwOTBkOTg3OWRlMmIwYTljMWFkODExNWNlMzJjNiIsICJvdXRwdXQiOiAidmFsdWUiLCAidmFyaWFibGUiOiAiQk1TX01heENlbGwiLCAidGltZW91dCI6IDMsICJpbnRlcnZhbCI6IDAuMDUsICJtYXhfYWdlIjogMC41LCAibmV3X2ZyYW1lIjogdHJ1ZX0= / PCH:1",
+          "is_judgment": true,
+          "fail_strategy": "失败停止"
+        }
+      ]
+    },
+    {
+      "name": "最低单体电压",
+      "min": "2.5",
+      "max": "4.2",
+      "standard_type": "数值",
+      "retry_count": "不复测",
+      "strategy": "任何NG停止",
+      "unit": "V",
+      "sub_steps": [
+        {
+          "name": "读取 BMS_CellStats.MinCellVoltage [0x351]",
+          "type": "CANDBC交互",
+          "device": "CANDBC 交互",
+          "action": "读取DBC信号",
+          "params": "DBC64:eyJtZXNzYWdlIjogIkJNU19DZWxsU3RhdHMiLCAic2lnbmFsIjogIk1pbkNlbGxWb2x0YWdlIiwgImZyYW1lX2lkIjogODQ5LCAiZXh0ZW5kZWQiOiBmYWxzZSwgInVuaXQiOiAiViIsICJtaW5pbXVtIjogMCwgIm1heGltdW0iOiA2LCAiaGFzX2Nob2ljZXMiOiBmYWxzZSwgImxhYmVsIjogIkJNU19DZWxsU3RhdHMuTWluQ2VsbFZvbHRhZ2UgWzB4MzUxXSIsICJzaGEyNTYiOiAiYmMwZGM5YmYzZTVmNDkyNjBhMjkyODhjZjc5N2Q2YjVmZWYwOTBkOTg3OWRlMmIwYTljMWFkODExNWNlMzJjNiIsICJvdXRwdXQiOiAidmFsdWUiLCAidmFyaWFibGUiOiAiQk1TX01pbkNlbGwiLCAidGltZW91dCI6IDMsICJpbnRlcnZhbCI6IDAuMDUsICJtYXhfYWdlIjogMC41LCAibmV3X2ZyYW1lIjogdHJ1ZX0= / PCH:1",
+          "is_judgment": true,
+          "fail_strategy": "失败停止"
+        }
+      ]
+    },
+    {
+      "name": "最高温度",
+      "min": "-20",
+      "max": "60",
+      "standard_type": "数值",
+      "retry_count": "不复测",
+      "strategy": "任何NG停止",
+      "unit": "degC",
+      "sub_steps": [
+        {
+          "name": "读取 BMS_CellStats.MaxTemperature [0x351]",
+          "type": "CANDBC交互",
+          "device": "CANDBC 交互",
+          "action": "读取DBC信号",
+          "params": "DBC64:eyJtZXNzYWdlIjogIkJNU19DZWxsU3RhdHMiLCAic2lnbmFsIjogIk1heFRlbXBlcmF0dXJlIiwgImZyYW1lX2lkIjogODQ5LCAiZXh0ZW5kZWQiOiBmYWxzZSwgInVuaXQiOiAiZGVnQyIsICJtaW5pbXVtIjogLTEyOCwgIm1heGltdW0iOiAxMjcsICJoYXNfY2hvaWNlcyI6IGZhbHNlLCAibGFiZWwiOiAiQk1TX0NlbGxTdGF0cy5NYXhUZW1wZXJhdHVyZSBbMHgzNTFdIiwgInNoYTI1NiI6ICJiYzBkYzliZjNlNWY0OTI2MGEyOTI4OGNmNzk3ZDZiNWZlZjA5MGQ5ODc5ZGUyYjBhOWMxYWQ4MTE1Y2UzMmM2IiwgIm91dHB1dCI6ICJ2YWx1ZSIsICJ2YXJpYWJsZSI6ICIiLCAidGltZW91dCI6IDMsICJpbnRlcnZhbCI6IDAuMDUsICJtYXhfYWdlIjogMC41LCAibmV3X2ZyYW1lIjogdHJ1ZX0= / PCH:1",
+          "is_judgment": true,
+          "fail_strategy": "失败停止"
+        }
+      ]
+    },
+    {
+      "name": "无故障",
+      "min": "0",
+      "max": "0",
+      "standard_type": "数值",
+      "retry_count": "不复测",
+      "strategy": "任何NG停止",
+      "unit": "NULL",
+      "sub_steps": [
+        {
+          "name": "读取 BMS_Status.FaultCount [0x350]",
+          "type": "CANDBC交互",
+          "device": "CANDBC 交互",
+          "action": "读取DBC信号",
+          "params": "DBC64:eyJtZXNzYWdlIjogIkJNU19TdGF0dXMiLCAic2lnbmFsIjogIkZhdWx0Q291bnQiLCAiZnJhbWVfaWQiOiA4NDgsICJleHRlbmRlZCI6IGZhbHNlLCAidW5pdCI6ICIiLCAibWluaW11bSI6IDAsICJtYXhpbXVtIjogMjU1LCAiaGFzX2Nob2ljZXMiOiBmYWxzZSwgImxhYmVsIjogIkJNU19TdGF0dXMuRmF1bHRDb3VudCBbMHgzNTBdIiwgInNoYTI1NiI6ICJiYzBkYzliZjNlNWY0OTI2MGEyOTI4OGNmNzk3ZDZiNWZlZjA5MGQ5ODc5ZGUyYjBhOWMxYWQ4MTE1Y2UzMmM2IiwgIm91dHB1dCI6ICJ2YWx1ZSIsICJ2YXJpYWJsZSI6ICIiLCAidGltZW91dCI6IDMsICJpbnRlcnZhbCI6IDAuMDUsICJtYXhfYWdlIjogMC41LCAibmV3X2ZyYW1lIjogdHJ1ZX0= / PCH:1 / RW:eyJtaW4iOiAwLjAsICJtYXgiOiAwLjAsICJ0aW1lb3V0IjogNSwgImludGVydmFsIjogMC4wNSwgImNvbnNlY3V0aXZlIjogMn0=",
+          "is_judgment": true,
+          "fail_strategy": "失败停止"
+        }
+      ]
+    },
+    {
+      "name": "状态文字",
+      "min": "Ready",
+      "max": "--",
+      "standard_type": "字符串",
+      "retry_count": "不复测",
+      "strategy": "任何NG停止",
+      "unit": "NULL",
+      "sub_steps": [
+        {
+          "name": "读取 BMS_Status.BmsState [0x350]",
+          "type": "CANDBC交互",
+          "device": "CANDBC 交互",
+          "action": "读取DBC信号",
+          "params": "DBC64:eyJtZXNzYWdlIjogIkJNU19TdGF0dXMiLCAic2lnbmFsIjogIkJtc1N0YXRlIiwgImZyYW1lX2lkIjogODQ4LCAiZXh0ZW5kZWQiOiBmYWxzZSwgInVuaXQiOiAiIiwgIm1pbmltdW0iOiAwLCAibWF4aW11bSI6IDMsICJoYXNfY2hvaWNlcyI6IHRydWUsICJsYWJlbCI6ICJCTVNfU3RhdHVzLkJtc1N0YXRlIFsweDM1MF0iLCAic2hhMjU2IjogImJjMGRjOWJmM2U1ZjQ5MjYwYTI5Mjg4Y2Y3OTdkNmI1ZmVmMDkwZDk4NzlkZTJiMGE5YzFhZDgxMTVjZTMyYzYiLCAib3V0cHV0IjogImNob2ljZSIsICJ2YXJpYWJsZSI6ICIiLCAidGltZW91dCI6IDMsICJpbnRlcnZhbCI6IDAuMDUsICJtYXhfYWdlIjogMC41LCAibmV3X2ZyYW1lIjogdHJ1ZX0= / PCH:1",
+          "is_judgment": true,
+          "fail_strategy": "失败停止"
+        }
+      ]
+    },
+    {
+      "name": "单体压差",
+      "min": "0",
+      "max": "0.1",
+      "unit": "V",
+      "standard_type": "数值",
+      "retry_count": "不复测",
+      "strategy": "任何NG停止",
+      "sub_steps": [
+        {
+          "name": "最高单体减最低单体",
+          "type": "公式计算",
+          "device": "公式计算 (Calculate)",
+          "action": "公式计算",
+          "params": "FORMULA:BMS_MaxCell - BMS_MinCell",
+          "is_judgment": true,
+          "fail_strategy": "失败停止"
+        }
+      ]
+    }
+  ],
+  "example_only": true
+}

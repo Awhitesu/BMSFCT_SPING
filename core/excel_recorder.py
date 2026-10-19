@@ -1,173 +1,121 @@
-"""测试记录 Excel 导出模块。
-
-每次测试结束后，按 test_id 从 SQLite 数据库读取主记录与测试项判定结果，
-生成格式化 Excel 文件，按 测试记录/项目号/年月日/ 目录归档。
-"""
-
+"""Publish complete reference-format XLS reports for MES collection."""
 import datetime
+import hashlib
+import json
 import os
+from pathlib import Path
 import sqlite3
-import sys
+import shutil
+import tempfile
+import threading
+import time
+from contextlib import contextmanager
 from typing import Optional
+from core.report_settings import validate_settings
+from core.xls_report import build_workbook
 
-from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
-from openpyxl.utils import get_column_letter
+_export_lock=threading.RLock()
 
+@contextmanager
+def _file_lock(folder,filename):
+    """Serialize the same SN/time across processes without publishing an empty XLS."""
+    directory=folder/'.trace';directory.mkdir(parents=True,exist_ok=True)
+    with (directory/(filename+'.lock')).open('a+b') as stream:
+        if stream.seek(0,os.SEEK_END)==0:stream.write(b'0');stream.flush()
+        deadline=time.monotonic()+3
+        import msvcrt
+        while True:
+            stream.seek(0)
+            try:msvcrt.locking(stream.fileno(),msvcrt.LK_NBLCK,1);break
+            except OSError:
+                if time.monotonic()>=deadline:raise RuntimeError('同名报告正在写入，请稍后重试导出。')
+                time.sleep(.02)
+        try:yield
+        finally:
+            stream.seek(0);msvcrt.locking(stream.fileno(),msvcrt.LK_UNLCK,1)
 
-def _default_root_dir() -> str:
-    """与 DBManager 保持一致：打包后锚定到 exe 目录，源码运行锚定到项目根目录"""
-    if getattr(sys, "frozen", False):
-        return os.path.dirname(os.path.abspath(sys.executable))
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+def extract_project_no(recipe_name):
+    return (str(recipe_name or '').strip().split('_')[0].strip() or '未知项目')
 
+def _sanitize(text):
+    value=''.join(c for c in str(text or '') if c.isalnum() or c in '_-')[:64] or 'UNKNOWN'
+    if value.upper() in {'CON','PRN','AUX','NUL',*[f'COM{i}' for i in range(1,10)],*[f'LPT{i}' for i in range(1,10)]}:value='_'+value
+    return value
 
-def extract_project_no(recipe_name: str) -> str:
-    """从配方名取项目号：按下划线取第一段，如 DJ2513_Aging66666 -> DJ2513"""
-    name = (recipe_name or "").strip()
-    if not name:
-        return "未知项目"
-    first = name.split("_")[0].strip()
-    return first or "未知项目"
+def _parse_time(value):
+    try:return datetime.datetime.fromisoformat(value or '')
+    except ValueError:return None
 
+def _duration(start,end):
+    if end is None:return ''
+    seconds=max(0,int((end-start).total_seconds()))
+    return (f'{seconds//3600:02d}:{seconds//60%60:02d}:{seconds%60:02d}' if seconds>=3600 else f'{seconds//60:02d}:{seconds%60:02d}')
 
-def _sanitize(text: str) -> str:
-    text = "".join(c for c in (text or "") if c.isalnum() or c in "_-")
-    return text or "UNKNOWN"
-
-
-def _parse_time(value: str) -> Optional[datetime.datetime]:
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
-        try:
-            return datetime.datetime.strptime(value or "", fmt)
-        except ValueError:
-            continue
-    return None
-
-
-def export_test_record(db_path: str, test_id: int, base_dir: Optional[str] = None) -> Optional[str]:
-    """导出指定 test_id 的测试记录为 Excel，返回文件绝对路径；记录不存在返回 None。"""
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
+def export_test_record(db_path:str,test_id:int,base_dir:Optional[str]=None,settings=None):
+    conn=sqlite3.connect(db_path);conn.row_factory=sqlite3.Row
     try:
-        main = conn.execute(
-            "SELECT * FROM test_main WHERE test_id = ?", (test_id,)
-        ).fetchone()
-        if main is None:
-            return None
-        items = conn.execute(
-            "SELECT * FROM test_items_results WHERE test_id = ? ORDER BY id ASC",
-            (test_id,),
-        ).fetchall()
-    finally:
-        conn.close()
+        conn.execute('BEGIN')
+        row=conn.execute('SELECT * FROM test_main WHERE test_id=?',(test_id,)).fetchone()
+        if row is None:return None
+        main=dict(row)
+        items=[dict(r) for r in conn.execute('SELECT * FROM test_items_results WHERE test_id=? ORDER BY id',(test_id,))]
+        for item in items:
+            for key in ('lower_limit','upper_limit','measured_value'):
+                if item.get(key+'_raw') is not None:item[key]=item[key+'_raw']
+    finally:conn.close()
+    evidence=json.loads(main.get('context_json') or '{}');recipe=evidence.get('recipe',{})
+    config=validate_settings(evidence.get('report_settings') or settings or {})
+    recipe_name=str(main.get('recipe_name') or '');project=str(recipe.get('project_no') or extract_project_no(recipe_name))
+    start=_parse_time(main.get('start_time'))
+    if start is None:raise ValueError('测试开始时间无效，不能生成带错误时间的MES报告。')
+    verdict=str(main.get('result') or '').upper()
+    if verdict in ('RUNNING',''):return None
+    result={'PASS':'Pass','OK':'Pass','NG':'Fail','FAIL':'Fail'}.get(verdict,verdict)
+    filename=f'{_sanitize(main.get("master_code"))}_{"Pass" if verdict in ("PASS","OK") else "Fail"}({start:%Y%m%d_%H-%M-%S}).xls'
+    root=Path(base_dir if base_dir is not None else config['report_root_dir']).expanduser().resolve()
+    folder=root/_sanitize(project)/start.strftime('%Y-%m-%d')/('PASS' if verdict in ('PASS','OK') else 'FAIL')
+    identity=dict(test_id=test_id,source_key=hashlib.sha256(os.path.normcase(os.path.realpath(db_path)).encode()).hexdigest())
+    info=dict(sn=main.get('master_code') or '',date=start.strftime('%Y/%m/%d'),time=start.strftime('%H:%M:%S'),
+              duration=_duration(start,_parse_time(main.get('end_time'))),result=result,project=project,
+              operator=main.get('operator') or '',model=recipe.get('model_name') or recipe_name,
+              recipe_file=recipe_name if recipe_name.lower().endswith('.json') else recipe_name+'.json',
+              equipment=config['report_equipment_no'],station=config['report_station_name'],
+              position1=config['report_position1'],position2=config['report_position2'])
+    path=_publish_report(folder,filename,identity,evidence,info,items)
+    if config['mes_report_dir']:
+        mes_folder=Path(config['mes_report_dir']).expanduser().resolve()
+        if mes_folder != path.parent:
+            try:_publish_report(mes_folder,filename,identity,evidence,info,items,source_path=path)
+            except Exception as exc:
+                raise RuntimeError(f'测试报告已保存至 {path}；MES文件输出失败：{exc}') from exc
+    return str(path)
 
-    recipe_name = main["recipe_name"] or ""
-    project_no = extract_project_no(recipe_name)
-    start_dt = _parse_time(main["start_time"]) or datetime.datetime.now()
-    date_str = start_dt.strftime("%Y-%m-%d")
-    ts_str = start_dt.strftime("%Y%m%d_%H%M%S")
-    result = main["result"] or ""
-    sn = _sanitize(main["master_code"])
 
-    if base_dir is None:
-        base_dir = os.path.join(_default_root_dir(), "测试记录")
-    out_dir = os.path.join(base_dir, project_no, date_str)
-    os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, f"{sn}_{ts_str}_{result}.xlsx")
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "测试记录"
-
-    title_font = Font(size=14, bold=True)
-    label_font = Font(bold=True)
-    header_font = Font(bold=True, color="FFFFFF")
-    header_fill = PatternFill("solid", fgColor="4472C4")
-    pass_font = Font(bold=True, color="006100")
-    pass_fill = PatternFill("solid", fgColor="C6EFCE")
-    fail_font = Font(bold=True, color="9C0006")
-    fail_fill = PatternFill("solid", fgColor="FFC7CE")
-    center = Alignment(horizontal="center", vertical="center")
-    left = Alignment(horizontal="left", vertical="center")
-
-    # 标题
-    ws.merge_cells("A1:I1")
-    cell = ws.cell(row=1, column=1, value="BMS 测试记录报告")
-    cell.font = title_font
-    cell.alignment = center
-    ws.row_dimensions[1].height = 28
-
-    # 主记录信息块（两列 标签/值 对）
-    info_pairs = [
-        ("项目号", project_no, "配方名称", recipe_name),
-        ("产品条码(SN)", main["master_code"] or "", "开始时间", main["start_time"] or ""),
-        ("结束时间", main["end_time"] or ""),
-    ]
-    row = 3
-    for pair in info_pairs:
-        label_a, value_a = pair[0], pair[1]
-        ws.cell(row=row, column=1, value=label_a).font = label_font
-        ws.cell(row=row, column=2, value=value_a).alignment = left
-        if len(pair) > 2:
-            ws.cell(row=row, column=4, value=pair[2]).font = label_font
-            ws.cell(row=row, column=5, value=pair[3]).alignment = left
-        row += 1
-
-    ws.cell(row=row, column=1, value="总结果").font = label_font
-    result_cell = ws.cell(row=row, column=2, value=result)
-    result_cell.alignment = center
-    if result == "PASS":
-        result_cell.font = pass_font
-        result_cell.fill = pass_fill
-    else:
-        result_cell.font = fail_font
-        result_cell.fill = fail_fill
-    row += 2
-
-    # 测试项判定表
-    headers = ["序号", "测试项", "下限", "上限", "实测值", "单位", "判定", "耗时(s)", "记录时间"]
-    for col, text in enumerate(headers, start=1):
-        c = ws.cell(row=row, column=col, value=text)
-        c.font = header_font
-        c.fill = header_fill
-        c.alignment = center
-    header_row = row
-    row += 1
-
-    for idx, item in enumerate(items, start=1):
-        unit = item["unit"]
-        if unit == "NULL":
-            unit = ""
-        values = [
-            idx,
-            item["item_name"],
-            item["lower_limit"],
-            item["upper_limit"],
-            item["measured_value"],
-            unit,
-            item["result"],
-            item["duration"] if "duration" in item.keys() else None,
-            item["timestamp"],
-        ]
-        for col, value in enumerate(values, start=1):
-            c = ws.cell(row=row, column=col, value=value)
-            c.alignment = center if col != 2 else left
-        verdict = (item["result"] or "").upper()
-        verdict_cell = ws.cell(row=row, column=7)
-        if verdict == "PASS":
-            verdict_cell.font = pass_font
-            verdict_cell.fill = pass_fill
-        elif verdict:
-            verdict_cell.font = fail_font
-            verdict_cell.fill = fail_fill
-        row += 1
-
-    # 列宽
-    widths = [6, 30, 12, 12, 12, 8, 10, 10, 20]
-    for col, width in enumerate(widths, start=1):
-        ws.column_dimensions[get_column_letter(col)].width = width
-    ws.freeze_panes = ws.cell(row=header_row + 1, column=1)
-
-    wb.save(out_path)
-    return os.path.abspath(out_path)
+def _publish_report(folder,filename,identity,evidence,info,items,source_path=None):
+    test_id=identity['test_id']
+    with _export_lock,_file_lock(folder,filename):
+        path=folder/filename;trace_path=folder/'.trace'/(filename+'.json')
+        if path.exists():
+            try:existing=json.loads(trace_path.read_text(encoding='utf-8'))
+            except (OSError,ValueError):existing={}
+            if any(existing.get(k)!=v for k,v in identity.items()):
+                folder=folder/'重复记录'/f'T{test_id}_{identity["source_key"][:8]}'
+                path=folder/filename;trace_path=folder/'.trace'/(filename+'.json')
+        folder.mkdir(parents=True,exist_ok=True);trace_path.parent.mkdir(exist_ok=True)
+        book=build_workbook(info,items) if source_path is None else None;temporary=None;trace_temporary=None
+        try:
+            fd,temporary=tempfile.mkstemp(dir=folder,prefix='.report_',suffix='.tmp')
+            with os.fdopen(fd,'wb') as stream:
+                if source_path is None:book.save(stream)
+                else:
+                    with source_path.open('rb') as source:shutil.copyfileobj(source,stream)
+                stream.flush();os.fsync(stream.fileno())
+            fd,trace_temporary=tempfile.mkstemp(dir=trace_path.parent,suffix='.tmp')
+            with os.fdopen(fd,'w',encoding='utf-8') as stream:
+                json.dump(dict(identity,context=evidence,info=info),stream,ensure_ascii=False,indent=2,allow_nan=False)
+                stream.flush();os.fsync(stream.fileno())
+            os.replace(trace_temporary,trace_path);os.replace(temporary,path)
+        finally:
+            for name in (temporary,trace_temporary):
+                if name and os.path.exists(name):os.unlink(name)
+    return path

@@ -111,7 +111,8 @@ class OpteeQSG400:
 
     def disconnect(self) -> bool:
         with self._lock:
-            if self._dll is None:
+            if self._dll is None or not self.is_connected:
+                # 从未建立连接时无需厂商DLL确认，直接视为已释放（设备不在场退出不报错）
                 self.is_connected = False
                 return True
             try:
@@ -371,6 +372,9 @@ class OpteeQSG400:
                     decoded = self._decode_intel_hex(data, start_addr, size)
                     if decoded:
                         return decoded
+                if len(data) != size:
+                    self.last_error = f'回读长度不一致：期望{size}字节，实际{len(data)}字节'
+                    return b''
                 return data
             except Exception as exc:
                 self.last_error = f"回读芯片数据异常: {exc}"
@@ -392,7 +396,7 @@ class OpteeQSG400:
         if code == 1:
             self.last_error = f"readchip 执行超时 ({timeout_ms}ms)"
             return b""
-        if code == 3:
+        if code not in (2, 4):
             self.last_error = "readchip 执行报错（通道状态 Error）"
             return b""
         # 执行完成后再取应答，大数据量可能分多帧，循环收取

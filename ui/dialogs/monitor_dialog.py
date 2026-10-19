@@ -1,6 +1,4 @@
-from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
-                               QProgressBar, QTreeWidget, QTreeWidgetItem, QTextEdit, 
-                               QPushButton, QFrame)
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar, QTreeWidget, QTreeWidgetItem, QTextEdit, QPushButton
 from PySide6.QtCore import Qt, Slot, QTimer
 from PySide6.QtGui import QColor
 
@@ -287,13 +285,13 @@ class MonitorDialog(QDialog):
                 if orig_idx == worker.current_step_index:
                     item.setText(4, "执行中...")
                     item.setForeground(4, QColor("#00E5FF"))
-                elif step_name in worker.step_statuses:
-                    is_pass = worker.step_statuses[step_name]
+                elif (orig_idx, step_name) in worker.step_statuses:
+                    is_pass = worker.step_statuses[(orig_idx, step_name)]
                     item.setText(4, "PASS" if is_pass else "NG")
                     item.setForeground(4, QColor("#4ECCA3") if is_pass else QColor("#FF4C29"))
                     
                     # 还原历史测量值到界面上！
-                    measured_val = getattr(worker, "step_measured_values", {}).get(step_name)
+                    measured_val = getattr(worker, "step_measured_values", {}).get((orig_idx, step_name))
                     if measured_val is not None and measured_val != "PASS":
                         item.setText(3, str(measured_val))
                         item.setForeground(3, QColor("#00E5FF"))

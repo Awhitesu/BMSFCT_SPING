@@ -4,7 +4,7 @@ import os
 import sqlite3
 import unittest
 
-from openpyxl import load_workbook
+import xlrd
 
 from core.excel_recorder import export_test_record, extract_project_no
 
@@ -74,29 +74,30 @@ class TestExportTestRecord(unittest.TestCase):
             self.assertIsNotNone(out)
             self.assertTrue(os.path.isfile(out))
             # 路径结构: 测试记录/项目号/年月日/SN_时间戳_结果.xlsx
-            self.assertEqual(os.path.basename(os.path.dirname(os.path.dirname(out))), "DJ2513")
-            self.assertEqual(os.path.basename(os.path.dirname(out)), "2026-09-30")
-            self.assertTrue(os.path.basename(out).startswith("SN12345_20260930_100000_PASS"))
+            self.assertEqual(os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(out)))), "DJ2513")
+            self.assertEqual(os.path.basename(os.path.dirname(os.path.dirname(out))), "2026-09-30")
+            self.assertEqual(os.path.basename(os.path.dirname(out)), "PASS")
+            self.assertEqual(os.path.basename(out),"SN12345_Pass(20260930_10-00-00).xls")
 
-            wb = load_workbook(out)
-            ws = wb.active
-            self.assertEqual(ws["A1"].value, "BMS 测试记录报告")
+            wb = xlrd.open_workbook(out,formatting_info=True)
+            ws = wb.sheet_by_index(0)
+            self.assertEqual(ws.cell_value(0,0), "Test Report")
             # 信息块
-            self.assertEqual(ws["A3"].value, "项目号")
-            self.assertEqual(ws["B3"].value, "DJ2513")            # 项目号
-            self.assertEqual(ws["E3"].value, "DJ2513_Aging66666")  # 配方名称
-            self.assertEqual(ws["A4"].value, "产品条码(SN)")
-            self.assertEqual(ws["B4"].value, "SN12345")            # SN
-            self.assertEqual(ws["A6"].value, "总结果")
-            self.assertEqual(ws["B6"].value, "PASS")               # 总结果
+            self.assertEqual(ws.cell_value(8,0), "项目编号：")
+            self.assertEqual(ws.cell_value(8,1), "DJ2513")
+            self.assertEqual(ws.cell_value(10,1), "DJ2513_Aging66666")
+            self.assertEqual(ws.cell_value(2,0), "SN号：")
+            self.assertEqual(ws.cell_value(2,1), "SN12345")
+            self.assertEqual(ws.cell_value(6,0), "测试结果：")
+            self.assertEqual(ws.cell_value(6,1), "Pass")
             # 表头在第 8 行
-            self.assertEqual(ws["A8"].value, "序号")
-            self.assertEqual(ws["B8"].value, "测试项")
+            self.assertEqual(ws.cell_value(17,0), "测试名称")
+            self.assertEqual(ws.cell_value(17,1), "测试值")
             # 两条测试项
-            self.assertEqual(ws["B9"].value, "电压检测")
-            self.assertEqual(ws["G9"].value, "PASS")
-            self.assertEqual(ws["B10"].value, "温度检测")
-            self.assertEqual(ws["G10"].value, "NG")
+            self.assertEqual(ws.cell_value(18,0), "电压检测")
+            self.assertEqual(ws.cell_value(18,5), "Pass")
+            self.assertEqual(ws.cell_value(19,0), "温度检测")
+            self.assertEqual(ws.cell_value(19,5), "Fail")
 
     def test_missing_test_id_returns_none(self):
         import tempfile

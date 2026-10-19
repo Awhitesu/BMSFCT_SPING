@@ -5,12 +5,9 @@
 """
 
 from typing import List, Optional
-from PySide6.QtCore import Qt, Signal, QPoint
-from PySide6.QtWidgets import (
-    QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, 
-    QScrollArea, QSizePolicy
-)
-from PySide6.QtGui import QFont, QMouseEvent
+from PySide6.QtCore import Qt, Signal, QPoint, QEvent
+from PySide6.QtWidgets import QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea
+from PySide6.QtGui import QMouseEvent
 
 
 class ByteBlock(QFrame):
@@ -21,6 +18,7 @@ class ByteBlock(QFrame):
         self.index = index
         self.byte_val = byte_val
         self.is_selected = False
+        self.setObjectName('byte_block')
 
         self.setFixedWidth(54)
         self.setFixedHeight(68)
@@ -58,13 +56,14 @@ class ByteBlock(QFrame):
     def update_style(self):
         if self.is_selected:
             self.setStyleSheet("""
-                QFrame {
+                QFrame#byte_block {
                     background-color: #0284C7;
                     border: 2px solid #38BDF8;
                     border-radius: 6px;
                 }
                 QLabel {
                     background: transparent;
+                    border: none;
                 }
             """)
             self.lbl_idx.setStyleSheet("font-size: 10px; color: #E0F2FE; font-weight: bold;")
@@ -72,22 +71,27 @@ class ByteBlock(QFrame):
             self.lbl_ascii.setStyleSheet("font-size: 11px; color: #BAE6FD; font-weight: bold;")
         else:
             self.setStyleSheet("""
-                QFrame {
+                QFrame#byte_block {
                     background-color: #111827;
                     border: 1px solid #334155;
                     border-radius: 6px;
                 }
-                QFrame:hover {
+                QFrame#byte_block:hover {
                     border: 1px solid #38BDF8;
                     background-color: #1E293B;
                 }
                 QLabel {
                     background: transparent;
+                    border: none;
                 }
             """)
             self.lbl_idx.setStyleSheet("font-size: 10px; color: #64748B;")
             self.lbl_hex.setStyleSheet("font-size: 14px; font-weight: bold; color: #E2E8F0; font-family: Consolas, monospace;")
             self.lbl_ascii.setStyleSheet("font-size: 11px; color: #94A3B8;")
+            if getattr(self, 'segment_color', None):
+                self.setStyleSheet(f'QFrame#byte_block {{ background:{self.segment_color}; border:2px solid #E2E8F0; border-radius:6px; }} QLabel {{ background:transparent; border:none; }}')
+                for label in (self.lbl_idx, self.lbl_hex, self.lbl_ascii):
+                    label.setStyleSheet(label.styleSheet() + 'color: white;')
 
 
 class ByteGridWidget(QWidget):
@@ -115,7 +119,7 @@ class ByteGridWidget(QWidget):
         # 横向滚动区域
         self.scroll_area = QScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setFixedHeight(88)
+        self.scroll_area.setFixedHeight(104)
         self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.scroll_area.setStyleSheet("""
@@ -141,17 +145,20 @@ class ByteGridWidget(QWidget):
 
         # 内部横向容器
         self.inner_widget = QWidget()
-        self.inner_widget.setStyleSheet("background: transparent;")
+        self.inner_widget.setObjectName("byteGridContent")
+        self.inner_widget.setStyleSheet("QWidget#byteGridContent { background: transparent; }")
         self.blocks_layout = QHBoxLayout(self.inner_widget)
         self.blocks_layout.setContentsMargins(8, 8, 8, 8)
         self.blocks_layout.setSpacing(6)
         self.blocks_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
         self.scroll_area.setWidget(self.inner_widget)
+        self.scroll_area.viewport().installEventFilter(self)
+        self.inner_widget.installEventFilter(self)
         main_layout.addWidget(self.scroll_area)
 
         # 占位提示标签 (无数据时展示)
-        self.lbl_empty = QLabel("请在上方输入请求或期望响应，即可在此直接拖拽框选字节")
+        self.lbl_empty = QLabel("请先在线抓取，或输入完整响应样本，再拖拽选择 DATA 字节")
         self.lbl_empty.setStyleSheet("color: #64748B; font-size: 12px; font-style: italic;")
         self.blocks_layout.addWidget(self.lbl_empty)
 
@@ -181,6 +188,9 @@ class ByteGridWidget(QWidget):
         self.lbl_empty.setVisible(False)
         for i, b in enumerate(raw_data):
             block = ByteBlock(i, b, self.inner_widget)
+            block.installEventFilter(self)
+            for label in (block.lbl_idx, block.lbl_hex, block.lbl_ascii):
+                label.setAttribute(Qt.WA_TransparentForMouseEvents)
             self.blocks_layout.addWidget(block)
             self._blocks.append(block)
 
@@ -240,6 +250,24 @@ class ByteGridWidget(QWidget):
             if block.rect().contains(local_pos):
                 return i
         return None
+
+    def set_segment_ranges(self, rules):
+        colors = ['#2563EB', '#9333EA', '#0F766E', '#B45309', '#BE185D', '#475569']
+        for i, block in enumerate(self._blocks):
+            matches = [n for n, rule in enumerate(rules) if i >= rule['offset'] and
+                       (rule['length'] == 0 or i < rule['offset'] + rule['length'])]
+            block.segment_color = colors[matches[-1] % len(colors)] if matches else None
+            block.setToolTip('解析段：' + ','.join(str(n+1) for n in matches) if matches else '')
+            block.update_style()
+
+    def eventFilter(self, watched, event):
+        # Scroll-area children consume context events before they reach the grid.
+        # Forward coordinates to the grid so all clients use the same menu path.
+        if event.type() == QEvent.ContextMenu and self.contextMenuPolicy() == Qt.CustomContextMenu:
+            self.customContextMenuRequested.emit(self.mapFromGlobal(event.globalPos()))
+            event.accept()
+            return True
+        return super().eventFilter(watched, event)
 
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.LeftButton:

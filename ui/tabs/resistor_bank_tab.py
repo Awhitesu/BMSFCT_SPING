@@ -1,9 +1,11 @@
+from devices.rn_board import shared_board
 import ipaddress
+from copy import deepcopy
 from PySide6.QtCore import Qt,QEvent
 from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QGridLayout,QGroupBox,
     QLabel,QPushButton,QSpinBox,QCheckBox,QScrollArea,QSizePolicy,QMessageBox)
 from ui.tabs.board_debug_tab import BoardDebugTab
-from devices.rn_board import RNBoard,board_settings
+from devices.rn_board import board_settings
 from devices.resistor_bank import channel_routes,operate_channels
 
 
@@ -55,7 +57,7 @@ class ResistorBankTab(BoardDebugTab):
         if not self.bank_ready:return super().rebuild()
         for setting in self.settings:
             if setting['enabled'] and setting['key'] not in self.boards:
-                self.boards[setting['key']]=RNBoard(setting)
+                self.boards[setting['key']]=shared_board(self.manager,setting)
         self.routes=channel_routes(self.boards)
         while self.bank_grid.count():
             item=self.bank_grid.takeAt(0)
@@ -90,6 +92,11 @@ class ResistorBankTab(BoardDebugTab):
     def save(self):
         if not self.bank_ready or self.task.isRunning():return
         cfg=dict(self.manager.db_manager.load_sys_config() or {})
+        current = [s for s in board_settings(cfg) if s['kind'] == 'resistor']
+        if current != self._loaded_settings:
+            self.reload_saved_config()
+            QMessageBox.warning(self, '配置已更新', '板卡配置已在其他页面修改，已刷新显示，请核对后再保存。')
+            return
         saved=dict(cfg.get('rn_boards',{}));numbers=set()
         addresses={(s['ip'],s['port']) for s in board_settings(cfg) if s['enabled'] and s['kind']!='resistor'}
         try:
@@ -102,13 +109,14 @@ class ResistorBankTab(BoardDebugTab):
                     if number in numbers:raise ValueError('已启用电阻板的序号不能重复')
                     if address in addresses:raise ValueError('已启用板卡的IP/端口重复')
                     numbers.add(number);addresses.add(address)
-                saved[setting['key']]=dict(ip=address[0],port=port.value(),unit=unit.value(),
+                saved[setting['key']]=dict(saved.get(setting['key'], {}), ip=address[0],port=port.value(),unit=unit.value(),
                     enabled=enabled,limit=profile.currentData(),number=number)
         except ValueError as exc:
             QMessageBox.warning(self,'配置错误',str(exc));return
         cfg['rn_boards']=saved
         if not self.manager.db_manager.save_sys_config(cfg):
             QMessageBox.warning(self,'保存失败','板卡配置未保存');return
+        self._loaded_settings = deepcopy([s for s in board_settings(cfg) if s['kind'] == 'resistor'])
         boards=list(self.boards.values());self.set_bank_busy(True)
         def apply():
             for board in boards:board.disconnect()

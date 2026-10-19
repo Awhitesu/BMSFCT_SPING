@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QGridLayout, QLabel, QPushB
                               QPlainTextEdit, QScrollArea)
 from ui.tabs.multimeter_tab import MeterTask
 from ui.tabs.hardware_config_tab import HardwareConfigTab
+from core.instrument_control import control_power, connect_instrument, instrument_transaction
 
 
 class IT6333BTab(QWidget):
@@ -95,10 +96,14 @@ class IT6333BTab(QWidget):
 
     def result(self, label, ok, result, channel):
         driver = self.manager.it6333b
+        control_result = isinstance(result, bool)
         if result is False:
             ok = False
+            result = driver.last_error or '控制未确认'
         self.status.setText(f'已连接 · {driver.idn}' if driver.is_connected else '未连接')
         self.log.appendPlainText(f'[{datetime.now():%H:%M:%S}] {label}: {result if ok else "失败 · " + str(result)}')
+        if control_result and driver.last_control:
+            self.log.appendPlainText(f'控制确认：{driver.last_control}')
         if channel and ok:
             v, a, on = result
             self.channels[channel][2].setText(f'实测电压：{v:.4f} V　实测电流：{a:.4f} A　输出：{"开启" if on else "关闭"}')
@@ -108,19 +113,24 @@ class IT6333BTab(QWidget):
     def connect_device(self):
         port, baud = self.port.currentText().strip(), self.baud.value()
         def connect(driver):
-            driver.port, driver.baudrate = port, baud
-            if not driver.connect():
-                raise ConnectionError(driver.last_error)
-            return driver.idn
+            with instrument_transaction(driver):
+                driver.port, driver.baudrate = port, baud
+                connect_instrument(driver)
+                return driver.idn
         self.run('连接', connect)
 
     def apply(self, channel):
         v, a, _ = self.channels[channel]
         voltage, current = v.value(), a.value()
-        self.run(f'CH{channel}设定参数', lambda d: d.set_voltage(channel, voltage) and d.set_current(channel, current))
+        def configure(driver):
+            with instrument_transaction(driver):
+                control_power(driver, 'set_current', current, channel=channel)
+                return control_power(driver, 'set_voltage', voltage, channel=channel)
+        self.run(f'CH{channel}设定参数', configure)
 
     def output(self, channel, state):
-        self.run(f'CH{channel}输出{"开启" if state else "关闭"}', lambda d: d.output_control(channel, state))
+        self.run(f'CH{channel}输出{"开启" if state else "关闭"}',
+                 lambda d: control_power(d, 'output_control', state, channel=channel))
 
     def read(self, channel):
         self.run(f'CH{channel}回读', lambda d: d.read_channel(channel), channel)
@@ -146,5 +156,5 @@ class IT6333BTab(QWidget):
                 parent = parent.parent()
 
     def shutdown(self):
-        if self.task and self.task.isRunning():
+        if self.task:
             self.task.wait()

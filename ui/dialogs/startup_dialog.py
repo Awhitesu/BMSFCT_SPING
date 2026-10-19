@@ -1,8 +1,10 @@
 import sys
+import inspect
+import html
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, 
                                QLabel, QTextEdit, QPushButton, QProgressBar, QApplication)
 from PySide6.QtCore import Qt, QThread, Signal, Slot, QTimer
-from PySide6.QtGui import QColor, QTextCursor
+from PySide6.QtGui import QTextCursor
 
 class InitWorker(QThread):
     log_signal = Signal(str)
@@ -18,7 +20,11 @@ class InitWorker(QThread):
             def logger(msg):
                 self.log_signal.emit(msg)
             
-            success = self.device_manager.init_all_devices(logger=logger)
+            method = self.device_manager.init_all_devices
+            kwargs = {"logger": logger}
+            if "cancelled" in inspect.signature(method).parameters:
+                kwargs["cancelled"] = self.isInterruptionRequested
+            success = method(**kwargs)
             self.finished_signal.emit(success)
         except Exception as e:
             self.log_signal.emit(f"[!] 后台初始化异常: {e}")
@@ -29,6 +35,10 @@ class StartupCheckDialog(QDialog):
     def __init__(self, device_manager, parent=None):
         super().__init__(parent)
         self.device_manager = device_manager
+        self._exit_pending = False
+        self._last_success = False
+        self._check_generation = 0
+        self.worker = None
         
         self.setWindowTitle("系统启动自检")
         self.setFixedSize(650, 450)
@@ -92,8 +102,14 @@ class StartupCheckDialog(QDialog):
         layout.addLayout(btn_layout)
 
     def _start_check(self):
+        if self._exit_pending:
+            return
+        if self.worker is not None and not self.worker.wait(0):
+            return
+        self._check_generation += 1
         self.lbl_title.setText("正在进行硬件通讯自检，请稍候...")
         self.lbl_title.setStyleSheet("font-size: 16px; font-weight: bold; color: white;")
+        self._last_success = False
         self.progress.setRange(0, 0)
         self.log_text.clear()
         
@@ -104,6 +120,7 @@ class StartupCheckDialog(QDialog):
         self.worker = InitWorker(self.device_manager)
         self.worker.log_signal.connect(self._append_log)
         self.worker.finished_signal.connect(self._on_check_finished)
+        self.worker.finished.connect(self._thread_finished)
         self.worker.start()
 
     @Slot(str)
@@ -117,7 +134,7 @@ class StartupCheckDialog(QDialog):
         elif "[*]" in msg:
             color = "#2196F3" # 蓝色
             
-        html_msg = f'<span style="color: {color};">{msg}</span>'
+        html_msg = f'<span style="color: {color};">{html.escape(msg)}</span>'
         self.log_text.append(html_msg)
         # 滚动到底部
         cursor = self.log_text.textCursor()
@@ -129,26 +146,74 @@ class StartupCheckDialog(QDialog):
         self.progress.setRange(0, 100)
         self.progress.setValue(100)
         
-        self.btn_retry.setEnabled(True)
-        self.btn_enter.setEnabled(True)
+        self._last_success = success
+        if self._exit_pending:
+            return
+        self.btn_retry.setEnabled(False)
+        self.btn_enter.setEnabled(False)
         
         # 统计脱机设备数量
         status_list = self.device_manager.get_all_device_status()
         offline_count = sum(1 for s in status_list if s["status"] == "离线")
+        unverified = [s['name'] for s in status_list if s.get('connection_verified') is False]
         
-        if offline_count == 0:
-            self.lbl_title.setText("硬件自检全部通过！")
-            self.lbl_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #4CAF50;")
+        if success and offline_count == 0:
+            self.lbl_title.setText(f"初始化完成；{len(unverified)} 项目标连接未验证" if unverified else "硬件自检全部通过！")
+            color = '#FF9800' if unverified else '#4CAF50'
+            self.lbl_title.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {color};")
             self.btn_enter.setText("进入系统")
             
             # 自动进入系统
-            QTimer.singleShot(200, self.accept)
+            # Enter only after the initialization thread has actually finished.
         else:
-            self.lbl_title.setText(f"自检完成，存在 {offline_count} 个离线/异常设备！")
+            self.lbl_title.setText(f"自检失败，请检查日志；离线设备：{offline_count} 个")
             self.lbl_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #FF9800;")
             self.btn_enter.setText("强制进入系统")
             self.btn_enter.setStyleSheet("background-color: #FF9800; color: white; font-weight: bold;")
             # 存在异常时，取消自动放行，强制要求操作员看一眼日志并手动点击进入
+
+    @Slot()
+    def _thread_finished(self):
+        if self.worker is not None and not self.worker.wait(0):
+            QTimer.singleShot(10, self._thread_finished)
+            return
+        if self._exit_pending:
+            QDialog.reject(self)
+            return
+        self.btn_retry.setEnabled(True)
+        self.btn_enter.setEnabled(True)
+        if self._last_success and all(row['status'] != '离线' for row in self.device_manager.get_all_device_status()):
+            generation = self._check_generation
+            QTimer.singleShot(0, lambda: self._auto_enter(generation))
+
+    def _auto_enter(self, generation):
+        if (generation == self._check_generation and self._last_success
+                and not self._exit_pending):
+            self.accept()
+
+    def accept(self):
+        if self._exit_pending:
+            return
+        if self.worker is not None and not self.worker.wait(0):
+            return
+        super().accept()
+
+    def reject(self):
+        self._exit_pending = True
+        if self.worker is not None and not self.worker.wait(0):
+            self.worker.requestInterruption()
+            self.btn_exit.setEnabled(False)
+            self.lbl_title.setText("正在停止自检，等待当前通信结束…")
+            return
+        super().reject()
+
+    def closeEvent(self, event):
+        if self.worker is not None and not self.worker.wait(0):
+            event.ignore()
+            self.reject()
+        else:
+            self._exit_pending = True
+            event.accept()
 
 if __name__ == "__main__":
     # 简单的独立测试代码

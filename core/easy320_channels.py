@@ -42,3 +42,13 @@ def read_channel_excel(path):
 def default_channels():
     names={0:'平推气缸',1:'气缸抬起',2:'气缸下压'}
     return [{'do':f'DO{i:o}','name':names.get(i,''),'index':i} for i in range(32)]
+
+
+def configured_channels(manager=None):
+    database = getattr(manager, 'db_manager', None) if manager is not None else None
+    if database is None:
+        return default_channels()
+    saved = (database.load_sys_config() or {}).get('easy320_channels')
+    if saved is None:
+        return default_channels()
+    return normalize_channels((i+1, row['do'], row.get('name', '')) for i, row in enumerate(saved))

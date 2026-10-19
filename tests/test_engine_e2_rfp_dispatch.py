@@ -5,6 +5,8 @@
 import os
 import sys
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -23,6 +25,7 @@ class TestEngineE2RfpDispatch(unittest.TestCase):
         self.mgr = MagicMock()
         self.programmer = MagicMock()
         self.programmer.is_connected = True
+        self.programmer.tool_ready = True
         self.programmer.last_error = ""
         self.programmer.query_state.return_value = "Ready"
         self.programmer.connect.return_value = True
@@ -62,6 +65,10 @@ class TestEngineE2RfpDispatch(unittest.TestCase):
         self.assertFalse(success)
 
     def test_burn_success_with_verify_diff_and_archive(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        source = Path(directory.name) / 'app.bin'
+        source.write_bytes(b"\x55\xAA" * 128)
         def fake_read_chip(start, size, out_file):
             with open(out_file, "wb") as f:
                 f.write(b"\x55\xAA" * 128)
@@ -72,14 +79,14 @@ class TestEngineE2RfpDispatch(unittest.TestCase):
             mock_record.return_value = {"match": True}
             success, result = self._run(
                 "执行烧录工程",
-                "FILE:D:/fw/app.hex / DEVICE_FAMILY:RX / INTERFACE:CSI / SPEED:2000000 / TIMEOUT:120 / VERIFY_DIFF:1",
+                f"FILE:{source} / DEVICE_FAMILY:RX / INTERFACE:CSI / SPEED:2000000 / TIMEOUT:120 / VERIFY_DIFF:1 / VERIFY_ADDRESS:0",
             )
 
         self.assertTrue(success)
         self.assertEqual("PASS", result)
         self.programmer.run_project.assert_called_once()
         call = self.programmer.run_project.call_args
-        self.assertEqual(call[0][0], "D:/fw/app.hex")
+        self.assertEqual(call[0][0], str(source))
         self.assertEqual(call[1]["timeout_s"], 120)
         # 连接参数覆盖到驱动实例
         self.assertEqual(self.programmer.device_family, "RX")
@@ -91,7 +98,7 @@ class TestEngineE2RfpDispatch(unittest.TestCase):
         mock_record.assert_called_once()
         record = mock_record.call_args[0][0]
         self.assertEqual(record["result"], "PASS")
-        self.assertEqual(record["project_name"], "app.hex")
+        self.assertEqual(record["project_name"], "app.bin")
         self.assertEqual(record["actual_checksum"], "0x00ABCDEF")
 
     def test_burn_success_without_verify_diff_no_archive(self):

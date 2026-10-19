@@ -48,6 +48,7 @@ class SimulatorMappingTests(unittest.TestCase):
         m = self.manager(dict(sim1_channels=3, sim2_enabled=True, sim2_channels=2))
         for sim in m.simulators:
             sim.is_connected = True
+            sim.read_output_state = Mock(return_value=False)
             sim.set_voltage = Mock(return_value=True)
             sim.set_voltages = Mock(return_value=True)
         self.assertTrue(m.broadcast_voltage(3.7))

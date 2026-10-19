@@ -22,7 +22,11 @@ def configured_read_unit(params):
 
 def is_voltage_read(params):
     # The measurement kind comes from the read command, not the unit suffix.
-    command = _UNIT_PARAM.sub("", str(params))
+    # RW is an opaque base64 payload; its letters must never select a sensor.
+    command = re.split(r'(?:^|\s/\s)RW:', str(params), maxsplit=1)[0]
+    command = _UNIT_PARAM.sub("", command)
+    if "电流" in command or "current" in command.lower():
+        return False
     return "电压" in command or "volt" in command.lower() or "V" in command.upper()
 
 

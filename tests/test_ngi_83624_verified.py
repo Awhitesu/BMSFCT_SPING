@@ -64,6 +64,7 @@ class SimulatorVerificationTests(unittest.TestCase):
         manager=DeviceManager(db)
         for sim in manager.simulators:
             sim.is_connected=False
+            sim.read_output_state=Mock(return_value=False)
             sim.set_voltage=Mock(return_value=True); sim.output_control=Mock(return_value=True)
             sim.set_voltages=Mock(return_value=True);sim.output_controls=Mock(return_value=True)
         manager.simulators[1].set_voltages.return_value=False
@@ -71,7 +72,8 @@ class SimulatorVerificationTests(unittest.TestCase):
         self.assertFalse(manager.broadcast_voltage(2.5))
         self.assertFalse(manager.broadcast_output(True))
         self.assertEqual(manager.simulators[1].set_voltages.call_count,1)
-        self.assertEqual(manager.simulators[1].output_controls.call_count,1)
+        manager.simulators[1].output_controls.assert_any_call(True,[1,2],None)
+        manager.simulators[1].output_controls.assert_any_call(False,[1,2],None)
 
     @patch('devices.ngi_83624.time.sleep')
     def test_invalid_output_reply_is_not_confirmed_off(self,sleep):

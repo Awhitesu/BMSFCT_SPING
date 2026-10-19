@@ -27,7 +27,7 @@ STEP_GRAMMAR_DOC = """## 子工步语法规则（引擎实际解析逻辑，必�
 - params 永远是【字符串】，多段用 " / " 连接，键值段格式 KEY:VALUE（KEY 大写）。
 - fail_strategy 只能是：失败停止 / 忽略继续 / 重试3次。
 - type 字段只是提示，引擎按关键字重新推导真实类型（见下方各路由）；未命中关键字的 type 一律落入「设置仪表」。
-- sync_exec=true 表示多通道同步执行（屏障集齐后只执行一次）；测试项 exec_mode="顺序执行" 时不要给子工步加 sync_exec。
+- 当前为单通道测试，工步依次执行；不要生成 sync_exec、seq_exec、exec_mode 或多通道同步屏障、顺序锁工步。
 - is_judgment=true 表示该子工步的回读值作为测试项判定依据，一个需要判定的测试项应有且仅有一个 true。
 - 测试项判定：standard_type="不判断" 恒 PASS；"字符串" 要求实测值与 min 精确相等；"数值" 取实测值中的数字与 min/max 比较。
 
@@ -39,7 +39,7 @@ STEP_GRAMMAR_DOC = """## 子工步语法规则（引擎实际解析逻辑，必�
 - 电池模拟器（device 含 simulator/电池模拟器）：
   批量："{电压}V / {电流}mA / ON|OFF / Range:HIGH|LOW / CH:ALL 或 1,2,3"；
   单通道："{电压}V / {电流}mA / 开启输出"（可省略 CH，默认本通道）。
-- 继电器（device 含 easy320 → Easy320；含 aging board/老化 → 老化板）：
+- 继电器（device 含 easy320 → Easy320）：
   action=闭合勾选通道/断开勾选通道，params="6,7"（通道号逗号分隔）；action 含「全部」= 全部断开。
 - CA550 校准仪（device 含 ca550）：
   "Type:V|mA|OHM|RTD|TC / Val:{数值} / Range:Auto|100mV|1V|10V|30V|20mA / Output:开启输出|关闭输出"；
@@ -99,7 +99,7 @@ STEP_GRAMMAR_DOC = """## 子工步语法规则（引擎实际解析逻辑，必�
 - 例："HOST:D:\\BMSTest\\BMS_General.exe / TIMEOUT:300"
 
 ### 9. 内部工步（不要在配方里手写）
-- 同步屏障、申请/释放顺序锁由引擎自动注入，手写的会被过滤或造成异常。
+- 旧配方的同步屏障和顺序锁在单通道执行时忽略，不要自动添加。
 
 ### UI 可创建的 device + action 组合（优先使用这些原文）
 - IT6722A 被测物供电电源 (IT6722A DUT Power)：设置参数 / 回读数据

@@ -1,28 +1,30 @@
 from ui.device_task import DeviceTask
 import time
+import queue
+from collections import deque
 
 from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtGui import QIntValidator
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFormLayout, QLabel,
-    QLineEdit, QComboBox, QPushButton, QSpinBox, QTableWidget,
-    QTableWidgetItem, QHeaderView, QMessageBox, QGridLayout, QPlainTextEdit,
-    QTabWidget, QCheckBox, QScrollArea, QLayout, QSizePolicy
-)
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFormLayout, QLabel, QLineEdit, QComboBox, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QGridLayout, QPlainTextEdit, QTabWidget, QCheckBox, QScrollArea, QLayout
 
 
 class UDSRequestWorker(QThread):
     result = Signal(object)
 
-    def __init__(self, client, sid, payload):
+    def __init__(self, client, sid, payload, security=None):
         super().__init__()
         self.client = client
         self.sid = sid
         self.payload = payload
+        self.security = security
 
     def run(self):
         try:
-            self.result.emit(self.client.request(self.sid, self.payload))
+            if self.security is not None:
+                from core.seedkey import unlock
+                self.result.emit(unlock(self.client,self.security,cancelled=self.isInterruptionRequested))
+            else:
+                self.result.emit(self.client.request(self.sid, self.payload))
         except Exception as exc:
             self.result.emit(exc)
 
@@ -33,10 +35,13 @@ class PCANFDTab(QWidget):
         self.device_manager = device_manager
         self.operation=DeviceTask(self)
         self._monitor_ids = None
+        self._monitor_skipped = 0
         self._init_ui()
+        from ui.layout_safety import protect_form_layout
+        protect_form_layout(self)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_monitor)
-        self.timer.start(100)
+        self.timer.start(50)
 
     def _init_ui(self):
         outer = QVBoxLayout(self)
@@ -55,7 +60,7 @@ class PCANFDTab(QWidget):
         self.device_type.addItems(['PCAN USB', 'ZLG CANFDNET-400U'])
         row.addWidget(QLabel('设备')); row.addWidget(self.device_type)
         self.channel = QComboBox()
-        self.channel.setEditable(True)
+        self.channel.setEditable(False)
         self.refresh_pcan_channels(getattr(self.driver, "channel", "PCAN_USBBUS1"))
         self.nominal = QComboBox()
         self.nominal.addItems(["125000", "250000", "500000", "1000000"])
@@ -74,6 +79,7 @@ class PCANFDTab(QWidget):
         btn_disconnect = QPushButton("断开")
         btn_disconnect.clicked.connect(self.disconnect_device)
         self.status = QLabel("离线")
+        self.status.setWordWrap(True)
         self.status.setMinimumWidth(130)
         self.status.setAlignment(Qt.AlignCenter)
         layout.addWidget(connection)
@@ -179,9 +185,13 @@ class PCANFDTab(QWidget):
         self.monitor.setHorizontalHeaderLabels(["时间", "CAN卡", "物理通道", "方向", "ID", "类型", "DLC", "数据"])
         self.monitor.horizontalHeader().setSectionResizeMode(7, QHeaderView.Stretch)
         for col in (0, 1, 2, 3, 4, 5, 6):
-            self.monitor.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
+            self.monitor.horizontalHeader().setSectionResizeMode(col, QHeaderView.Interactive)
+            self.monitor.setColumnWidth(col, (115, 150, 105, 60, 90, 80, 55)[col])
         monitor_layout.addWidget(self.monitor, 1)
         self.sub_tabs.addTab(tab_monitor, "📡 报文交互监控")
+        from ui.widgets.dbc_forms import DBCMonitorTab
+        self.dbc_monitor = DBCMonitorTab(self.device_manager)
+        self.sub_tabs.addTab(self.dbc_monitor, "DBC信号监控")
 
         # --- 子页 2: 📤 报文发送 ---
         tab_send = QWidget()
@@ -244,7 +254,19 @@ class PCANFDTab(QWidget):
         uds_layout.addWidget(QLabel("响应日志"), 3, 0)
         uds_layout.addWidget(self.uds_result, 4, 0, 1, 7)
         uds_layout.setRowStretch(4, 1)
-        uds_page_layout.addWidget(uds_group, 1)
+        self.uds_detail_tabs = QTabWidget()
+        self.uds_detail_tabs.addTab(uds_group, '请求与响应')
+        uds_page_layout.addWidget(self.uds_detail_tabs, 1)
+        security_page = QWidget()
+        security_layout = QVBoxLayout(security_page)
+        from ui.widgets.security_access_form import SecurityAccessForm
+        self.uds_security = SecurityAccessForm()
+        security_layout.addWidget(self.uds_security)
+        self.uds_unlock_btn = QPushButton('执行 DLL 安全解锁（0x27）')
+        self.uds_unlock_btn.clicked.connect(self.unlock_uds_security)
+        security_layout.addWidget(self.uds_unlock_btn)
+        security_layout.addStretch()
+        self.uds_detail_tabs.addTab(security_page, '安全访问 DLL')
         self.sub_tabs.addTab(tab_uds, "🩺 UDS 诊断")
 
         layout.addWidget(self.sub_tabs, 1)
@@ -252,20 +274,8 @@ class PCANFDTab(QWidget):
     def refresh_pcan_channels(self, selected=None):
         if selected is None:
             selected = self.channel.currentData() or self.channel.currentText().strip()
-        channels = []
-        try:
-            import can
-            for item in can.detect_available_configs(interfaces=["pcan"]):
-                value = str(item.get("channel", "")).strip()
-                if value and value not in channels:
-                    channels.append(value)
-        except Exception:
-            pass
-        if not channels:
-            channels = [f"PCAN_USBBUS{i}" for i in range(1, 17)]
-        channels += [f"ZLG_CAN{i}" for i in range(1, 5)]
-        if selected and selected not in channels:
-            channels.append(selected)
+        from core.can_choices import CAN_CHANNELS
+        channels = CAN_CHANNELS
         self.channel.blockSignals(True)
         self.channel.clear()
         for value in channels:
@@ -280,7 +290,7 @@ class PCANFDTab(QWidget):
         return self.device_manager.pcan
 
     def run_device(self,action,callback):
-        if self.operation.isRunning() or (getattr(self,'uds_worker',None) and self.uds_worker.isRunning()):return
+        if self.operation.isRunning() or (getattr(self,'uds_worker',None) and not self.uds_worker.wait(0)):return
         self.operation.run(action,callback)
 
     def connect_device(self):
@@ -306,7 +316,9 @@ class PCANFDTab(QWidget):
     def shutdown(self):
         self.timer.stop()
         self.operation.shutdown()
-        if getattr(self,'uds_worker',None) and self.uds_worker.isRunning():self.uds_worker.wait()
+        if getattr(self,'uds_worker',None):
+            self.uds_worker.requestInterruption()
+            self.uds_worker.wait()
 
     def _update_connection_controls(self, *_args):
         zlg = self.channel.currentText().startswith('ZLG_CAN')
@@ -321,13 +333,15 @@ class PCANFDTab(QWidget):
             if zlg else 'PCAN使用所选USB通道和波特率。连接参数与自动化测试共享，测试执行期间请勿切换连接。')
 
     def apply_zlg_parameters(self):
+        if self.operation.isRunning():
+            return
         if not self.driver.is_connected or not self.driver.channel.startswith('ZLG_CAN'):
             QMessageBox.warning(self, '未连接', '请先连接ZLG设备。')
             return
         if self.channel.currentText() != self.driver.channel:
             QMessageBox.warning(self, '通道未切换', '选择的通道与当前连接不同，请先重新连接。')
             return
-        if getattr(self, 'uds_worker', None) and self.uds_worker.isRunning():
+        if getattr(self, 'uds_worker', None) and not self.uds_worker.wait(0):
             QMessageBox.warning(self, '正在执行', '请等待UDS请求结束后再设置。')
             return
         try:
@@ -337,8 +351,23 @@ class PCANFDTab(QWidget):
             settings = [dict(enabled=enable.isChecked(), nominal=int(nominal.currentText()),
                              data=int(data.currentText()), termination=termination.isChecked())
                         for enable, nominal, data, termination in self.zlg_channel_controls]
-            self.driver.bus.configure_channels(settings, self.zlg_persist.isChecked())
-            QMessageBox.information(self, '已应用', 'CH1–CH4配置请求已成功应用。')
+            driver, bus = self.driver, self.driver.bus
+            persist = self.zlg_persist.isChecked()
+            def apply():
+                with driver.lock:
+                    if not driver.is_connected or driver.bus is not bus:
+                        raise ConnectionError('CAN连接已改变，请重新连接后应用配置')
+                    bus.configure_channels(settings, persist)
+                return True
+            def completed(ok, value):
+                self.zlg_apply.setEnabled(True)
+                if ok and value is True:
+                    QMessageBox.information(self, '已应用', 'CH1–CH4配置请求已成功应用。')
+                else:
+                    QMessageBox.critical(self, '设置失败', str(value))
+            self.zlg_apply.setEnabled(False)
+            if not self.operation.run(apply, completed):
+                self.zlg_apply.setEnabled(True)
         except Exception as exc:
             QMessageBox.critical(self, '设置失败', str(exc))
 
@@ -381,7 +410,7 @@ class PCANFDTab(QWidget):
             self.uds_sid.setText(text.split()[0])
 
     def send_uds_request(self):
-        if self.operation.isRunning() or (getattr(self,'uds_worker',None) and self.uds_worker.isRunning()):return
+        if self.operation.isRunning() or (getattr(self,'uds_worker',None) and not self.uds_worker.wait(0)):return
         if not self.driver.is_connected:
             QMessageBox.warning(self, "UDS诊断", "请先连接 USB PCAN-FD")
             return
@@ -403,12 +432,38 @@ class PCANFDTab(QWidget):
             f"[{time.strftime('%H:%M:%S')}] TX UDS 0x{sid:02X}: {params.hex(' ').upper()}"
         )
         self.uds_send_btn.setEnabled(False)
+        self.uds_unlock_btn.setEnabled(False)
         self.uds_worker = UDSRequestWorker(client, sid, params)
+        self.uds_worker.result.connect(self._on_uds_finished)
+        self.uds_worker.start()
+
+    def unlock_uds_security(self):
+        if self.operation.isRunning() or (getattr(self,'uds_worker',None) and not self.uds_worker.wait(0)):
+            return
+        if not self.driver.is_connected:
+            QMessageBox.warning(self, 'UDS安全访问', '请先连接配方使用的CAN设备')
+            return
+        try:
+            config = self.uds_security.config()
+            if config is None:
+                raise ValueError('请勾选并配置安全访问DLL')
+            tx_id=int(self.uds_tx_id.text().strip(),0);rx_id=int(self.uds_rx_id.text().strip(),0)
+            frame=self.uds_frame_type.currentIndex();timeout=float(self.uds_timeout.value())
+            client=self.driver.create_uds_client(tx_id=tx_id,rx_id=rx_id,can_fd=frame>0,brs=frame==2,
+                timeout=timeout,p2_star_timeout=max(5.0,timeout))
+        except (ValueError, OSError, RuntimeError) as exc:
+            QMessageBox.warning(self, '安全访问配置错误', str(exc))
+            return
+        self.uds_result.appendPlainText(f'开始DLL安全解锁：Seed子功能=0x{config["level"]:02X}；仅ECU正响应才表示解锁成功')
+        self.uds_send_btn.setEnabled(False);self.uds_unlock_btn.setEnabled(False)
+        self.uds_detail_tabs.setCurrentIndex(0)
+        self.uds_worker=UDSRequestWorker(client,0x27,b'',security=config)
         self.uds_worker.result.connect(self._on_uds_finished)
         self.uds_worker.start()
 
     def _on_uds_finished(self, result):
         self.uds_send_btn.setEnabled(True)
+        self.uds_unlock_btn.setEnabled(True)
         if isinstance(result, Exception):
             self.uds_result.appendPlainText(f"RX ERROR: {result}")
             return
@@ -466,31 +521,45 @@ class PCANFDTab(QWidget):
         self.status.setText((f"● CH1–CH4监听 / 发送{self.driver.channel}" if self.driver.channel.startswith('ZLG_CAN') else "● 已连接") if connected else "● 未连接")
         color = "#22C55E" if connected else "#FF4D5A"
         self.status.setStyleSheet(f"color:{color}; border:1px solid {color}; border-radius:6px; padding:7px 14px; font-weight:bold;")
-        processed = 0
-        displayed = 0
-        while processed < 100:
+        # Drain a bounded snapshot and render the latest matching frames.
+        # Hidden pages and busy buses must not replay seconds of stale data.
+        pending = deque(maxlen=500)
+        for _ in range(min(10000, self.driver.msg_queue.qsize())):
             try:
                 msg = self.driver.msg_queue.get_nowait()
-            except Exception:
+            except queue.Empty:
                 break
-            processed += 1
             if not self._monitor_message_matches(msg):
                 continue
-            row = self.monitor.rowCount()
-            self.monitor.insertRow(row)
+            if len(pending) == pending.maxlen:
+                self._monitor_skipped += 1
+            pending.append(msg)
+        displayed = len(pending)
+        self.monitor.setUpdatesEnabled(False)
+        try:
+            self._append_monitor_frames(pending)
+        finally:
+            self.monitor.setUpdatesEnabled(True)
+        if hasattr(self, "lbl_msg_count"):
+            skipped = self._monitor_skipped + getattr(self.driver, 'monitor_dropped', 0)
+            self.lbl_msg_count.setText(f"共 {self.monitor.rowCount()} 条报文 · 显示跳过 {skipped} 帧")
+        if displayed and not (hasattr(self, "chk_auto_scroll") and self.chk_auto_scroll.isChecked()):
+            self.monitor.scrollToBottom()
+
+    def _append_monitor_frames(self, pending):
+        excess = max(0, self.monitor.rowCount() + len(pending) - 2000)
+        if excess:
+            self.monitor.model().removeRows(0, excess)
+        first = self.monitor.rowCount()
+        self.monitor.setRowCount(first + len(pending))
+        for row, msg in enumerate(pending, first):
             type_name = ["CAN", "FD", "FD+BRS"][min(int(msg.get("can_type", 0)), 2)]
+            stamp = msg.get('timestamp_rel', time.time())
             values = [
-                time.strftime("%H:%M:%S", time.localtime(msg.get('timestamp_rel', time.time()))),
+                time.strftime("%H:%M:%S", time.localtime(stamp)) + f'.{int(stamp * 1000) % 1000:03d}',
                 msg.get('device', '--'), str(msg.get('physical_channel', '--')), msg.get("direction", ""),
                 f"0x{msg.get('can_id', 0):X}", type_name, str(msg.get("dlc", 0)),
                 bytes(msg.get("data", b"")).hex(" ").upper(),
             ]
             for col, value in enumerate(values):
                 self.monitor.setItem(row, col, QTableWidgetItem(value))
-            displayed += 1
-        while self.monitor.rowCount() > 2000:
-            self.monitor.removeRow(0)
-        if hasattr(self, "lbl_msg_count"):
-            self.lbl_msg_count.setText(f"共 {self.monitor.rowCount()} 条报文")
-        if displayed and not (hasattr(self, "chk_auto_scroll") and self.chk_auto_scroll.isChecked()):
-            self.monitor.scrollToBottom()

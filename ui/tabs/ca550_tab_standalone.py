@@ -1,10 +1,10 @@
 import sys
 import time
 import queue
-from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, 
-                                QPushButton, QLabel, QGroupBox, QDoubleSpinBox, 
-                                QComboBox, QTextEdit, QFrame, QCheckBox, QScrollArea, QLineEdit, QMessageBox)
+from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QGridLayout, QPushButton, QLabel, QGroupBox, QDoubleSpinBox, QComboBox, QTextEdit, QFrame, QCheckBox, QScrollArea, QLineEdit
 from PySide6.QtCore import Qt, QTimer, QThread, Signal
+from core.numeric_validation import finite_reading
+from core.instrument_control import control_calibrator, connect_instrument
 
 # --- 顺序执行工作线程 ---
 
@@ -13,6 +13,7 @@ class CA550SerialWorker(QThread):
     单线程串口工作者，确保所有指令按顺序下发，避免冲突。
     """
     response_received = Signal(str, str, object) # action, response, args
+    control_confirmed = Signal(str, object)
     
     def __init__(self, driver):
         super().__init__()
@@ -39,8 +40,21 @@ class CA550SerialWorker(QThread):
                 self.busy = True
                 try:
                     driver=self.driver_provider() if self.driver_provider else self.driver
-                    func = getattr(driver, action)
-                    res = func(*args)
+                    previous = getattr(driver, 'last_control', None)
+                    try:
+                        cancelled = lambda: not self.running or self.isInterruptionRequested()
+                        if action in ('set_source_func', 'set_source_range', 'set_source_data', 'set_source_output'):
+                            res = control_calibrator(driver, action, args[0],
+                                tolerance=args[1] if len(args) > 1 else None, cancelled=cancelled)
+                        elif action == 'connect':
+                            res = connect_instrument(driver, cancelled)
+                        else:
+                            res = getattr(driver, action)(*args)
+                    finally:
+                        if action in ('set_source_data', 'set_source_output'):
+                            details = getattr(driver, 'last_control', None)
+                            if isinstance(details, dict) and details is not previous and details.get('action') == action:
+                                self.control_confirmed.emit(action, dict(details))
                 finally:
                     self.busy = False
                     self.task_queue.task_done()
@@ -67,13 +81,17 @@ class CA550StandaloneTab(QWidget):
         
         self.manager = manager
         self._driver = driver
+        self._confirmed_source_state = None
+        self._output_details_received = False
         # 初始化单线程 Worker
         self.worker = CA550SerialWorker(self.ca550)
         self.worker.driver_provider = lambda:self.ca550
         self.worker.response_received.connect(self.on_response)
+        self.worker.control_confirmed.connect(self.on_control_confirmed)
         self.worker.start()
         
         self._init_ui()
+        self._render_source_state()
         
         # 定时更新回读信息
         self.timer = QTimer(self)
@@ -212,7 +230,7 @@ class CA550StandaloneTab(QWidget):
         
         btn_set = QPushButton("下发设定值 (SD)")
         btn_set.setStyleSheet("background-color: #0055aa; color: white; font-weight: bold;")
-        btn_set.clicked.connect(lambda: self.worker.add_task("set_source_data", self.sp_sd.value()))
+        btn_set.clicked.connect(lambda: self.worker.add_task("set_source_data", self.sp_sd.value(), self.sp_tolerance.value()))
         src_layout.addWidget(btn_set, 3, 0, 1, 3)
         
         self.btn_so = QPushButton("源输出: OFF")
@@ -221,6 +239,21 @@ class CA550StandaloneTab(QWidget):
         self.btn_so.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #333; color: white;")
         self.btn_so.clicked.connect(self.toggle_source_output)
         src_layout.addWidget(self.btn_so, 4, 0, 1, 3)
+        self.sp_tolerance = QDoubleSpinBox()
+        self.sp_tolerance.setDecimals(6)
+        self.sp_tolerance.setRange(0, 1000)
+        self.sp_tolerance.setValue(0.0001)
+        src_layout.addWidget(QLabel("设值回读容差（当前功能单位）:"), 5, 0)
+        src_layout.addWidget(self.sp_tolerance, 5, 1, 1, 2)
+        self.lbl_control_result = QLabel("等待控制确认")
+        self.lbl_control_result.setWordWrap(True)
+        src_layout.addWidget(self.lbl_control_result, 6, 0, 1, 3)
+        self.lbl_control_stats = QLabel("本次运行：暂无控制记录")
+        self.lbl_control_stats.setWordWrap(True)
+        src_layout.addWidget(self.lbl_control_stats, 7, 0, 1, 3)
+        note = QLabel("确认源设定值和输出状态；端子实际电压/电流需通过测量通道或独立仪表确认。")
+        note.setWordWrap(True)
+        src_layout.addWidget(note, 8, 0, 1, 3)
         
         group_source.setLayout(src_layout)
         content_layout.addWidget(group_source, 0, 1)
@@ -297,8 +330,52 @@ class CA550StandaloneTab(QWidget):
         
         # 处理测量数据回读
         elif action == "read_measure_data":
-            if res and "ERROR" not in res:
+            try:
+                finite_reading(res)
                 self.lbl_od.setText(res)
+                self.lbl_od.setStyleSheet("font-size:36px; color:#22C55E; background-color:#000; padding:10px;")
+            except (ValueError, TypeError):
+                self.lbl_od.setText('读取失败')
+                self.lbl_od.setStyleSheet("font-size:36px; color:#FF4D5A; background-color:#000; padding:10px;")
+        elif action == "set_source_output":
+            self.btn_so.setEnabled(True)
+            if res != 'True' and not self._output_details_received:
+                self.lbl_control_result.setText(f"输出控制未确认成功：{res}")
+            self._output_details_received = False
+        elif action == 'read_source_output':
+            self._confirmed_source_state = int(res) if res in ('0', '1') else None
+            self._render_source_state()
+        self.refresh_connection_state()
+
+    def on_control_confirmed(self, action, details):
+        ok = details.get('success') is True
+        actual = details.get('actual')
+        self.lbl_control_result.setText(
+            f"{'确认成功' if ok else '确认失败'} | 请求：{details.get('requested')} | "
+            f"回读：{actual if actual is not None else '未知'} | "
+            f"耗时：{details.get('elapsed', 0):.2f}s\n{details.get('reason', '')}")
+        self.lbl_control_result.setStyleSheet(f"color:{'#22C55E' if ok else '#FF4D5A'};")
+        self.txt_log.append(f"[控制确认] {details}")
+        stats = details.get('statistics', {})
+        if stats:
+            total = stats['total']
+            confirmed = stats['first_pass'] + stats['recovered']
+            self.lbl_control_stats.setText(
+                f"本次运行：{total} 次 | 首次确认 {stats['first_pass']} | 等待/重试后确认 {stats['recovered']} | "
+                f"失败 {stats['failed']} | 确认成功率 {confirmed / total:.1%}")
+        if action == 'set_source_output':
+            self._output_details_received = True
+            self._confirmed_source_state = actual if actual in (0, 1) else None
+            self._render_source_state()
+
+    def _render_source_state(self):
+        if not hasattr(self, 'btn_so'):
+            return
+        state = self._confirmed_source_state
+        self.btn_so.setChecked(state == 1)
+        self.btn_so.setText('源输出：未知' if state is None else ('源输出：开启（已回读）' if state == 1 else '源输出：关闭（已回读）'))
+        self.btn_so.setStyleSheet(
+            f"font-size:16px; font-weight:bold; color:white; background-color:{'#28a745' if state == 1 else '#333'};")
 
     def refresh_serial_ports(self, selected=None):
         if selected is None:
@@ -349,9 +426,11 @@ class CA550StandaloneTab(QWidget):
         self.worker.add_task("get_battery")
 
     def toggle_source_output(self, checked):
+        self._output_details_received = False
+        self._render_source_state()
+        self.btn_so.setEnabled(False)
+        self.lbl_control_result.setText("正在确认输出状态…")
         self.worker.add_task("set_source_output", 1 if checked else 0)
-        self.btn_so.setText("源输出: ON" if checked else "源输出: OFF")
-        self.btn_so.setStyleSheet(f"font-size: 16px; font-weight: bold; background-color: {'#28a745' if checked else '#333'}; color: white;")
 
     def toggle_measure_state(self, checked):
         self.worker.add_task("set_measure_state", 1 if checked else 0)
@@ -361,13 +440,18 @@ class CA550StandaloneTab(QWidget):
     def periodic_update(self):
         if not self.isVisible(): return
         self.refresh_connection_state()
-        if self.ca550.is_connected and self.btn_mo.isChecked():
+        if self.ca550.is_connected:
             # 只有当队列为空时才添加回读任务，防止任务堆积
             if not self.worker.busy and self.worker.task_queue.empty():
-                self.worker.add_task("read_measure_data")
+                self.worker.add_task('read_source_output')
+                if self.btn_mo.isChecked():
+                    self.worker.add_task("read_measure_data", 'measure')
 
     def refresh_connection_state(self):
         connected = bool(self.ca550 and self.ca550.is_connected)
+        if not connected:
+            self._confirmed_source_state = None
+            self._render_source_state()
         self.lbl_comm.setText("●  已连接" if connected else "●  未连接")
         color = "#22C55E" if connected else "#FF4D5A"
         self.lbl_comm.setStyleSheet(

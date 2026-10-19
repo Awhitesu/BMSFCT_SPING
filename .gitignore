@@ -31,3 +31,14 @@ reports/
 *.elf
 *.zip
 recipes/backup/
+config/sys_config.json
+*.exe
+*.7z
+*.rar
+*.pfx
+*.p12
+*.pem
+*.key
+
+config/sys_config.json.bak
+tools/native_debug/

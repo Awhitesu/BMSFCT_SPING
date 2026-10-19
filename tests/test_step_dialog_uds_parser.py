@@ -121,7 +121,7 @@ class TestStepDialogUDSParser(unittest.TestCase):
 
     def test_byte_grid_pdu_sync_and_selection_linkage(self):
         # 1. 输入期望响应 PDU，测试自动同步方块
-        self.dialog.uds_expected.setText("62 01 01 0E 10 2A")
+        self.dialog.uds_workbench.response_sample.setText("62 01 01 0E 10 2A")
         self.dialog._sync_byte_grid_from_pdu()
         self.assertEqual(len(self.dialog.uds_byte_grid._blocks), 6)
         self.assertEqual(self.dialog.uds_byte_grid._blocks[0].lbl_hex.text(), "62")
@@ -153,55 +153,62 @@ class TestStepDialogUDSParser(unittest.TestCase):
         self.dialog.btn_quick_formula.click()
         self.assertEqual(self.dialog.uds_extract_mode.currentIndex(), 3) # FORMULA
 
-    def test_bms_template_auto_fill(self):
-        # 1. 查找并选中“读电池总压”模板
-        target_idx = -1
-        for i in range(self.dialog.combo_uds_templates.count()):
-            if "总压" in self.dialog.combo_uds_templates.itemText(i):
-                target_idx = i
-                break
-        self.assertGreater(target_idx, 0, "未找到电池总压模板")
-        
-        self.dialog.combo_uds_templates.setCurrentIndex(target_idx)
-        
-        # 2. 校验自动预填字段
-        self.assertEqual(self.dialog.uds_request.text(), "22 01 01")
-        self.assertTrue(self.dialog.uds_expected.text().startswith("62 01 01"))
-        self.assertEqual(self.dialog.uds_extract_mode.currentIndex(), 2) # CALC
+    def test_simplified_editor_controls_and_window_flags(self):
+        from PySide6.QtCore import Qt
+        self.assertTrue(self.dialog.windowFlags() & Qt.WindowMinimizeButtonHint)
+        self.assertTrue(self.dialog.windowFlags() & Qt.WindowMaximizeButtonHint)
+        for name in ('uds_simple_group', 'uds_proto_fmt', 'combo_uds_templates',
+                     'btn_save_did_tpl', 'btn_import_did_csv', 'uds_update_btn'):
+            self.assertFalse(hasattr(self.dialog, name), name)
+        self.assertIs(self.dialog.btn_live_sniff.parentWidget(), self.dialog.uds_extract_group)
+        self.dialog.uds_tabs.setCurrentIndex(2)
+        self.dialog.show()
+        app.processEvents()
+        button = self.dialog.uds_add_btn
+        table = self.dialog.uds_table
+        self.assertLess(button.geometry().bottom(), table.geometry().top())
+        self.assertGreater(button.geometry().center().x(), table.geometry().center().x())
+
+    def test_inline_rule_edit_and_manual_offset_persist(self):
+        from PySide6.QtCore import Qt
+        self.dialog.uds_request.setText('22 F1 90')
+        self.dialog.uds_extract_mode.setCurrentIndex(1)
+        self.dialog.uds_extract_offset.setValue(4)
+        self.dialog.uds_extract_len.setValue(17)
+        self.dialog.uds_add_btn.click()
+        rule = self.dialog.uds_table.item(0, 4)
+        self.assertTrue(rule.flags() & Qt.ItemIsEditable)
+        rule.setText('ASCII(offset=3,len=17,var=VIN)')
+        self.dialog.uds_table.item(0, 2).setText('62 F1 90')
+        self.assertEqual(self.dialog.uds_table.item(0, 3).text(), '\u6821\u9a8c')
+        self.dialog.uds_table.item(0, 2).setText('')
+        self.assertEqual(self.dialog.uds_table.item(0, 3).text(), '\u4e0d\u6821\u9a8c')
+        self.assertIn('ASCII(offset=3,len=17,var=VIN)', self.dialog._uds_script())
+        self.dialog.load_uds_row(0)
         self.assertEqual(self.dialog.uds_extract_offset.value(), 3)
-        self.assertEqual(self.dialog.uds_extract_len.value(), 2)
-        self.assertAlmostEqual(self.dialog.uds_extract_scale.value(), 0.1)
-        self.assertEqual(self.dialog.uds_extract_unit.text(), "V")
-        self.assertIn("VOLT", self.dialog.uds_extract_var.text().upper())
-        
-        # 3. 校验方块选区已自动生成并高亮 Byte 3~4
-        self.assertGreaterEqual(len(self.dialog.uds_byte_grid._blocks), 5)
-        self.assertTrue(self.dialog.uds_byte_grid._blocks[3].is_selected)
-        self.assertTrue(self.dialog.uds_byte_grid._blocks[4].is_selected)
+        self.assertEqual(self.dialog.uds_extract_len.value(), 17)
 
-    def test_protocol_format_offset_toggle(self):
-        # 1. 切换为“私有协议 (含长度字节, 偏移 4)”
-        self.dialog.uds_proto_fmt.setCurrentIndex(1)
-        self.assertEqual(self.dialog.uds_extract_offset.value(), 4)
+    def test_workbench_preserves_parser_draft_and_list(self):
+        self.assertEqual(self.dialog.uds_tabs.count(), 4)
+        self.assertEqual(self.dialog.uds_tabs.currentIndex(), 2)
+        self.dialog.uds_request.setText('22 F1 90')
+        self.dialog.uds_tabs.setCurrentIndex(3)
+        self.dialog.uds_extract_mode.setCurrentIndex(1)
+        self.dialog.uds_extract_len.setValue(17)
+        self.dialog.uds_tabs.setCurrentIndex(2)
+        self.assertIn('22 F1 90', self.dialog.uds_draft_summary.text())
+        self.dialog.uds_add_btn.click()
+        self.assertEqual(self.dialog.uds_table.rowCount(), 1)
+        self.assertIn('ASCII(offset=3,len=17)', self.dialog._uds_script())
 
-        # 2. 切换回“标准 UDS (ISO 14229, 偏移 3)”
-        self.dialog.uds_proto_fmt.setCurrentIndex(0)
-        self.assertEqual(self.dialog.uds_extract_offset.value(), 3)
-
-    def test_auto_mock_padding_prefix_only(self):
-        # 当只有 3 字节肯定前缀时，验证是否自动补齐为至少 8 个方块供拖拽
-        self.dialog.uds_expected.setText("62 01 01")
+    def test_response_sample_is_not_padded(self):
+        self.dialog.uds_workbench.response_sample.setText('62 01 01')
         self.dialog.uds_extract_offset.setValue(3)
-        self.dialog.uds_extract_len.setValue(0)
-        self.dialog._sync_byte_grid_from_pdu()
-        self.assertGreaterEqual(len(self.dialog.uds_byte_grid._blocks), 8)
-        self.assertEqual(self.dialog.uds_byte_grid._blocks[0].lbl_hex.text(), "62")
-        self.assertEqual(self.dialog.uds_byte_grid._blocks[1].lbl_hex.text(), "01")
-        self.assertEqual(self.dialog.uds_byte_grid._blocks[2].lbl_hex.text(), "01")
-        self.assertEqual(self.dialog.uds_byte_grid._blocks[3].lbl_hex.text(), "00") # 虚拟补齐
+        self.dialog.uds_extract_len.setValue(17)
+        self.assertEqual(self.dialog.uds_byte_grid._raw_bytes, bytes.fromhex('62 01 01'))
 
     def test_spinbox_to_bytegrid_selection_sync(self):
-        self.dialog.uds_expected.setText("62 F1 90 41 42 43 44 45 46 47")
+        self.dialog.uds_workbench.response_sample.setText("62 F1 90 41 42 43 44 45 46 47")
         self.dialog._sync_byte_grid_from_pdu()
         # 手动修改 SpinBox 偏移和长度
         self.dialog.uds_extract_offset.setValue(3)

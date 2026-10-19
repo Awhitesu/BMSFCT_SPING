@@ -35,11 +35,15 @@ class TBS2102B:
 
     def disconnect(self):
         with self._lock:
-            for resource in (self.resource, self.rm):
-                if resource:
-                    resource.close()
+            resources = self.resource, self.rm
             self.resource = self.rm = None
             self.is_connected = False
+            for resource in resources:
+                if resource:
+                    try:
+                        resource.close()
+                    except Exception as exc:
+                        self.last_error = str(exc)
 
     def command(self, command):
         with self._lock:
@@ -67,6 +71,8 @@ class TBS2102B:
 
     def trigger(self, kind, source, mode, level, slope, coupling, holdoff,
                 polarity, when, width, lower, upper):
+        if not all(math.isfinite(float(value)) for value in (level, holdoff, width, lower, upper)):
+            raise ValueError('触发参数必须为有限数值')
         if kind not in ('EDGE', 'WIDTH', 'RUNT') or source not in ('CH1', 'CH2', 'LINE'):
             raise ValueError('触发类型或来源错误')
         if not 20e-9 <= holdoff <= 8 or width < 1e-9:

@@ -33,6 +33,7 @@ class TestRenesasE2TabRun(unittest.TestCase):
         self.mock_programmer.interface = "FINE"
         self.mock_programmer.speed = "1000000"
         self.mock_programmer.is_connected = True
+        self.mock_programmer.tool_ready = True
         self.mock_programmer.last_error = ""
         self.mock_programmer.query_state.return_value = "Ready"
         self.mock_programmer.run_project.return_value = True
@@ -65,8 +66,8 @@ class TestRenesasE2TabRun(unittest.TestCase):
         self.assertEqual(self.tab.combo_project.count(), 1)
         self.assertIn("浏览本地工程文件", self.tab.combo_project.currentText())
 
-    def test_buttons_disabled_when_disconnected(self):
-        self.mock_programmer.is_connected = False
+    def test_buttons_disabled_when_tool_not_ready(self):
+        self.mock_programmer.tool_ready = False
         self.tab.refresh_connection_state()
         self.assertFalse(self.tab.btn_run.isEnabled())
         self.assertFalse(self.tab.btn_query.isEnabled())
@@ -86,10 +87,11 @@ class TestRenesasE2TabRun(unittest.TestCase):
             target_func = mock_thread.call_args[1]["target"]
             target_func()
         self.assertFalse(self.tab._running)
-        self.assertEqual(self.tab.lbl_device_state.text(), "Ready")
+        self.assertEqual(self.tab.lbl_device_state.text(), "E2 USB已识别（目标连接未验证）")
 
     def test_run_project_success(self):
         self._select_project_quietly(self.hex_path)
+        self.tab.chk_deep_diff.setChecked(False)
         fake_record = {
             "match": True,
             "match_str": "MATCH (100% 吻合)",

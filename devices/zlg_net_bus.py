@@ -68,23 +68,30 @@ class ZLGNetBus:
             raise
 
     def send(self, message, timeout=None):
+        message._check()
         fd = message.is_fd
         obj = self.types.ZCAN_TransmitFD_Data() if fd else self.types.ZCAN_Transmit_Data()
-        obj.frame.can_id = message.arbitration_id | (int(message.is_extended_id) << 31)
+        obj.frame.can_id = (message.arbitration_id | (int(message.is_extended_id) << 31)
+                            | (int(message.is_remote_frame) << 30)
+                            | (int(message.is_error_frame) << 29))
         if fd:
             obj.frame.len = len(message.data)
             obj.frame.flags = int(message.bitrate_switch)
         else:
-            obj.frame.can_dlc = len(message.data)
+            obj.frame.can_dlc = message.dlc
         for i, byte in enumerate(message.data):
             obj.frame.data[i] = byte
         with self.lock:
             if not self.handle:
                 raise RuntimeError('ZLG已断开')
-            if self.physical_channel not in getattr(self, 'enabled_channels', set(range(4))):
+            channel = self.physical_channel if message.channel is None else int(message.channel)
+            handle = getattr(self, 'handles', {self.physical_channel: self.handle}).get(channel)
+            if not handle:
+                raise RuntimeError('ZLG物理通道句柄不存在')
+            if channel not in getattr(self, 'enabled_channels', set(range(4))):
                 raise RuntimeError('所选发送通道未使能')
             fn = self.dll.ZCAN_TransmitFD if fd else self.dll.ZCAN_Transmit
-            if fn(self.handle, C.byref(obj), 1) != 1:
+            if fn(handle, C.byref(obj), 1) != 1:
                 raise RuntimeError('ZLG发送失败')
 
     def configure_channel(self, nominal_bitrate, data_bitrate, termination, persist=False):
@@ -98,7 +105,8 @@ class ZLGNetBus:
                 data.value = str(value).encode()
                 if self.dll.ZCAN_SetValue(self.device, b'0/add_dynamic_data', C.byref(data)) != 1:
                     raise RuntimeError('ZLG动态配置提交失败: ' + suffix)
-            if self.dll.ZCAN_SetValue(self.device, b'0/apply_dynamic_data', C.c_char_p(b'1' if persist else b'0')) != 1:
+            # SDK C example passes a UINT pointer, not the ASCII string '0'/'1'.
+            if self.dll.ZCAN_SetValue(self.device, b'0/apply_dynamic_data', C.byref(C.c_uint(int(bool(persist))))) != 1:
                 raise RuntimeError('ZLG动态配置应用失败')
 
     def configure_channels(self, settings, persist=False):
@@ -121,7 +129,7 @@ class ZLGNetBus:
                     if self.dll.ZCAN_SetValue(self.device, b'0/add_dynamic_data', C.byref(data)) != 1:
                         raise RuntimeError(f'CH{index + 1}提交失败: {suffix}；未完成应用')
                 # 官方手册要求切换到下一物理通道前先应用本通道配置。
-                if self.dll.ZCAN_SetValue(self.device, b'0/apply_dynamic_data', C.c_char_p(b'1' if persist else b'0')) != 1:
+                if self.dll.ZCAN_SetValue(self.device, b'0/apply_dynamic_data', C.byref(C.c_uint(int(bool(persist))))) != 1:
                     raise RuntimeError(f'CH{index + 1}配置应用失败；此前CH1–CH{index}可能已经生效，请检查设备配置。')
                 if not hasattr(self, 'enabled_channels'):
                     self.enabled_channels = set(range(4))
@@ -154,6 +162,8 @@ class ZLGNetBus:
                         continue
                     frame = obj.frame
                     length = frame.len if fd else frame.can_dlc
+                    if length > (64 if fd else 8):
+                        raise ValueError('ZLG接收帧长度无效')
                     self._rx_next = (index * 2 + int(fd) + 1) % 8
                     return self.can.Message(arbitration_id=frame.can_id & 0x1FFFFFFF,
                         channel=index,
@@ -161,7 +171,8 @@ class ZLGNetBus:
                         is_error_frame=bool(frame.can_id & 0x20000000),
                         is_remote_frame=bool(frame.can_id & 0x40000000),
                         is_fd=fd, bitrate_switch=bool(frame.flags & 1) if fd else False,
-                        data=bytes(frame.data[:length]), timestamp=time.time())
+                        dlc=length,
+                        data=b'' if frame.can_id & 0x40000000 else bytes(frame.data[:length]), timestamp=time.time())
             if time.monotonic() >= deadline:
                 return None
             time.sleep(0.002)

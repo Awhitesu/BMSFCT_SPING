@@ -1,0 +1,907 @@
+{
+    "name": "VF-Limo7(PVFLIMO7-VN)_APP",
+    "recipe_number": 7,
+    "project_no": "",
+    "model_name": "",
+    "dbc": null,
+    "plc_recipe_register": 0,
+    "sn_regex": "^SCUx03DP051607B\\d{11}$",
+    "can_config": {
+        "channel": "PCAN_USBBUS1",
+        "mode": "经典 CAN",
+        "nominal_bitrate": 500000,
+        "data_bitrate": 2000000
+    },
+    "items": [
+        {
+            "step_id": "9f2f01c3da7949189a39303782588a75",
+            "name": "BMS上电",
+            "mode": "范围判定",
+            "min": "180",
+            "max": "220",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "unit": "mA",
+            "sub_steps": [
+                {
+                    "step_id": "9efc067ffa644fcfb65eac7ef5648a94",
+                    "name": "Easy320 继电器 (Easy320)-闭合勾选通道 (6,7)",
+                    "action": "闭合勾选通道",
+                    "params": "6,7",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "0dcc7e0685454b04a45a3099aeceeaf4",
+                    "name": "等待 (Wait)-固定延时 (2000ms)",
+                    "action": "固定延时",
+                    "params": "2000ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "702b4f5ce80448c9b63eb96bf21804d2",
+                    "name": "IT6722A 被测物供电电源 (IT6722A DUT Power)-设置参数 (12.0V / 3.0A / 开启输出)",
+                    "action": "设置参数",
+                    "params": "12.0V / 3.0A / 开启输出",
+                    "device": "IT6722A 被测物供电电源 (IT6722A DUT Power)",
+                    "type": "设置仪表",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "6e58cb6cb85145c6b2bcc5c7a8bc6672",
+                    "name": "IT6722A 被测物供电电源 (IT6722A DUT Power)-回读数据 (读取电流 / UNIT:mA / RW:eyJtaW4iOiAxODAuMCwgIm1heCI6IDIyMC4wLCAidGltZW91dCI6IDEwLjAsICJpbnRlcnZhbCI6IDAuMSwgImNvbnNlY3V0aXZlIjogMX0=)",
+                    "action": "回读数据",
+                    "params": "读取电流 / UNIT:mA / RW:eyJtaW4iOiAxODAuMCwgIm1heCI6IDIyMC4wLCAidGltZW91dCI6IDEwLjAsICJpbnRlcnZhbCI6IDAuMSwgImNvbnNlY3V0aXZlIjogMX0=",
+                    "device": "IT6722A 被测物供电电源 (IT6722A DUT Power)",
+                    "type": "读取仪表",
+                    "is_judgment": true,
+                    "fail_strategy": "失败停止"
+                }
+            ]
+        },
+        {
+            "step_id": "784c37d5ee6c4b4b808828eb7cd66d8f",
+            "name": "选择APP",
+            "mode": "字符串比对",
+            "min": "SOW32030001BC-01_UN.hex",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "复测1次",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "7544afea26b44fe6bb4f985d75811301",
+                    "name": "APP刷写-查找刷写文件 (HOST:D:\\BMSTest\\BMS_General.exe / INI:config.ini / SECTION:App / KEY:addr / APPNAME:)",
+                    "action": "查找刷写文件",
+                    "params": "HOST:D:\\BMSTest\\BMS_General.exe / INI:config.ini / SECTION:App / KEY:addr / APPNAME:",
+                    "device": "APP刷写",
+                    "type": "APP刷写配置",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "1f49ee5f074f4debaab012e4bf0cb915",
+            "name": "APP刷写",
+            "mode": "字符串比对",
+            "min": "PASS",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "复测1次",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "72098c34ae314897b71510e08665c31f",
+                    "name": "APP刷写-启动刷写 (HOST:D:\\BMSTest\\BMS_General.exe / TIMEOUT:300 / FLASH_TX_ID:0x693 / FLASH_RX_ID:0x613)",
+                    "action": "启动刷写",
+                    "params": "HOST:D:\\BMSTest\\BMS_General.exe / TIMEOUT:300 / FLASH_TX_ID:0x693 / FLASH_RX_ID:0x613",
+                    "device": "APP刷写",
+                    "type": "APP刷写",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "75abe8e860954377b6d3835af9d756fd",
+            "name": "BMS重启",
+            "mode": "字符串比对",
+            "min": "PASS",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "不复测",
+            "unit": "mA",
+            "sub_steps": [
+                {
+                    "step_id": "40089da3c6644252b45340eaf9e64004",
+                    "name": "Easy320 继电器 (Easy320)-断开勾选通道 (7)",
+                    "action": "断开勾选通道",
+                    "params": "7",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "984f7bcfd12e4fd19aff263625a3a2db",
+                    "name": "等待 (Wait)-固定延时 (5000ms)",
+                    "action": "固定延时",
+                    "params": "5000ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "1def6abf3d154ad4865cbd94cb3bab80",
+                    "name": "Easy320 继电器 (Easy320)-闭合勾选通道 (6,7)",
+                    "action": "闭合勾选通道",
+                    "params": "6,7",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                },
+                {
+                    "step_id": "c71a50afbf3446698891c5df7d534326",
+                    "name": "等待 (Wait)-固定延时 (2000ms)",
+                    "action": "固定延时",
+                    "params": "2000ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                }
+            ]
+        },
+        {
+            "step_id": "f994703f62dd444c8c8ee382fe6e0536",
+            "name": "发送整车报文",
+            "mode": "字符串比对",
+            "min": "PASS",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "不复测",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "af3f55fcf7aa47ada7432eee25441041",
+                    "name": "等待 (Wait)-固定延时 (500ms)",
+                    "action": "固定延时",
+                    "params": "500ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "baadb93980f1445d9dae017689d861c5",
+                    "name": "启动周期报文列表：发送整车报文",
+                    "action": "启动周期报文列表",
+                    "params": "CANPER64:eyJuYW1lIjogIuWPkemAgeaVtOi9puaKpeaWhyIsICJvcGVyYXRpb24iOiAic3RhcnQiLCAiZnJhbWVzIjogW3siaWQiOiAyOTMsICJkYXRhIjogIjAwIDAwIDAwIDAxIDAwIDAwIDAwIDAwIiwgInBlcmlvZF9tcyI6IDUwMCwgInR5cGUiOiAwfSwgeyJpZCI6IDg4OCwgImRhdGEiOiAiMDIgMDAgMDAgMDAgMDAgMDAgMDAgMDAiLCAicGVyaW9kX21zIjogNTAwLCAidHlwZSI6IDB9LCB7ImlkIjogMjc5LCAiZGF0YSI6ICIwMCAwMCAwMCAwMCAwMiAwMCAwMCAwMCIsICJwZXJpb2RfbXMiOiA1MDAsICJ0eXBlIjogMH0sIHsiaWQiOiAyODAsICJkYXRhIjogIjAwIDAxIDAwIDAwIDAwIDAwIDAwIDAwIiwgInBlcmlvZF9tcyI6IDUwMCwgInR5cGUiOiAwfV19 / PCH:0",
+                    "device": "CAN 交互",
+                    "type": "CAN交互",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "82df9fb4636f4166a54144605cdcb0b2",
+            "name": "SOC标定",
+            "mode": "字符串比对",
+            "min": "6E",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "复测1次",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "32cef9957d104c01b363b1348c7bda48",
+                    "name": "等待 (Wait)-固定延时 (500ms)",
+                    "action": "固定延时",
+                    "params": "500ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "fb63c50f825b4b25b0e9303c3858956b",
+                    "name": "UDS 交互列表-顺序发送并校验 (TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MTAgMDMgPT4gNTAgMDMKQERFTEFZIDUwMAoyNyAwMSA9PiA2NyAwMQpAREVMQVkgNTAwCkBTRUNVUklUWQpAREVMQVkgMTAwCjJFIDEwIDIzIDAwIEQyID0-IDZFIDEwIDIzIHwgSEVYKG9mZnNldD0wLGxlbj0xKQ== / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI1MCAwMyAwMCAzMiAwMCBDOCIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiIiwgIm91dHB1dCI6IGZhbHNlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuaJqeWxleS8muivnSJ9LCB7ImFkZHJlc3MiOiAiZGVmYXVsdCIsICJjaGVjayI6IHRydWUsICJyZXNwb25zZV9zYW1wbGUiOiAiIiwgInN1cHByZXNzIjogZmFsc2UsICJleHBlY3RlZCI6ICIiLCAib3V0cHV0IjogZmFsc2UsICJlbmFibGVkIjogdHJ1ZSwgIm5hbWUiOiAi5bu25pe2IDUwMG1zIn0sIHsiYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2NyAwMSBGNyAxOSA0RCA0OCA0RiAxNSBGNCA3OCA0MiBFOCBFMCBERCA4MCBCRCAwOSAxMyIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiIiwgIm91dHB1dCI6IGZhbHNlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9LCB7ImFkZHJlc3MiOiAiZGVmYXVsdCIsICJjaGVjayI6IHRydWUsICJyZXNwb25zZV9zYW1wbGUiOiAiIiwgInN1cHByZXNzIjogZmFsc2UsICJleHBlY3RlZCI6ICIiLCAib3V0cHV0IjogZmFsc2UsICJlbmFibGVkIjogdHJ1ZSwgIm5hbWUiOiAi5bu25pe2IDUwMG1zIn0sIHsiYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICIiLCAic3VwcHJlc3MiOiBmYWxzZSwgImV4cGVjdGVkIjogIiIsICJvdXRwdXQiOiBmYWxzZSwgImVuYWJsZWQiOiB0cnVlLCAibmFtZSI6ICJETEzlronlhajop6PplIEifSwgeyJhZGRyZXNzIjogImRlZmF1bHQiLCAiY2hlY2siOiB0cnVlLCAicmVzcG9uc2Vfc2FtcGxlIjogIiIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiIiwgIm91dHB1dCI6IGZhbHNlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuW7tuaXtiAxMDBtcyJ9LCB7ImFkZHJlc3MiOiAiZGVmYXVsdCIsICJjaGVjayI6IHRydWUsICJyZXNwb25zZV9zYW1wbGUiOiAiNkUgMTAgMjMiLCAic3VwcHJlc3MiOiBmYWxzZSwgImV4cGVjdGVkIjogIjZFIiwgIm91dHB1dCI6IHRydWUsICJlbmFibGVkIjogdHJ1ZSwgIm5hbWUiOiAi6Ieq5a6a5LmJIn1d / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / SEC64:eyJwYXRoIjogIkM6L1VzZXJzL3N1cGVybWFuL0Rlc2t0b3AvQk1TRkNUL1NlZWRLZXkvTElNT19TZWVkbktleV9CTVMuZGxsIiwgImFwaSI6ICJhdXRvIiwgImNhbGxpbmciOiAiY2RlY2wiLCAibGV2ZWwiOiAxLCAiZGxsX2xldmVsIjogMSwgInZhcmlhbnQiOiAiIiwgInNlZWRfZGF0YSI6ICIiLCAiY2FwYWNpdHkiOiAyNTYsICJ0aW1lb3V0IjogNS4wfQ== / PCH:0)",
+                    "action": "顺序发送并校验",
+                    "params": "TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MTAgMDMgPT4gNTAgMDMKQERFTEFZIDUwMAoyNyAwMSA9PiA2NyAwMQpAREVMQVkgNTAwCkBTRUNVUklUWQpAREVMQVkgMTAwCjJFIDEwIDIzIDAwIEQyID0-IDZFIDEwIDIzIHwgSEVYKG9mZnNldD0wLGxlbj0xKQ== / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI1MCAwMyAwMCAzMiAwMCBDOCIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiIiwgIm91dHB1dCI6IGZhbHNlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuaJqeWxleS8muivnSJ9LCB7ImFkZHJlc3MiOiAiZGVmYXVsdCIsICJjaGVjayI6IHRydWUsICJyZXNwb25zZV9zYW1wbGUiOiAiIiwgInN1cHByZXNzIjogZmFsc2UsICJleHBlY3RlZCI6ICIiLCAib3V0cHV0IjogZmFsc2UsICJlbmFibGVkIjogdHJ1ZSwgIm5hbWUiOiAi5bu25pe2IDUwMG1zIn0sIHsiYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2NyAwMSBGNyAxOSA0RCA0OCA0RiAxNSBGNCA3OCA0MiBFOCBFMCBERCA4MCBCRCAwOSAxMyIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiIiwgIm91dHB1dCI6IGZhbHNlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9LCB7ImFkZHJlc3MiOiAiZGVmYXVsdCIsICJjaGVjayI6IHRydWUsICJyZXNwb25zZV9zYW1wbGUiOiAiIiwgInN1cHByZXNzIjogZmFsc2UsICJleHBlY3RlZCI6ICIiLCAib3V0cHV0IjogZmFsc2UsICJlbmFibGVkIjogdHJ1ZSwgIm5hbWUiOiAi5bu25pe2IDUwMG1zIn0sIHsiYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICIiLCAic3VwcHJlc3MiOiBmYWxzZSwgImV4cGVjdGVkIjogIiIsICJvdXRwdXQiOiBmYWxzZSwgImVuYWJsZWQiOiB0cnVlLCAibmFtZSI6ICJETEzlronlhajop6PplIEifSwgeyJhZGRyZXNzIjogImRlZmF1bHQiLCAiY2hlY2siOiB0cnVlLCAicmVzcG9uc2Vfc2FtcGxlIjogIiIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiIiwgIm91dHB1dCI6IGZhbHNlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuW7tuaXtiAxMDBtcyJ9LCB7ImFkZHJlc3MiOiAiZGVmYXVsdCIsICJjaGVjayI6IHRydWUsICJyZXNwb25zZV9zYW1wbGUiOiAiNkUgMTAgMjMiLCAic3VwcHJlc3MiOiBmYWxzZSwgImV4cGVjdGVkIjogIjZFIiwgIm91dHB1dCI6IHRydWUsICJlbmFibGVkIjogdHJ1ZSwgIm5hbWUiOiAi6Ieq5a6a5LmJIn1d / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / SEC64:eyJwYXRoIjogIkM6L1VzZXJzL3N1cGVybWFuL0Rlc2t0b3AvQk1TRkNUL1NlZWRLZXkvTElNT19TZWVkbktleV9CTVMuZGxsIiwgImFwaSI6ICJhdXRvIiwgImNhbGxpbmciOiAiY2RlY2wiLCAibGV2ZWwiOiAxLCAiZGxsX2xldmVsIjogMSwgInZhcmlhbnQiOiAiIiwgInNlZWRfZGF0YSI6ICIiLCAiY2FwYWNpdHkiOiAyNTYsICJ0aW1lb3V0IjogNS4wfQ== / PCH:0",
+                    "device": "UDS 交互列表",
+                    "type": "CAN交互",
+                    "is_judgment": true,
+                    "fail_strategy": "重试3次"
+                }
+            ]
+        },
+        {
+            "step_id": "ac66444ba7b14dd4850bd6481c4286c2",
+            "name": "SOH标定",
+            "mode": "字符串比对",
+            "min": "6E",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "复测1次",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "137cbc3bf1e843e79e8a350a3c53544f",
+                    "name": "UDS 交互列表-顺序发送并校验 (TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MkUgMTAgMjQgQzggPT4gNkUgMTAgMjQgfCBIRVgob2Zmc2V0PTAsbGVuPTEp / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICIiLCAic3VwcHJlc3MiOiBmYWxzZSwgImV4cGVjdGVkIjogIiIsICJvdXRwdXQiOiB0cnVlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9XQ== / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0)",
+                    "action": "顺序发送并校验",
+                    "params": "TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MkUgMTAgMjQgQzggPT4gNkUgMTAgMjQgfCBIRVgob2Zmc2V0PTAsbGVuPTEp / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICIiLCAic3VwcHJlc3MiOiBmYWxzZSwgImV4cGVjdGVkIjogIiIsICJvdXRwdXQiOiB0cnVlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9XQ== / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0",
+                    "device": "UDS 交互列表",
+                    "type": "CAN交互",
+                    "is_judgment": true,
+                    "fail_strategy": "重试3次"
+                }
+            ]
+        },
+        {
+            "step_id": "a5f88ca9795c4ec08b55f16941099433",
+            "name": "BMS重启",
+            "mode": "字符串比对",
+            "min": "PASS",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "不复测",
+            "unit": "mA",
+            "sub_steps": [
+                {
+                    "step_id": "7ce75a6e9f034dcaae2222bbc58aad5a",
+                    "name": "Easy320 继电器 (Easy320)-断开勾选通道 (6,7)",
+                    "action": "断开勾选通道",
+                    "params": "6,7",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "d0ac6bd4df444d9d817ee6c2759dc2ec",
+                    "name": "等待 (Wait)-固定延时 (2000ms)",
+                    "action": "固定延时",
+                    "params": "2000ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "16f741cc194c45a28631b29861ee91bf",
+                    "name": "Easy320 继电器 (Easy320)-闭合勾选通道 (6,7)",
+                    "action": "闭合勾选通道",
+                    "params": "6,7",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                },
+                {
+                    "step_id": "053336e53b79475a9e735b17d85ea1fd",
+                    "name": "等待 (Wait)-固定延时 (2000ms)",
+                    "action": "固定延时",
+                    "params": "2000ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                }
+            ]
+        },
+        {
+            "step_id": "ebe84e5da3044a9c9b342cfeaffc3ad4",
+            "name": "SOC标定读取",
+            "mode": "范围判定",
+            "min": "21",
+            "max": "21",
+            "standard_type": "数值",
+            "retry_count": "复测1次",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "3fc41bde1dee441db2f4e1e16cf9cdba",
+                    "name": "等待 (Wait)-固定延时 (500ms)",
+                    "action": "固定延时",
+                    "params": "500ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "3fc2fde6d62e4478add0152a23894ae0",
+                    "name": "UDS 交互列表-顺序发送并校验 (TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgMTAgMjMgfCBDQUxDKG9mZnNldD0zLGxlbj0yLHNjYWxlPTAuMSk= / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiAxMCAyMyAwMCBEMiIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiMjEuMCIsICJvdXRwdXQiOiB0cnVlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9XQ== / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0)",
+                    "action": "顺序发送并校验",
+                    "params": "TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgMTAgMjMgfCBDQUxDKG9mZnNldD0zLGxlbj0yLHNjYWxlPTAuMSk= / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiAxMCAyMyAwMCBEMiIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiMjEuMCIsICJvdXRwdXQiOiB0cnVlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9XQ== / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0",
+                    "device": "UDS 交互列表",
+                    "type": "CAN交互",
+                    "is_judgment": true,
+                    "fail_strategy": "重试3次"
+                }
+            ]
+        },
+        {
+            "step_id": "b41806266b0140f5be172ce924efd69c",
+            "name": "SOH标定读取",
+            "mode": "范围判定",
+            "min": "100",
+            "max": "100",
+            "standard_type": "数值",
+            "retry_count": "复测1次",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "2e2b25f27d2d456da05c0a284bbf496c",
+                    "name": "等待 (Wait)-固定延时 (500ms)",
+                    "action": "固定延时",
+                    "params": "500ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "8f3c049dc78847f68974132538697ab0",
+                    "name": "UDS 交互列表-顺序发送并校验 (TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgMTAgMjQgfCBDQUxDKG9mZnNldD0zLGxlbj0wLHNjYWxlPTAuNSk= / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiAxMCAyNCBDOCIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiMTAwLjAiLCAib3V0cHV0IjogdHJ1ZSwgImVuYWJsZWQiOiB0cnVlLCAibmFtZSI6ICLoh6rlrprkuYkifV0= / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0)",
+                    "action": "顺序发送并校验",
+                    "params": "TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgMTAgMjQgfCBDQUxDKG9mZnNldD0zLGxlbj0wLHNjYWxlPTAuNSk= / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiAxMCAyNCBDOCIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiMTAwLjAiLCAib3V0cHV0IjogdHJ1ZSwgImVuYWJsZWQiOiB0cnVlLCAibmFtZSI6ICLoh6rlrprkuYkifV0= / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0",
+                    "device": "UDS 交互列表",
+                    "type": "CAN交互",
+                    "is_judgment": true,
+                    "fail_strategy": "重试3次"
+                }
+            ]
+        },
+        {
+            "step_id": "07055de1c56543dbbf569a6b1d448c07",
+            "name": "写生产日期",
+            "mode": "字符串比对",
+            "min": "6E",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "不复测",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "d13f4ddbef854498a16a59ccb71a2292",
+                    "name": "UDS 交互列表-顺序发送并校验 (TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MTAgMDMgPT4gNTAgMDMKQERFTEFZIDIwMAoxMCAwMiA9PiA1MCAwMgpAREVMQVkgMjAw / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI1MCAwMyAwMCAzMiAwMCBDOCIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiIiwgIm91dHB1dCI6IGZhbHNlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9LCB7ImFkZHJlc3MiOiAiZGVmYXVsdCIsICJjaGVjayI6IHRydWUsICJyZXNwb25zZV9zYW1wbGUiOiAiIiwgInN1cHByZXNzIjogZmFsc2UsICJleHBlY3RlZCI6ICIiLCAib3V0cHV0IjogZmFsc2UsICJlbmFibGVkIjogdHJ1ZSwgIm5hbWUiOiAi5bu25pe2IDIwMG1zIn0sIHsiYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI1MCAwMiAwMCAzMiAwMCBDOCIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiIiwgIm91dHB1dCI6IGZhbHNlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9LCB7ImFkZHJlc3MiOiAiZGVmYXVsdCIsICJjaGVjayI6IHRydWUsICJyZXNwb25zZV9zYW1wbGUiOiAiIiwgInN1cHByZXNzIjogZmFsc2UsICJleHBlY3RlZCI6ICIiLCAib3V0cHV0IjogZmFsc2UsICJlbmFibGVkIjogdHJ1ZSwgIm5hbWUiOiAi5bu25pe2IDIwMG1zIn1d / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogdHJ1ZSwgImtlZXBhbGl2ZV9tcyI6IDIwMDAsICJrZWVwYWxpdmVfYWRkcmVzcyI6ICJwaHlzaWNhbCIsICJrZWVwYWxpdmVfc3VwcHJlc3MiOiB0cnVlLCAicGFkZGluZyI6IDAsICJibG9ja19zaXplIjogMCwgInN0X21pbiI6IDAsICJwMl9zdGFyX21zIjogNTAwMCwgImZyYW1lX2Zvcm1hdCI6ICJhdXRvIiwgImNhc2VzIjogW10sICJkdGNfZGljdGlvbmFyeSI6IHt9fQ== / PCH:0)",
+                    "action": "顺序发送并校验",
+                    "params": "TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MTAgMDMgPT4gNTAgMDMKQERFTEFZIDIwMAoxMCAwMiA9PiA1MCAwMgpAREVMQVkgMjAw / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI1MCAwMyAwMCAzMiAwMCBDOCIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiIiwgIm91dHB1dCI6IGZhbHNlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9LCB7ImFkZHJlc3MiOiAiZGVmYXVsdCIsICJjaGVjayI6IHRydWUsICJyZXNwb25zZV9zYW1wbGUiOiAiIiwgInN1cHByZXNzIjogZmFsc2UsICJleHBlY3RlZCI6ICIiLCAib3V0cHV0IjogZmFsc2UsICJlbmFibGVkIjogdHJ1ZSwgIm5hbWUiOiAi5bu25pe2IDIwMG1zIn0sIHsiYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI1MCAwMiAwMCAzMiAwMCBDOCIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiIiwgIm91dHB1dCI6IGZhbHNlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9LCB7ImFkZHJlc3MiOiAiZGVmYXVsdCIsICJjaGVjayI6IHRydWUsICJyZXNwb25zZV9zYW1wbGUiOiAiIiwgInN1cHByZXNzIjogZmFsc2UsICJleHBlY3RlZCI6ICIiLCAib3V0cHV0IjogZmFsc2UsICJlbmFibGVkIjogdHJ1ZSwgIm5hbWUiOiAi5bu25pe2IDIwMG1zIn1d / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogdHJ1ZSwgImtlZXBhbGl2ZV9tcyI6IDIwMDAsICJrZWVwYWxpdmVfYWRkcmVzcyI6ICJwaHlzaWNhbCIsICJrZWVwYWxpdmVfc3VwcHJlc3MiOiB0cnVlLCAicGFkZGluZyI6IDAsICJibG9ja19zaXplIjogMCwgInN0X21pbiI6IDAsICJwMl9zdGFyX21zIjogNTAwMCwgImZyYW1lX2Zvcm1hdCI6ICJhdXRvIiwgImNhc2VzIjogW10sICJkdGNfZGljdGlvbmFyeSI6IHt9fQ== / PCH:0",
+                    "device": "UDS 交互列表",
+                    "type": "CAN交互",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "1668ef99931a4c4c821e44169fe6281e",
+                    "name": "UDS 2E 三字段写入",
+                    "action": "写入三字段 ASCII 并校验响应",
+                    "params": "WRITE64:eyJ0eF9pZCI6IDE2ODMsICJyeF9pZCI6IDE1NTUsICJkaWQiOiA2MTgzNiwgInRpbWVvdXQiOiAxMDAwLCAibGl0ZXJhbCI6ICJMSU1PQ04iLCAic3RhcnQiOiAyMywgImxlbmd0aCI6IDR9 / PCH:0 / TYPE:0",
+                    "device": "UDS 2E 三字段写入",
+                    "type": "CAN交互",
+                    "is_judgment": true,
+                    "fail_strategy": "失败停止"
+                }
+            ]
+        },
+        {
+            "step_id": "b04aec806c5d484a8094c340a800965e",
+            "name": "BMS重启",
+            "mode": "字符串比对",
+            "min": "PASS",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "不复测",
+            "unit": "mA",
+            "sub_steps": [
+                {
+                    "step_id": "fccbed05006f43d9a099d8f3b1e771df",
+                    "name": "Easy320 继电器 (Easy320)-断开勾选通道 (6,7)",
+                    "action": "断开勾选通道",
+                    "params": "6,7",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "ba9c39210d3d4323a06a4098bba06b79",
+                    "name": "等待 (Wait)-固定延时 (2000ms)",
+                    "action": "固定延时",
+                    "params": "2000ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "a546b9bd61064e339a939094ff0e97c7",
+                    "name": "Easy320 继电器 (Easy320)-闭合勾选通道 (6,7)",
+                    "action": "闭合勾选通道",
+                    "params": "6,7",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                },
+                {
+                    "step_id": "6cf6334b5d6e4057bd0f1175d6819a26",
+                    "name": "等待 (Wait)-固定延时 (2000ms)",
+                    "action": "固定延时",
+                    "params": "2000ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                }
+            ]
+        },
+        {
+            "step_id": "a683f6417ba84d9a9f5f20abb924b15b",
+            "name": "读生产日期",
+            "mode": "字符串比对",
+            "min": "主板序列号",
+            "max": "--",
+            "standard_type": "变量",
+            "retry_count": "不复测",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "3f6831ab3cae4cb18808bf42c69967eb",
+                    "name": "UDS 交互列表-顺序发送并校验 (TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgOEMgfCBBU0NJSShvZmZzZXQ9MyxsZW49MTYp / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSA4QyAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiIiwgIm91dHB1dCI6IHRydWUsICJlbmFibGVkIjogdHJ1ZSwgIm5hbWUiOiAi6Ieq5a6a5LmJIn1d / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0)",
+                    "action": "顺序发送并校验",
+                    "params": "TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgOEMgfCBBU0NJSShvZmZzZXQ9MyxsZW49MTYp / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSA4QyAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCAwMCIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiIiwgIm91dHB1dCI6IHRydWUsICJlbmFibGVkIjogdHJ1ZSwgIm5hbWUiOiAi6Ieq5a6a5LmJIn1d / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0",
+                    "device": "UDS 交互列表",
+                    "type": "CAN交互",
+                    "is_judgment": true,
+                    "fail_strategy": "失败停止"
+                }
+            ]
+        },
+        {
+            "step_id": "acdd335b0a1e463bbc2e1b0d5ada82f5",
+            "name": "停止整车报文",
+            "mode": "字符串比对",
+            "min": "PASS",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "复测1次",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "cefb8a56375e4926865c1768c0399222",
+                    "name": "等待 (Wait)-固定延时 (500ms)",
+                    "action": "固定延时",
+                    "params": "500ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "86fffa8c19934df5892218f1c6a13894",
+                    "name": "停止周期报文列表：发送整车报文",
+                    "action": "停止周期报文列表",
+                    "params": "CANPER64:eyJuYW1lIjogIuWPkemAgeaVtOi9puaKpeaWhyIsICJvcGVyYXRpb24iOiAic3RvcCJ9 / PCH:0",
+                    "device": "CAN 交互",
+                    "type": "CAN交互",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "52fbed778cd346a480d3a8d2551b904d",
+            "name": "BMS重启",
+            "mode": "字符串比对",
+            "min": "PASS",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "不复测",
+            "unit": "mA",
+            "sub_steps": [
+                {
+                    "step_id": "5d3d96444c3f4c7fb3e8a1b6128f2061",
+                    "name": "Easy320 继电器 (Easy320)-断开勾选通道 (6,7)",
+                    "action": "断开勾选通道",
+                    "params": "6,7",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "2b9a54e34e034fd9b984f757dc37417a",
+                    "name": "等待 (Wait)-固定延时 (2000ms)",
+                    "action": "固定延时",
+                    "params": "2000ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "56e5b023db414cdabc0a18fb55e382f1",
+                    "name": "Easy320 继电器 (Easy320)-闭合勾选通道 (6,7)",
+                    "action": "闭合勾选通道",
+                    "params": "6,7",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                },
+                {
+                    "step_id": "cba1441a55624265b3616b14030c0814",
+                    "name": "等待 (Wait)-固定延时 (2000ms)",
+                    "action": "固定延时",
+                    "params": "2000ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                }
+            ]
+        },
+        {
+            "step_id": "5b8664c2172a4694ac44dbb165c9d20e",
+            "name": "[F103]客户软件版本号",
+            "mode": "字符串比对",
+            "min": "BAT32030000BC",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "不复测",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "cd0c8deed0b3485da6daa7c7c6503139",
+                    "name": "等待 (Wait)-固定延时 (500ms)",
+                    "action": "固定延时",
+                    "params": "500ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "499f08fb3c5f4641a999b238818fc46b",
+                    "name": "UDS 交互列表-顺序发送并校验 (TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgMDMgPT4gNjIgRjEgMDMgfCBDT01CSU5FKGRhdGE9ZXlKdGIyUmxJam9pUTA5TlFrbE9SU0lzSW5ObFoyMWxiblJ6SWpwYmV5SnRiMlJsSWpvaVFWTkRTVWtpTENKdlptWnpaWFFpT2pNc0lteGxibWQwYUNJNk0zMHNleUp0YjJSbElqb2lRa05FSWl3aWIyWm1jMlYwSWpvMkxDSnNaVzVuZEdnaU9qUjlMSHNpYlc5a1pTSTZJa0ZUUTBsSklpd2liMlptYzJWMElqb3hNQ3dpYkdWdVozUm9Jam95ZlYwc0luTmxjR0Z5WVhSdmNpSTZJaUlzSW5aaGNsOXVZVzFsSWpvaUluMD0p / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSAwMyA0MiA0MSA1NCAzMiAwMyAwMCAwMCA0MiA0MyIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiQkFUMzIwMzAwMDBCQyIsICJvdXRwdXQiOiB0cnVlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9XQ== / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0)",
+                    "action": "顺序发送并校验",
+                    "params": "TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgMDMgPT4gNjIgRjEgMDMgfCBDT01CSU5FKGRhdGE9ZXlKdGIyUmxJam9pUTA5TlFrbE9SU0lzSW5ObFoyMWxiblJ6SWpwYmV5SnRiMlJsSWpvaVFWTkRTVWtpTENKdlptWnpaWFFpT2pNc0lteGxibWQwYUNJNk0zMHNleUp0YjJSbElqb2lRa05FSWl3aWIyWm1jMlYwSWpvMkxDSnNaVzVuZEdnaU9qUjlMSHNpYlc5a1pTSTZJa0ZUUTBsSklpd2liMlptYzJWMElqb3hNQ3dpYkdWdVozUm9Jam95ZlYwc0luTmxjR0Z5WVhSdmNpSTZJaUlzSW5aaGNsOXVZVzFsSWpvaUluMD0p / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSAwMyA0MiA0MSA1NCAzMiAwMyAwMCAwMCA0MiA0MyIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiQkFUMzIwMzAwMDBCQyIsICJvdXRwdXQiOiB0cnVlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9XQ== / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0",
+                    "device": "UDS 交互列表",
+                    "type": "CAN交互",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "d0a52b1890fc4160825b4aa7b65e7baa",
+            "name": "[F188]客户软件版本号",
+            "mode": "字符串比对",
+            "min": "SOW32030001BC",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "不复测",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "0cc58ad861c544c4a9832154ae70585c",
+                    "name": "UDS 交互列表-顺序发送并校验 (TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgODggfCBDT01CSU5FKGRhdGE9ZXlKdGIyUmxJam9pUTA5TlFrbE9SU0lzSW5ObFoyMWxiblJ6SWpwYmV5SnRiMlJsSWpvaVFWTkRTVWtpTENKdlptWnpaWFFpT2pNc0lteGxibWQwYUNJNk0zMHNleUp0YjJSbElqb2lRa05FSWl3aWIyWm1jMlYwSWpvMkxDSnNaVzVuZEdnaU9qUjlMSHNpYlc5a1pTSTZJa0ZUUTBsSklpd2liMlptYzJWMElqb3hNQ3dpYkdWdVozUm9Jam95ZlYwc0luTmxjR0Z5WVhSdmNpSTZJaUlzSW5aaGNsOXVZVzFsSWpvaUluMD0p / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSA4OCA1MyA0RiA1NyAzMiAwMyAwMCAwMSA0MiA0MyIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiU09XMzIwMzAwMDFCQyIsICJvdXRwdXQiOiB0cnVlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9XQ== / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0)",
+                    "action": "顺序发送并校验",
+                    "params": "TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgODggfCBDT01CSU5FKGRhdGE9ZXlKdGIyUmxJam9pUTA5TlFrbE9SU0lzSW5ObFoyMWxiblJ6SWpwYmV5SnRiMlJsSWpvaVFWTkRTVWtpTENKdlptWnpaWFFpT2pNc0lteGxibWQwYUNJNk0zMHNleUp0YjJSbElqb2lRa05FSWl3aWIyWm1jMlYwSWpvMkxDSnNaVzVuZEdnaU9qUjlMSHNpYlc5a1pTSTZJa0ZUUTBsSklpd2liMlptYzJWMElqb3hNQ3dpYkdWdVozUm9Jam95ZlYwc0luTmxjR0Z5WVhSdmNpSTZJaUlzSW5aaGNsOXVZVzFsSWpvaUluMD0p / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSA4OCA1MyA0RiA1NyAzMiAwMyAwMCAwMSA0MiA0MyIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiU09XMzIwMzAwMDFCQyIsICJvdXRwdXQiOiB0cnVlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9XQ== / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0",
+                    "device": "UDS 交互列表",
+                    "type": "CAN交互",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "3769bd96b6974603a2befc7d942565ac",
+            "name": "[F191]客户硬件版本号",
+            "mode": "字符串比对",
+            "min": "BAT32030002BB",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "不复测",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "0ca904dfa8c648a389d0d1d6791dfe4f",
+                    "name": "UDS 交互列表-顺序发送并校验 (TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgOTEgfCBDT01CSU5FKGRhdGE9ZXlKdGIyUmxJam9pUTA5TlFrbE9SU0lzSW5ObFoyMWxiblJ6SWpwYmV5SnRiMlJsSWpvaVFWTkRTVWtpTENKdlptWnpaWFFpT2pNc0lteGxibWQwYUNJNk0zMHNleUp0YjJSbElqb2lRa05FSWl3aWIyWm1jMlYwSWpvMkxDSnNaVzVuZEdnaU9qUjlMSHNpYlc5a1pTSTZJa0ZUUTBsSklpd2liMlptYzJWMElqb3hNQ3dpYkdWdVozUm9Jam95ZlYwc0luTmxjR0Z5WVhSdmNpSTZJaUlzSW5aaGNsOXVZVzFsSWpvaUluMD0p / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSA5MSA0MiA0MSA1NCAzMiAwMyAwMCAwMiA0MiA0MiIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiQkFUMzIwMzAwMDJCQiIsICJvdXRwdXQiOiB0cnVlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9XQ== / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0)",
+                    "action": "顺序发送并校验",
+                    "params": "TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgOTEgfCBDT01CSU5FKGRhdGE9ZXlKdGIyUmxJam9pUTA5TlFrbE9SU0lzSW5ObFoyMWxiblJ6SWpwYmV5SnRiMlJsSWpvaVFWTkRTVWtpTENKdlptWnpaWFFpT2pNc0lteGxibWQwYUNJNk0zMHNleUp0YjJSbElqb2lRa05FSWl3aWIyWm1jMlYwSWpvMkxDSnNaVzVuZEdnaU9qUjlMSHNpYlc5a1pTSTZJa0ZUUTBsSklpd2liMlptYzJWMElqb3hNQ3dpYkdWdVozUm9Jam95ZlYwc0luTmxjR0Z5WVhSdmNpSTZJaUlzSW5aaGNsOXVZVzFsSWpvaUluMD0p / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSA5MSA0MiA0MSA1NCAzMiAwMyAwMCAwMiA0MiA0MiIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiQkFUMzIwMzAwMDJCQiIsICJvdXRwdXQiOiB0cnVlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9XQ== / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0",
+                    "device": "UDS 交互列表",
+                    "type": "CAN交互",
+                    "is_judgment": false,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "90a985d47705413d964f645758d854e9",
+            "name": "[F11A]DBC版本号",
+            "mode": "字符串比对",
+            "min": "050002",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "不复测",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "5d6ca54da6c44312bec3035213aaeefd",
+                    "name": "UDS 交互列表-顺序发送并校验 (TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgMUEgfCBDT01CSU5FKGRhdGE9ZXlKdGIyUmxJam9pUTA5TlFrbE9SU0lzSW5ObFoyMWxiblJ6SWpwYmV5SnRiMlJsSWpvaVNFVllJaXdpYjJabWMyVjBJam96TENKc1pXNW5kR2dpT2pOOVhTd2ljMlZ3WVhKaGRHOXlJam9pSWl3aWRtRnlYMjVoYldVaU9pSWlmUT09KQ== / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSAxQSAwNSAwMCAwMiIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiMDUwMDAyIiwgIm91dHB1dCI6IHRydWUsICJlbmFibGVkIjogdHJ1ZSwgIm5hbWUiOiAi6Ieq5a6a5LmJIn1d / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0)",
+                    "action": "顺序发送并校验",
+                    "params": "TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgMUEgfCBDT01CSU5FKGRhdGE9ZXlKdGIyUmxJam9pUTA5TlFrbE9SU0lzSW5ObFoyMWxiblJ6SWpwYmV5SnRiMlJsSWpvaVNFVllJaXdpYjJabWMyVjBJam96TENKc1pXNW5kR2dpT2pOOVhTd2ljMlZ3WVhKaGRHOXlJam9pSWl3aWRtRnlYMjVoYldVaU9pSWlmUT09KQ== / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSAxQSAwNSAwMCAwMiIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiMDUwMDAyIiwgIm91dHB1dCI6IHRydWUsICJlbmFibGVkIjogdHJ1ZSwgIm5hbWUiOiAi6Ieq5a6a5LmJIn1d / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0",
+                    "device": "UDS 交互列表",
+                    "type": "CAN交互",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "00915131ff2e4ad790b19756b693663e",
+            "name": "[F141]客户硬件版本号",
+            "mode": "字符串比对",
+            "min": "FF",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "不复测",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "4084af1b24d1434f809ccbffcdd59043",
+                    "name": "UDS 交互列表-顺序发送并校验 (TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgNDEgfCBDT01CSU5FKGRhdGE9ZXlKdGIyUmxJam9pUTA5TlFrbE9SU0lzSW5ObFoyMWxiblJ6SWpwYmV5SnRiMlJsSWpvaVNFVllJaXdpYjJabWMyVjBJam96TENKc1pXNW5kR2dpT2pGOVhTd2ljMlZ3WVhKaGRHOXlJam9pSWl3aWRtRnlYMjVoYldVaU9pSWlmUT09KQ== / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSA0MSBGRiIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiRkYiLCAib3V0cHV0IjogdHJ1ZSwgImVuYWJsZWQiOiB0cnVlLCAibmFtZSI6ICLoh6rlrprkuYkifV0= / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0)",
+                    "action": "顺序发送并校验",
+                    "params": "TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgNDEgfCBDT01CSU5FKGRhdGE9ZXlKdGIyUmxJam9pUTA5TlFrbE9SU0lzSW5ObFoyMWxiblJ6SWpwYmV5SnRiMlJsSWpvaVNFVllJaXdpYjJabWMyVjBJam96TENKc1pXNW5kR2dpT2pGOVhTd2ljMlZ3WVhKaGRHOXlJam9pSWl3aWRtRnlYMjVoYldVaU9pSWlmUT09KQ== / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSA0MSBGRiIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiRkYiLCAib3V0cHV0IjogdHJ1ZSwgImVuYWJsZWQiOiB0cnVlLCAibmFtZSI6ICLoh6rlrprkuYkifV0= / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0",
+                    "device": "UDS 交互列表",
+                    "type": "CAN交互",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "95f3220e4192436283f59a58dab57ac8",
+            "name": "[F148]客户软件小版本号",
+            "mode": "字符串比对",
+            "min": "01",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "不复测",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "14571490d8914029b90355745188c56e",
+                    "name": "UDS 交互列表-顺序发送并校验 (TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgNDggfCBDT01CSU5FKGRhdGE9ZXlKdGIyUmxJam9pUTA5TlFrbE9SU0lzSW5ObFoyMWxiblJ6SWpwYmV5SnRiMlJsSWpvaVNFVllJaXdpYjJabWMyVjBJam96TENKc1pXNW5kR2dpT2pGOVhTd2ljMlZ3WVhKaGRHOXlJam9pSWl3aWRtRnlYMjVoYldVaU9pSWlmUT09KQ== / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSA0OCAwMSIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiMDEiLCAib3V0cHV0IjogdHJ1ZSwgImVuYWJsZWQiOiB0cnVlLCAibmFtZSI6ICLoh6rlrprkuYkifV0= / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0)",
+                    "action": "顺序发送并校验",
+                    "params": "TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgNDggfCBDT01CSU5FKGRhdGE9ZXlKdGIyUmxJam9pUTA5TlFrbE9SU0lzSW5ObFoyMWxiblJ6SWpwYmV5SnRiMlJsSWpvaVNFVllJaXdpYjJabWMyVjBJam96TENKc1pXNW5kR2dpT2pGOVhTd2ljMlZ3WVhKaGRHOXlJam9pSWl3aWRtRnlYMjVoYldVaU9pSWlmUT09KQ== / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSA0OCAwMSIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiMDEiLCAib3V0cHV0IjogdHJ1ZSwgImVuYWJsZWQiOiB0cnVlLCAibmFtZSI6ICLoh6rlrprkuYkifV0= / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0",
+                    "device": "UDS 交互列表",
+                    "type": "CAN交互",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "6e5524eade884b759e5d51243df4b51d",
+            "name": "[F143]客户零件号",
+            "mode": "字符串比对",
+            "min": "01",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "不复测",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "e10a8d36a26a4b4aa7c4970b3b4e50a7",
+                    "name": "UDS 交互列表-顺序发送并校验 (TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgNDMgfCBDT01CSU5FKGRhdGE9ZXlKdGIyUmxJam9pUTA5TlFrbE9SU0lzSW5ObFoyMWxiblJ6SWpwYmV5SnRiMlJsSWpvaVNFVllJaXdpYjJabWMyVjBJam96TENKc1pXNW5kR2dpT2pGOVhTd2ljMlZ3WVhKaGRHOXlJam9pSWl3aWRtRnlYMjVoYldVaU9pSWlmUT09KQ== / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSA0MyAwMSIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiMDEiLCAib3V0cHV0IjogdHJ1ZSwgImVuYWJsZWQiOiB0cnVlLCAibmFtZSI6ICLoh6rlrprkuYkifV0= / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0)",
+                    "action": "顺序发送并校验",
+                    "params": "TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgNDMgfCBDT01CSU5FKGRhdGE9ZXlKdGIyUmxJam9pUTA5TlFrbE9SU0lzSW5ObFoyMWxiblJ6SWpwYmV5SnRiMlJsSWpvaVNFVllJaXdpYjJabWMyVjBJam96TENKc1pXNW5kR2dpT2pGOVhTd2ljMlZ3WVhKaGRHOXlJam9pSWl3aWRtRnlYMjVoYldVaU9pSWlmUT09KQ== / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSA0MyAwMSIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiMDEiLCAib3V0cHV0IjogdHJ1ZSwgImVuYWJsZWQiOiB0cnVlLCAibmFtZSI6ICLoh6rlrprkuYkifV0= / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0",
+                    "device": "UDS 交互列表",
+                    "type": "CAN交互",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "1db4a355fb284b0abe3b211daf257f65",
+            "name": "BOOT版本号",
+            "mode": "字符串比对",
+            "min": "2103",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "不复测",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "75fdced5082f485c93f9456e135a0fa3",
+                    "name": "UDS 交互列表-顺序发送并校验 (TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgMDEgfCBDT01CSU5FKGRhdGE9ZXlKdGIyUmxJam9pUTA5TlFrbE9SU0lzSW5ObFoyMWxiblJ6SWpwYmV5SnRiMlJsSWpvaVNFVllJaXdpYjJabWMyVjBJam96TENKc1pXNW5kR2dpT2pKOVhTd2ljMlZ3WVhKaGRHOXlJam9pSWl3aWRtRnlYMjVoYldVaU9pSWlmUT09KQ== / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSAwMSAyMSAwMyIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiMjEwMyIsICJvdXRwdXQiOiB0cnVlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9XQ== / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0)",
+                    "action": "顺序发送并校验",
+                    "params": "TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MjIgRjEgMDEgfCBDT01CSU5FKGRhdGE9ZXlKdGIyUmxJam9pUTA5TlFrbE9SU0lzSW5ObFoyMWxiblJ6SWpwYmV5SnRiMlJsSWpvaVNFVllJaXdpYjJabWMyVjBJam96TENKc1pXNW5kR2dpT2pKOVhTd2ljMlZ3WVhKaGRHOXlJam9pSWl3aWRtRnlYMjVoYldVaU9pSWlmUT09KQ== / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI2MiBGMSAwMSAyMSAwMyIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiMjEwMyIsICJvdXRwdXQiOiB0cnVlLCAiZW5hYmxlZCI6IHRydWUsICJuYW1lIjogIuiHquWumuS5iSJ9XQ== / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0",
+                    "device": "UDS 交互列表",
+                    "type": "CAN交互",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "18f08a34bb484fa690eaf15a58439bc2",
+            "name": "#清除故障",
+            "mode": "字符串比对",
+            "min": "54",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "复测3次",
+            "unit": "NULL",
+            "sub_steps": [
+                {
+                    "step_id": "548a20f9973e4d6bb55c783711dafbff",
+                    "name": "UDS 交互列表-顺序发送并校验 (TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MTQgRkYgRkYgRkYgPT4gNTQgfCBIRVgob2Zmc2V0PTAsbGVuPTEp / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI1NCIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiNTQiLCAib3V0cHV0IjogdHJ1ZSwgImVuYWJsZWQiOiB0cnVlLCAibmFtZSI6ICLoh6rlrprkuYkifV0= / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0)",
+                    "action": "顺序发送并校验",
+                    "params": "TX_ID:0x693 / RX_ID:0x613 / TYPE:0 / TIMEOUT:1000 / CYCLES:1 / INTERVAL:1 / LIST64:MTQgRkYgRkYgRkYgPT4gNTQgfCBIRVgob2Zmc2V0PTAsbGVuPTEp / UDSMETA64:W3siYWRkcmVzcyI6ICJkZWZhdWx0IiwgImNoZWNrIjogdHJ1ZSwgInJlc3BvbnNlX3NhbXBsZSI6ICI1NCIsICJzdXBwcmVzcyI6IGZhbHNlLCAiZXhwZWN0ZWQiOiAiNTQiLCAib3V0cHV0IjogdHJ1ZSwgImVuYWJsZWQiOiB0cnVlLCAibmFtZSI6ICLoh6rlrprkuYkifV0= / UDSCFG64:eyJmdW5jdGlvbmFsX2lkIjogMjAxNSwgImFkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlIjogZmFsc2UsICJrZWVwYWxpdmVfbXMiOiAyMDAwLCAia2VlcGFsaXZlX2FkZHJlc3MiOiAicGh5c2ljYWwiLCAia2VlcGFsaXZlX3N1cHByZXNzIjogdHJ1ZSwgInBhZGRpbmciOiAwLCAiYmxvY2tfc2l6ZSI6IDAsICJzdF9taW4iOiAwLCAicDJfc3Rhcl9tcyI6IDUwMDAsICJmcmFtZV9mb3JtYXQiOiAiYXV0byIsICJjYXNlcyI6IFtdLCAiZHRjX2RpY3Rpb25hcnkiOiB7fX0= / PCH:0",
+                    "device": "UDS 交互列表",
+                    "type": "CAN交互",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "08a5ccd50c6849d2a28aed9810707425",
+            "name": "BMS弹出",
+            "mode": "字符串比对",
+            "min": "PASS",
+            "max": "--",
+            "standard_type": "字符串",
+            "retry_count": "不复测",
+            "unit": "mA",
+            "sub_steps": [
+                {
+                    "step_id": "cf649895a31b44cab3dacb8e35b65a6c",
+                    "name": "Easy320 继电器 (Easy320)-断开勾选通道 (7)",
+                    "action": "断开勾选通道",
+                    "params": "7",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "15835085b3654b06a0f0fe7d891bbe4d",
+                    "name": "等待 (Wait)-固定延时 (4000ms)",
+                    "action": "固定延时",
+                    "params": "4000ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "e51432ac728c40788f15e418392eed28",
+                    "name": "Easy320 继电器 (Easy320)-断开勾选通道 (6)",
+                    "action": "断开勾选通道",
+                    "params": "6",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "12a3bfb5b57c4ab49da2dcd65c86a6d0",
+                    "name": "IT6722A 被测物供电电源 (IT6722A DUT Power)-设置参数 (12.0V / 3.0A / 关闭输出)",
+                    "action": "设置参数",
+                    "params": "12.0V / 3.0A / 关闭输出",
+                    "device": "IT6722A 被测物供电电源 (IT6722A DUT Power)",
+                    "type": "设置仪表",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "bc05fecc28ab495c992061be185b527d",
+                    "name": "Easy320 继电器 (Easy320)-断开勾选通道 (1)",
+                    "action": "断开勾选通道",
+                    "params": "1",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "3ed39eaa48604967aff6cab1acafa828",
+                    "name": "等待 (Wait)-固定延时 (1000ms)",
+                    "action": "固定延时",
+                    "params": "1000ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "a45e3d5e0dea405f824b8894ea86f492",
+                    "name": "Easy320 继电器 (Easy320)-断开勾选通道 (2)",
+                    "action": "断开勾选通道",
+                    "params": "2",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "5fb7b5db649e44748d853ca49e40827b",
+                    "name": "Easy320 继电器 (Easy320)-闭合勾选通道 (3)",
+                    "action": "闭合勾选通道",
+                    "params": "3",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "51edb11aa50b49e998d0dba64d9b9acc",
+                    "name": "等待 (Wait)-固定延时 (1000ms)",
+                    "action": "固定延时",
+                    "params": "1000ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "8aaec872a84f4d0ab136921755bf0cc6",
+                    "name": "Easy320 继电器 (Easy320)-断开勾选通道 (5)",
+                    "action": "断开勾选通道",
+                    "params": "5",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "da95d7431cd9404fbeb93771030e876f",
+                    "name": "Easy320 继电器 (Easy320)-闭合勾选通道 (4)",
+                    "action": "闭合勾选通道",
+                    "params": "4",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "9f3aed778e9e4050a75a2c270d232007",
+                    "name": "等待 (Wait)-固定延时 (2000ms)",
+                    "action": "固定延时",
+                    "params": "2000ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
+                    "step_id": "58ae4cfd5b7c434dbcebb181f2dcfd20",
+                    "name": "Easy320 继电器 (Easy320)-全部断开 (--)",
+                    "action": "全部断开",
+                    "params": "--",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                }
+            ]
+        }
+    ]
+}

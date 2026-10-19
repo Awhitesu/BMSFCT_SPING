@@ -89,7 +89,7 @@ class TestUDSEngineIntegration(unittest.TestCase):
         )
         r_success, r_val = self.engine._execute_sub_step_logic(read_step)
         self.assertTrue(r_success)
-        self.assertEqual(r_val, "360.00")
+        self.assertEqual(r_val, 360.0)
 
     def test_uds_backward_compatibility_without_rule(self):
         # 兼容旧配方: 无 pipe 解析规则

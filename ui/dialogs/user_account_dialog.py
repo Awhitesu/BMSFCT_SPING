@@ -1,4 +1,4 @@
-import sys
+
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTabWidget, QWidget, QMessageBox, QComboBox
@@ -20,7 +20,8 @@ class UserAccountDialog(QDialog):
         self.current_role = self.db_manager.get_user_role(current_user)
 
         self.setWindowTitle("系统用户管理与权限控制")
-        self.setFixedSize(450, 390)
+        self.resize(520, 540)
+        self.setMinimumSize(420, 420)
         self.setModal(True)
         self.setStyleSheet("""
             QDialog {
@@ -83,6 +84,8 @@ class UserAccountDialog(QDialog):
         """)
 
         self._init_ui()
+        from ui.layout_safety import protect_form_layout
+        protect_form_layout(self)
         self._update_permission_ui()
 
     def _init_ui(self):
@@ -215,6 +218,20 @@ class UserAccountDialog(QDialog):
 
         self.tabs.addTab(tab_add, "新增账户")
 
+        password_page = QWidget()
+        password_layout = QVBoxLayout(password_page)
+        self.edit_old_password = QLineEdit()
+        self.edit_new_password = QLineEdit()
+        self.edit_confirm_password = QLineEdit()
+        for label, editor in (("当前密码", self.edit_old_password), ("新密码", self.edit_new_password), ("确认新密码", self.edit_confirm_password)):
+            password_layout.addWidget(QLabel(label))
+            editor.setEchoMode(QLineEdit.Password)
+            password_layout.addWidget(editor)
+        change_button = QPushButton("修改当前账号密码")
+        change_button.clicked.connect(self._change_password)
+        password_layout.addWidget(change_button)
+        self.tabs.addTab(password_page, "修改密码")
+
         main_layout.addWidget(self.tabs)
 
         # 3. 底部状态与操作区
@@ -233,7 +250,7 @@ class UserAccountDialog(QDialog):
 
     def _refresh_header_text(self):
         is_admin = (self.current_role == "admin")
-        role_tag = "超级管理员" if self.current_user.upper() == "ADMIN" else ("管理员" if is_admin else "操作员")
+        role_tag = "超级管理员" if self.current_user == "ADMIN" and is_admin else ("管理员" if is_admin else "操作员")
         tag_color = "#00FFCC" if is_admin else "#FFC107"
         self.lbl_current_info.setText(
             f"当前已登录账户:  <span style='color:#FFFFFF; font-weight:bold; font-size:15px;'>{self.current_user}</span>"
@@ -259,14 +276,14 @@ class UserAccountDialog(QDialog):
 
     def _refresh_user_combos(self):
         users_info = self.db_manager.get_all_users_with_role()
-        
+
         # 刷新切换登录下拉框
         self.combo_switch_user.clear()
         for u in users_info:
             uname = u["username"]
             role_label = "管理员" if u["role"] == "admin" else "操作员"
             self.combo_switch_user.addItem(f"{uname} ({role_label})", uname)
-        
+
         idx = self.combo_switch_user.findData(self.current_user)
         if idx >= 0:
             self.combo_switch_user.setCurrentIndex(idx)
@@ -289,9 +306,23 @@ class UserAccountDialog(QDialog):
         color = "#00FFCC" if role == "admin" else "#FFC107"
         self.lbl_del_target_role.setText(f"权限类型: <span style='color:{color}; font-weight:bold;'>{role_label}</span>")
 
+    def _change_password(self):
+        if not self.db_manager.verify_user(self.current_user, self.edit_old_password.text()):
+            QMessageBox.warning(self, "修改密码", "当前密码错误")
+            return
+        password = self.edit_new_password.text()
+        if not password or password != self.edit_confirm_password.text():
+            QMessageBox.warning(self, "修改密码", "新密码不能为空，且两次输入须一致")
+            return
+        ok, message = self.db_manager.update_user(self.current_user, self.current_user, password)
+        if ok:
+            for editor in (self.edit_old_password, self.edit_new_password, self.edit_confirm_password):
+                editor.clear()
+        QMessageBox.information(self, "修改密码", message)
+
     def _on_switch_login(self):
         target_user = self.combo_switch_user.currentData()
-        pwd = self.edit_switch_pwd.text().strip()
+        pwd = self.edit_switch_pwd.text()
         if not target_user:
             QMessageBox.warning(self, "提示", "请选择要切换的账户！")
             return
@@ -300,6 +331,9 @@ class UserAccountDialog(QDialog):
             return
 
         if self.db_manager.verify_user(target_user, pwd):
+            from ui.dialogs.password_change import ensure_initial_password_changed
+            if not ensure_initial_password_changed(self.db_manager, target_user, pwd, self):
+                return
             self.logged_in_user = target_user
             self.current_user = target_user
             self.current_role = self.db_manager.get_user_role(target_user)
@@ -349,8 +383,8 @@ class UserAccountDialog(QDialog):
 
         new_u = self.edit_add_user.text().strip()
         new_role = "admin" if self.combo_add_role.currentText() == "管理员" else "operator"
-        new_p = self.edit_add_pwd.text().strip()
-        confirm_p = self.edit_add_pwd2.text().strip()
+        new_p = self.edit_add_pwd.text()
+        confirm_p = self.edit_add_pwd2.text()
 
         if not new_u:
             QMessageBox.warning(self, "提示", "新用户名不能为空！")

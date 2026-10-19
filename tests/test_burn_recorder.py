@@ -1,5 +1,5 @@
 import os
-import shutil
+import tempfile
 import sys
 import unittest
 
@@ -15,13 +15,12 @@ from core.burn_recorder import (
 
 class TestBurnRecorder(unittest.TestCase):
     def setUp(self):
-        self.test_dir = os.path.abspath(r"C:\Users\95403\.gemini\antigravity-ide\brain\838e2ea1-fd49-4b24-a903-3934c490f566\scratch\test_records")
-        os.makedirs(self.test_dir, exist_ok=True)
+        self._temporary = tempfile.TemporaryDirectory(prefix='burn-record-test-')
+        self.test_dir = self._temporary.name
         self.sample_opj = os.path.abspath(r"C:\Users\95403\.gemini\antigravity-ide\brain\838e2ea1-fd49-4b24-a903-3934c490f566\scratch\geely.opj")
 
     def tearDown(self):
-        if os.path.exists(self.test_dir):
-            shutil.rmtree(self.test_dir, ignore_errors=True)
+        self._temporary.cleanup()
 
     def test_parse_opj_metadata(self):
         if not os.path.exists(self.sample_opj):

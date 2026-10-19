@@ -25,6 +25,8 @@ class FlashProgress:
         self.pending = None
         self.next_block = 1
         self.last_block = None
+        self.received_frames = 0
+        self.observed_ids = {}
 
     def invalidate(self, reason):
         with self._lock:
@@ -36,6 +38,10 @@ class FlashProgress:
         if message.get("direction", "RX") != "RX":
             return
         can_id = message.get("can_id")
+        with self._lock:
+            self.received_frames += 1
+            if can_id in self.observed_ids or len(self.observed_ids) < 32:
+                self.observed_ids[can_id] = self.observed_ids.get(can_id, 0) + 1
         if message.get("is_error_frame"):
             self.invalidate("CAN错误帧，进度未知")
             return
@@ -213,6 +219,8 @@ class FlashProgress:
                     99.9, round(100.0 * self.confirmed / self.total, 1)
                 )
             return {
+                "received_frames": self.received_frames,
+                "observed_ids": [f'0x{key:X}' for key in self.observed_ids if isinstance(key, int)],
                 "phase": self.phase, "percent": percent, "segment": self.segment,
                 "confirmed_bytes": self.confirmed, "total_bytes": self.total,
                 "can_warning": self.warning,

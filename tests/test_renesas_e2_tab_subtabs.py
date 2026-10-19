@@ -25,6 +25,7 @@ class TestRenesasE2TabSubtabs(unittest.TestCase):
         self.mock_programmer.interface = "FINE"
         self.mock_programmer.speed = "1000000"
         self.mock_programmer.is_connected = True
+        self.mock_programmer.tool_ready = True
         self.mock_programmer.query_state.return_value = "Ready"
         self.mock_programmer.get_recent_log.return_value = ""
         self.mock_dm.e2_rfp = self.mock_programmer

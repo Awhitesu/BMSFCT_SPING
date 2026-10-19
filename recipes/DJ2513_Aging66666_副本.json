@@ -26,7 +26,8 @@
                     "device": "NGI 高压源 (HV Source)",
                     "type": "设置仪表",
                     "is_judgment": false,
-                    "fail_strategy": "失败停止"
+                    "fail_strategy": "失败停止",
+                    "step_id": "56dfc754d17e4844bac466778a4b84e2"
                 },
                 {
                     "name": "等待 (Wait)-固定延时 (1000ms)",
@@ -35,7 +36,8 @@
                     "device": "等待 (Wait)",
                     "type": "等待",
                     "is_judgment": false,
-                    "fail_strategy": "失败停止"
+                    "fail_strategy": "失败停止",
+                    "step_id": "4a78be35a0ac4e6bb13eac7353172726"
                 },
                 {
                     "name": "CA550 校准仪 (CA550)-参数设置 (Type:V / Val:0.0 / Range:Auto / Output:关闭输出)",
@@ -44,7 +46,8 @@
                     "device": "CA550 校准仪 (CA550)",
                     "type": "校准仪设置",
                     "is_judgment": false,
-                    "fail_strategy": "失败停止"
+                    "fail_strategy": "失败停止",
+                    "step_id": "4619b21a092c4139889c05edab2d6960"
                 },
                 {
                     "name": "主机板电源 (Main Power)-设置参数 (0.0V / 0.0A / 关闭输出)",
@@ -53,9 +56,11 @@
                     "device": "主机板电源 (Main Power)",
                     "type": "设置仪表",
                     "is_judgment": false,
-                    "fail_strategy": "失败停止"
+                    "fail_strategy": "失败停止",
+                    "step_id": "b58ee1bd4ec140c1a18c799c81f5a98e"
                 }
-            ]
+            ],
+            "step_id": "a1579a7ba23d4b2ea5eb2aabf12c164b"
         },
         {
             "name": "BMS板工作唤醒",
@@ -73,7 +78,8 @@
                     "device": "等待 (Wait)",
                     "type": "等待",
                     "is_judgment": false,
-                    "fail_strategy": "失败停止"
+                    "fail_strategy": "失败停止",
+                    "step_id": "5437f510aa2645e486f782057ca22438"
                 },
                 {
                     "name": "老化功能板继电器 (Aging Board)-断开勾选通道 (2,4,5,6,7,8,9,10,12,13,14,15,16,17,18,19,20,21,22)",
@@ -82,7 +88,8 @@
                     "device": "老化功能板继电器 (Aging Board)",
                     "type": "继电器控制",
                     "is_judgment": false,
-                    "fail_strategy": "重试3次"
+                    "fail_strategy": "重试3次",
+                    "step_id": "11ef1411b8904011bf022ea04e4c872a"
                 },
                 {
                     "name": "等待 (Wait)-固定延时 (2000ms)",
@@ -91,7 +98,8 @@
                     "device": "等待 (Wait)",
                     "type": "等待",
                     "is_judgment": false,
-                    "fail_strategy": "失败停止"
+                    "fail_strategy": "失败停止",
+                    "step_id": "204984ada3294f5bb38c49c526f60c30"
                 },
                 {
                     "name": "老化功能板继电器 (Aging Board)-闭合勾选通道 (1,11)",
@@ -100,7 +108,8 @@
                     "device": "老化功能板继电器 (Aging Board)",
                     "type": "继电器控制",
                     "is_judgment": false,
-                    "fail_strategy": "重试3次"
+                    "fail_strategy": "重试3次",
+                    "step_id": "828c9b1edd854dbe8e421bf0d5258283"
                 },
                 {
                     "name": "主机板电源 (Main Power)-设置参数 (12.5V / 100.0A / 开启输出)",
@@ -109,9 +118,11 @@
                     "device": "主机板电源 (Main Power)",
                     "type": "设置仪表",
                     "is_judgment": false,
-                    "fail_strategy": "失败停止"
+                    "fail_strategy": "失败停止",
+                    "step_id": "cd222c32762c4d6ca6d05cbd1096e2a3"
                 }
-            ]
+            ],
+            "step_id": "8f1c4162cbff465d9817cf52c7b276cf"
         },
         {
             "name": "供电DCDC+电压测试",
@@ -129,9 +140,11 @@
                     "device": "3.5HEOL协议",
                     "type": "3.5HEOL协议",
                     "is_judgment": true,
-                    "fail_strategy": "重试3次"
+                    "fail_strategy": "重试3次",
+                    "step_id": "059ad9ff93734f7ea4e74ebf4f1d4e2a"
                 }
-            ]
+            ],
+            "step_id": "f742ae53095443bba60125769adbe3cd"
         },
         {
             "name": "供电DCDC+电压测试",
@@ -149,9 +162,11 @@
                     "device": "3.5HEOL协议",
                     "type": "3.5HEOL协议",
                     "is_judgment": true,
-                    "fail_strategy": "重试3次"
+                    "fail_strategy": "重试3次",
+                    "step_id": "f21faddb42c847ebb9addbddb8111088"
                 }
-            ]
+            ],
+            "step_id": "127be610f6f8472ca1a755f12a14c861"
         },
         {
             "name": "供电DCDC+电压测试",
@@ -169,9 +184,11 @@
                     "device": "3.5HEOL协议",
                     "type": "3.5HEOL协议",
                     "is_judgment": true,
-                    "fail_strategy": "重试3次"
+                    "fail_strategy": "重试3次",
+                    "step_id": "dadf3780511a4e5b9601a5f31fdad524"
                 }
-            ]
+            ],
+            "step_id": "9c0ba9639d8940259a738118a468f3a6"
         }
     ]
 }

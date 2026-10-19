@@ -1,6 +1,8 @@
+from core.numeric_validation import finite_reading
 import serial
 import time
 import logging
+import re
 
 # 配置基础日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -20,86 +22,70 @@ class CA550Controller:
         
         self.ser = None
         self.is_connected = False
+        self.identity = ""
+        self.last_error = ""
+        self._last_connect_port = None
         
         import threading
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._last_connect_attempt = 0.0
+        self.last_control = {}
+        self.control_statistics = dict(total=0, first_pass=0, recovered=0, failed=0)
+        self.control_timeout = 2.0
+        self.setpoint_tolerance = 0.0001
         self._cooldown_time = 5.0  # 5秒冷却时间
 
     def connect(self) -> bool:
         """建立串口连接并执行握手验证"""
-        if not self.port or self.port.strip() == "":
-            logger.warning("CA550 串口未配置，跳过连接。")
-            return False
-            
-        import time
         with self._lock:
-            # 连接冷却机制：如果刚尝试过且失败，短时间内不再反复尝试，避免UI卡死
-            if time.time() - self._last_connect_attempt < self._cooldown_time:
+            self.disconnect()
+            if not str(self.port or "").strip():
+                self.last_error = "CA550 serial port is not configured"
                 return False
-                
-            self._last_connect_attempt = time.time()
-            
+            now = time.monotonic()
+            if self._last_connect_port == self.port and now - self._last_connect_attempt < self._cooldown_time:
+                self.last_error = "CA550 connection retry cooldown"
+                return False
+            self._last_connect_attempt = now
+            self._last_connect_port = self.port
             try:
-                # 确保先关闭旧连接
-                if self.ser and self.ser.is_open:
-                    try: self.ser.close()
-                    except: pass
-                
-                # 物理层连接
-                self.ser = serial.Serial(
-                    port=self.port,
-                    baudrate=self.baudrate,
-                    bytesize=self.bytesize,
-                    parity=self.parity,
-                    stopbits=self.stopbits,
-                    timeout=0.5,
-                    write_timeout=0.5
-                )
-                # 激活 DTR/RTS 信号
+                self.ser = serial.Serial(port=self.port, baudrate=self.baudrate,
+                    bytesize=self.bytesize, parity=self.parity, stopbits=self.stopbits,
+                    timeout=0.5, write_timeout=0.5)
                 self.ser.dtr = True
                 self.ser.rts = True
-                
-                self.is_connected = self.ser.is_open
-                if self.is_connected:
-                    # 强制等待硬件就绪并执行握手验证
-                    time.sleep(0.3)
-                    
-                    # 内部发送指令，避免死锁
-                    self.ser.reset_input_buffer()
-                    self.ser.write(b"*IDN?\r\n")
-                    self.ser.flush()
-                    time.sleep(0.08)
-                    response = self.ser.readline().decode("ascii", errors="ignore").strip()
-                    if not response:
-                        time.sleep(0.1)
-                        response = self.ser.read_all().decode("ascii", errors="ignore").strip()
-                    
-                    idn = response
-                    
-                    if idn and "ERROR" not in idn:
-                        logger.info(f"成功连接并验证 CA550: {self.port} (IDN: {idn})")
-                        self._last_connect_attempt = 0.0 # 成功则重置冷却
-                        return True
-                    else:
-                        self.ser.close()
-                        self.is_connected = False
-                        logger.error(f"CA550 握手失败 (无响应或响应错误): {self.port}")
-                        return False
-                return False
-            except Exception as e:
-                self.is_connected = False
-                logger.error(f"CA550 连接异常: {e}")
+                if not self.ser.is_open:
+                    raise ConnectionError("CA550 serial port did not open")
+                time.sleep(0.3)
+                idn = self._send_command("*IDN?", skip_conn_check=True)
+                if 'ERROR' in idn.upper() or not re.search(r'(?:^|[,\s])CA550(?:$|[,\s])', idn.upper()):
+                    raise ConnectionError(f"CA550 identity mismatch or no response: {idn}")
+                state = self._send_command("SO?", skip_conn_check=True)
+                if state not in ('0', '1'):
+                    raise ConnectionError(f"CA550 output state reply is invalid: {state}")
+                self.identity = idn
+                self.is_connected = True
+                self.last_error = ""
+                self._last_connect_attempt = 0.0
+                logger.info("CA550 connected: %s (%s)", self.port, idn)
+                self._ever_connected = True
+                return True
+            except Exception as exc:
+                self.last_error = str(exc)
+                self.disconnect()
+                logger.error("CA550 connection failed: %s", self.last_error)
                 return False
 
     def disconnect(self):
-        """断开连接"""
         with self._lock:
-            if self.ser and self.ser.is_open:
-                try: self.ser.close()
-                except: pass
+            port, self.ser = self.ser, None
             self.is_connected = False
-            logger.info(f"已断开物理连接: {self.port}")
+            self.identity = ""
+            if port:
+                try:
+                    port.close()
+                except Exception as exc:
+                    logger.warning("CA550 serial close failed: %s", exc)
 
     def _send_command(self, cmd: str, skip_conn_check=False) -> str:
         with self._lock:
@@ -110,7 +96,8 @@ class CA550Controller:
                 self.ser.reset_input_buffer()
                 # 根据参考项目建议，使用 \r\n (CRLF) 结束符
                 full_cmd = f"{cmd}\r\n".encode("ascii")
-                self.ser.write(full_cmd)
+                if self.ser.write(full_cmd) != len(full_cmd):
+                    raise ConnectionError("CA550 serial command was not fully written")
                 self.ser.flush()
                 
                 # 给予响应缓冲区填充时间
@@ -123,6 +110,8 @@ class CA550Controller:
                     response = self.ser.read_all().decode("ascii", errors="ignore").strip()
                 
                 if not response:
+                    if '?' in cmd:
+                        raise TimeoutError("CA550 query returned no response")
                     return ""
                 
                 # 更加通用和健壮的回显与头部剥离逻辑
@@ -137,7 +126,8 @@ class CA550Controller:
                 return response.strip()
             except Exception as e:
                 logger.error(f"CA550 通讯错误: {e}")
-                self.is_connected = False # 发生异常时断开连接，以便重连
+                self.last_error = str(e)
+                self.disconnect()
                 return f"ERROR: {e}"
 
     # --- 指令集 ---
@@ -167,71 +157,92 @@ class CA550Controller:
         return self._send_command("SD?")
     def set_source_func(self, func_code: int): return self._send_command(f"SF{func_code}")
     def set_source_range(self, range_code: int): return self._send_command(f"SR{range_code}")
-    def set_source_data(self, value: float) -> bool:
-        """
-        设置源输出数值 (例如电压/电流)
-        带有 2 次重试机制及物理状态回读校验 (SD?)
-        """
-        for attempt in range(2):
-            res = self._send_command(f"SD{value:.4f}")
-            if "ERROR" in res:
-                time.sleep(0.5)
-                continue
-            
-            time.sleep(0.3) # 增加延时等待硬件动作，避免读到旧状态
-            
-            check = self._send_command("SD?")
-            if "ERROR" in check or not check:
-                time.sleep(0.5)
-                continue
-                
-            try:
-                # 解析回读结果
-                val = float(check.strip())
-                # 放宽 CA550 设定值回读的容忍度，避免浮点精度引起偶发判定失败
-                if abs(val - value) <= 0.05:
-                    return True
+    def _confirm_control(self, action, command, query, target, state=False, tolerance=None):
+        started = time.monotonic()
+        actual = None
+        attempts = 0
+        reason = ""
+        success = False
+        reads = 0
+        try:
+            timeout = finite_reading(self.control_timeout)
+            tolerance = finite_reading(self.setpoint_tolerance if tolerance is None else tolerance)
+            if timeout <= 0 or tolerance < 0:
+                raise ValueError("Invalid control timeout/tolerance")
+            deadline = started + timeout
+            # Only explicit command rejection permits one resend. A delayed
+            # readback is polled without repeatedly resetting the operation.
+            for _ in range(2):
+                attempts += 1
+                reply = self._send_command(command)
+                if "ERROR" not in reply.upper():
+                    break
+                if not self.is_connected or time.monotonic() >= deadline:
+                    raise ConnectionError(reply)
+            else:
+                raise RuntimeError(reply)
+            while True:
+                reply = self._send_command(query)
+                reads += 1
+                if "ERROR" in reply.upper():
+                    raise ConnectionError(reply)
+                if state:
+                    if reply not in ('0', '1'):
+                        raise ValueError(f"Invalid output state: {reply}")
+                    actual = int(reply)
+                    success = actual == target
                 else:
-                    logger.warning(f"CA550 输出数值校验失败: 设定 {value}, 回读 {val}，准备重试 (Attempt {attempt+1})")
-            except Exception as e:
-                logger.warning(f"CA550 输出数值解析异常: {e}, 返回内容: {check}")
-                
-            time.sleep(0.5)
-            
-        self.is_connected = False
-        return False
+                    actual = finite_reading(reply)
+                    success = abs(actual - target) <= tolerance + 1e-12
+                if success:
+                    break
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"Readback mismatch: requested={target}, actual={actual}")
+                time.sleep(min(.1, max(0, deadline-time.monotonic())))
+        except Exception as exc:
+            reason = str(exc)
+        self.last_error = reason
+        self._record_confirmation(dict(action=action, requested=target, actual=actual,
+            success=success, attempts=attempts, elapsed=time.monotonic()-started,
+            reason=reason, tolerance=None if state else tolerance),
+            first_pass=success and attempts == 1 and reads == 1)
+        return success
+
+    def _record_confirmation(self, details, first_pass=False):
+        self.control_statistics['total'] += 1
+        key = 'failed' if not details['success'] else ('first_pass' if first_pass else 'recovered')
+        self.control_statistics[key] += 1
+        self.last_control = {**details, 'statistics': dict(self.control_statistics)}
+        logger.info("CA550 control confirmation: %s", self.last_control)
+
+    def set_source_data(self, value: float, tolerance=None) -> bool:
+        with self._lock:
+            try:
+                value = finite_reading(value)
+            except (ValueError, TypeError) as exc:
+                self.last_error = str(exc)
+                self._record_confirmation(dict(action='set_source_data', requested=str(value),
+                    actual=None, success=False, attempts=0, elapsed=0, reason=str(exc)))
+                return False
+            return self._confirm_control('set_source_data', f'SD{value:.4f}', 'SD?', value, tolerance=tolerance)
+
     def set_source_output(self, state: int) -> bool:
-        """
-        设置输出状态 (0=关, 1=开)
-        带有 2 次重试机制及物理状态回读校验
-        """
-        for attempt in range(2):
-            res = self._send_command(f"SO{state}")
-            if "ERROR" in res:
-                time.sleep(0.5)
-                continue
-            
-            time.sleep(0.3) # 增加延时等待硬件继电器动作，避免读到旧状态
-            
-            check = self._send_command("SO?")
-            if "ERROR" in check or not check:
-                time.sleep(0.5)
-                continue
-                
-            try:
-                # 解析回读结果 (例如回读出 '1' 或 '0')
-                val = int(check.strip())
-                if val == state:
-                    return True
-                else:
-                    logger.warning(f"CA550 输出控制校验失败，准备重试 (Attempt {attempt+1})")
-            except Exception as e:
-                logger.warning(f"CA550 输出状态解析异常: {e}, 返回内容: {check}")
-                
-            time.sleep(0.5)
-            
-        self.is_connected = False
-        return False
+        with self._lock:
+            if state not in (0, 1):
+                self.last_error = "Output state must be 0 or 1"
+                self._record_confirmation(dict(action='set_source_output', requested=str(state),
+                    actual=None, success=False, attempts=0, elapsed=0, reason=self.last_error))
+                return False
+            state = int(state)
+            return self._confirm_control('set_source_output', f'SO{state}', 'SO?', state, state=True)
+
+    def read_source_output(self):
+        with self._lock:
+            reply = self._send_command('SO?')
+            if reply not in ('0', '1'):
+                raise ValueError(f'Invalid output state: {reply}')
+            return int(reply)
+
     def set_source_0_percent(self, value: float): return self._send_command(f"SL{value:.4f}")
     def set_source_100_percent(self, value: float): return self._send_command(f"SH{value:.4f}")
 

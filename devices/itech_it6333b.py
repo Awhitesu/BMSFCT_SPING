@@ -1,12 +1,18 @@
 """IT6333B three-channel supply, RS232 SCPI."""
-import math
+from core.numeric_validation import finite_reading
 import serial
 from .itech_it6722a import IT6722A
 
 
 class IT6333B(IT6722A):
+    COMMAND_INTERVAL = 0.0
+    DIAGNOSE_FAILURE = False
     MAX_VOLTAGES = {1: 60.0, 2: 60.0, 3: 5.0}
     MAX_CURRENT = 3.0
+
+    def _prepare_control(self):
+        # This model has its own remote-mode handshake and channel selection.
+        pass
 
     def __init__(self, port='', baudrate=9600, timeout=2):
         super().__init__(port, baudrate, timeout)
@@ -25,38 +31,87 @@ class IT6333B(IT6722A):
                 if not self.write('SYST:REM'):
                     raise ConnectionError('进入远程控制失败')
                 self.last_error = ''
+                self._ever_connected = True
                 return True
             except Exception as exc:
                 self.last_error = str(exc)
                 self.disconnect()
                 return False
 
+    def _channel(self, channel):
+        if isinstance(channel,bool) or not isinstance(channel,int) or channel not in self.MAX_VOLTAGES:
+            raise ValueError('IT6333B channel must be 1, 2 or 3')
+        return channel
+
     def select_channel(self, channel):
-        if channel not in self.MAX_VOLTAGES:
-            raise ValueError('IT6333B 通道必须为1、2、3')
-        if not self.write(f'INST:NSEL {channel}'):
-            return False
-        return self._to_float(self.query('INST:NSEL?')) == channel
+        self._channel(channel)
+        with self._lock:
+            if not self.write(f'INST:NSEL {channel}'):
+                return False
+            return self._to_float(self.query('INST:NSEL?')) == channel
+
+    def _confirmed_channel(self, channel, action, command, requested, readback, matches, logger=None):
+        with self._lock:
+            def expected():
+                if not self.select_channel(channel):
+                    raise ConnectionError(f'CH{channel} selection not confirmed')
+                values = requested() if callable(requested) else dict(requested)
+                return {'channel':channel,**values}
+            def actual(values):
+                values['channel'] = channel
+                return readback(values)
+            return self._confirmed(action,command,expected,actual,matches,logger)
 
     def set_voltage(self, channel, voltage, logger=None):
-        value = float(voltage)
-        if channel not in self.MAX_VOLTAGES or not math.isfinite(value) or not 0 <= value <= self.MAX_VOLTAGES[channel]:
-            return False
-        with self._lock:
-            return self.select_channel(channel) and self._set_and_verify(f'VOLT {value:.3f}', 'VOLT?', value, 0.01)
+        try:
+            self._channel(channel)
+            value = finite_reading(voltage)
+            if not 0 <= value <= self.MAX_VOLTAGES[channel]:
+                raise ValueError('Voltage is outside channel range')
+        except (ValueError,TypeError) as exc:
+            return self._invalid('set_voltage',{'channel':channel,'voltage':str(voltage)},exc,logger)
+        def readback(actual):
+            actual['voltage'] = self._number('VOLT?')
+            actual['output'] = self.read_output_state()
+            if actual['output']:actual['measured_voltage'] = self._number('MEAS:VOLT?')
+            return actual
+        return self._confirmed_channel(channel,'set_voltage',f'VOLT {value:.3f}',{'voltage':value},readback,
+            lambda req,act: abs(act['voltage']-value)<=.01+1e-12 and
+                (not act['output'] or abs(act['measured_voltage']-value)<=self.output_voltage_tolerance+1e-12),logger)
 
     def set_current(self, channel, current, logger=None):
-        value = float(current)
-        if not math.isfinite(value) or not 0 <= value <= 3:
-            return False
-        with self._lock:
-            return self.select_channel(channel) and self._set_and_verify(f'CURR {value:.3f}', 'CURR?', value, 0.005)
+        try:
+            self._channel(channel)
+            value = finite_reading(current)
+            if not 0 <= value <= self.MAX_CURRENT:raise ValueError('Current outside channel range')
+        except (ValueError,TypeError) as exc:
+            return self._invalid('set_current',{'channel':channel,'current_limit':str(current)},exc,logger)
+        def readback(actual):
+            actual['current_limit'] = self._number('CURR?')
+            return actual
+        return self._confirmed_channel(channel,'set_current',f'CURR {value:.3f}',{'current_limit':value},readback,
+            lambda req,act: abs(act['current_limit']-value)<=.005+1e-12,logger)
 
     def output_control(self, channel, state, logger=None):
-        with self._lock:
-            if not self.select_channel(channel) or not self.write(f'OUTP {1 if state else 0}'):
-                return False
-            return self.query('OUTP?').strip().upper() in ({'1', 'ON'} if state else {'0', 'OFF'})
+        try:
+            self._channel(channel)
+            if state not in (False,True,0,1):raise ValueError('Output state must be ON/OFF')
+        except (ValueError,TypeError) as exc:
+            return self._invalid('output_control',{'channel':channel,'output':str(state)},exc,logger)
+        state = bool(state)
+        def expected():
+            result = {'output':state}
+            if state:
+                result['voltage'] = self._number('VOLT?')
+                if result['voltage']>self.MAX_VOLTAGES[channel]:raise ValueError('Invalid voltage setpoint')
+            return result
+        def readback(actual):
+            actual['output'] = self.read_output_state()
+            if state:actual['measured_voltage'] = self._number('MEAS:VOLT?')
+            return actual
+        return self._confirmed_channel(channel,'output_control',f'OUTP {int(state)}',expected,readback,
+            lambda req,act: act['output']==state and
+                (not state or abs(act['measured_voltage']-req['voltage'])<=self.output_voltage_tolerance+1e-12),logger)
 
     def read_channel(self, channel):
         with self._lock:

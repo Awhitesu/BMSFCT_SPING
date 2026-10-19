@@ -1,8 +1,4 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                               QComboBox, QPushButton, QGroupBox, QTextEdit, 
-                               QGridLayout, QFrame, QTabWidget, QTreeWidget,
-                               QTreeWidgetItem, QStackedWidget, QSplitter, QLineEdit,
-                               QStyledItemDelegate,QHeaderView)
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton, QGroupBox, QTextEdit, QGridLayout, QTreeWidget, QTreeWidgetItem, QStackedWidget, QSplitter, QLineEdit, QStyledItemDelegate, QHeaderView
 from PySide6.QtCore import Qt,QSize,QEvent
 
 

@@ -1,6 +1,7 @@
 """Six independent resistor boards exposed as fixed global channels 1..36."""
 import time
 from concurrent.futures import ThreadPoolExecutor
+from core.board_control import control_board
 
 
 def channel_routes(boards):
@@ -39,7 +40,7 @@ def operate_channels(boards,channels,operation,resistance=0):
             return values,{ch:str(exc) for ch,_ in selected}
         for channel,local in selected:
             try:
-                values[channel]=(board.set_resistance(resistance,local) if operation=='set'
+                values[channel]=(control_board(board,'resistance',channel=local,resistance=resistance) if operation=='set'
                                  else board.read_resistance(local))
             except Exception as exc:errors[channel]=str(exc)
         return values,errors

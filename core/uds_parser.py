@@ -6,6 +6,8 @@ UDS 响应数据提取、ASCII 转换与多字节物理公式计算核心模块
 """
 
 import re
+import base64
+import json
 from typing import Any, Dict, Optional
 
 
@@ -21,6 +23,16 @@ def parse_uds_rule_string(rule_str: str) -> Optional[Dict[str, Any]]:
         return None
 
     text = rule_str.strip()
+    if text.startswith('COMBINE('):
+        try:
+            encoded = re.fullmatch(r'COMBINE\(data=([A-Za-z0-9_=\-]+)\)', text)
+            if not encoded:
+                return None
+            rule = json.loads(base64.urlsafe_b64decode(encoded[1]).decode('utf-8'))
+            validate_combined_rule(rule)
+            return rule
+        except (ValueError, TypeError, KeyError, UnicodeError):
+            return None
     match = re.match(r"^([A-Za-z_]+)\((.*)\)$", text)
     if not match:
         return None
@@ -71,6 +83,23 @@ def parse_uds_rule_string(rule_str: str) -> Optional[Dict[str, Any]]:
     return rule
 
 
+def validate_combined_rule(rule):
+    if not isinstance(rule, dict) or rule.get('mode') != 'COMBINE':
+        raise ValueError('组合解析配置无效')
+    segments = rule.get('segments')
+    if not isinstance(segments, list) or not 1 <= len(segments) <= 128:
+        raise ValueError('组合解析需要1～128段')
+    if not isinstance(rule.get('separator', ''), str) or not isinstance(rule.get('var_name', ''), str):
+        raise ValueError('组合解析分隔符或变量名无效')
+    for index, segment in enumerate(segments, 1):
+        if not isinstance(segment, dict) or segment.get('mode') not in ('ASCII', 'HEX', 'BCD', 'CALC', 'NUMERIC', 'FORMULA'):
+            raise ValueError(f'第{index}段解析模式无效')
+        for name in ('offset', 'length'):
+            if type(segment.get(name)) is not int or not 0 <= segment[name] <= 4096:
+                raise ValueError(f'第{index}段{name}应为0～4096的整数')
+    return rule
+
+
 def format_uds_rule_string(rule: Optional[Dict[str, Any]]) -> str:
     """
     将规则字典格式化为简洁易读的单行规则字符串。
@@ -78,7 +107,11 @@ def format_uds_rule_string(rule: Optional[Dict[str, Any]]) -> str:
     if not rule or not isinstance(rule, dict):
         return ""
     mode = str(rule.get("mode", "")).upper()
-    if mode not in ("ASCII", "CALC", "NUMERIC", "FORMULA"):
+    if mode == 'COMBINE':
+        validate_combined_rule(rule)
+        encoded = base64.urlsafe_b64encode(json.dumps(rule, ensure_ascii=False, separators=(',', ':')).encode('utf-8')).decode('ascii')
+        return f'COMBINE(data={encoded})'
+    if mode not in ("ASCII", "HEX", "BCD", "CALC", "NUMERIC", "FORMULA"):
         return ""
 
     offset = int(rule.get("offset", 3))
@@ -87,10 +120,10 @@ def format_uds_rule_string(rule: Optional[Dict[str, Any]]) -> str:
 
     parts = [f"offset={offset}", f"len={length}"]
 
-    if mode == "ASCII":
+    if mode in ("ASCII", "HEX", "BCD"):
         if var_name:
             parts.append(f"var={var_name}")
-        return f"ASCII({','.join(parts)})"
+        return f"{mode}({','.join(parts)})"
 
     endian = str(rule.get("endian", "big")).lower()
     if endian != "big":
@@ -135,6 +168,23 @@ def parse_uds_response_data(raw_bytes: bytes, rule: Optional[Dict[str, Any]]) ->
         return {"success": False, "error": "规则未配置"}
 
     mode = str(rule.get("mode", "NONE")).upper()
+    if mode == 'COMBINE':
+        try:
+            validate_combined_rule(rule)
+            values = []
+            for index, segment in enumerate(rule['segments'], 1):
+                result = parse_uds_response_data(raw_bytes, segment)
+                if not result.get('success'):
+                    return dict(success=False, error=f'第{index}段：'+result.get('error', '解析失败'))
+                value = str(result['value'])
+                if segment['mode'] == 'HEX':
+                    value = value.replace(' ', '')
+                values.append(value)
+            value = rule.get('separator', '').join(values)
+            return dict(success=True, mode='COMBINE', value=value, display=value,
+                        var_name=rule.get('var_name', ''), segments=values)
+        except (ValueError, TypeError, KeyError) as exc:
+            return dict(success=False, error=str(exc))
     offset = int(rule.get("offset", 3))
     length = int(rule.get("length", 0))
     var_name = str(rule.get("var_name", "")).strip()
@@ -157,6 +207,16 @@ def parse_uds_response_data(raw_bytes: bytes, rule: Optional[Dict[str, Any]]) ->
 
     if not chunk:
         return {"success": False, "error": "截取到的有效负载为空"}
+
+    if mode == 'HEX':
+        text=chunk.hex(' ').upper()
+        return dict(success=True,mode='HEX',raw_hex=text,value=text,display=text,var_name=var_name)
+    if mode == 'BCD':
+        for index,byte in enumerate(chunk):
+            if byte>>4>9 or byte&15>9:
+                return dict(success=False,error=f'BCD无效：偏移{offset+index}的字节0x{byte:02X}包含A～F，BCD每个半字节只能为0～9')
+        text=''.join(f'{byte:02X}' for byte in chunk)
+        return dict(success=True,mode='BCD',raw_hex=chunk.hex(' ').upper(),value=text,display=text,var_name=var_name)
 
     # 1. 模式 A: ASCII 字符串解码
     if mode == "ASCII":

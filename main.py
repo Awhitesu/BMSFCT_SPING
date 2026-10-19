@@ -5,8 +5,8 @@ import sys
 import traceback
 from datetime import datetime
 
-from PySide6.QtCore import QDir
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtCore import QDir, qVersion
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from data.db_manager import DBManager
 from ui.dialogs.login_dialog import LoginDialog
@@ -51,12 +51,21 @@ def _load_application_style(app, base_dir):
     qss_path = os.path.join(resources_dir, "style.qss")
     if os.path.exists(qss_path):
         with open(qss_path, "r", encoding="utf-8") as style_file:
-            app.setStyleSheet(style_file.read())
+            # Resolve assets against the bundle/source root, not the launch cwd.
+            import re
+            prefix = resources_dir.replace('\\', '/').replace('"', '%22') + '/'
+            app.setStyleSheet(re.sub(r'url\(resources/([^)]*)\)',
+                                    lambda match: 'url("' + prefix + match.group(1) + '")',
+                                    style_file.read()))
 
 
 def _authenticate_user():
     """在任何设备初始化之前完成用户验证。"""
-    auth_db = DBManager()
+    try:
+        auth_db = DBManager()
+    except Exception as exc:
+        QMessageBox.critical(None, "\u767b\u5f55\u5931\u8d25", "\u6570\u636e\u5e93\u65e0\u6cd5\u521d\u59cb\u5316\uff1a" + str(exc))
+        return None
     try:
         dialog = LoginDialog(auth_db)
         if dialog.exec() != QDialog.Accepted:
@@ -78,6 +87,20 @@ def main():
     logging.getLogger("pymodbus").setLevel(logging.DEBUG if os.getenv('GX_VERBOSE_IO') == '1' else logging.WARNING)
 
     app = QApplication(sys.argv)
+    from core.app_version import get_version
+    app.setApplicationVersion(get_version())
+    logging.info('BMSFCT application version: %s', app.applicationVersion())
+    import PySide6
+    import shiboken6
+    from core.qt_runtime import validate_qt_versions
+    try:
+        validate_qt_versions(PySide6.__version__,shiboken6.__version__,qVersion())
+    except RuntimeError as exc:
+        message=str(exc)+'\n\n请使用项目的 .venv\\Scripts\\python.exe 运行 main.py，或按 requirements.txt 安装依赖。'
+        logging.error(message)
+        QMessageBox.critical(None,'Qt运行环境需要更新',message)
+        return 1
+    _crash_log_file.write(f'[QT_RUNTIME] PySide6={PySide6.__version__} Shiboken={shiboken6.__version__} Qt={qVersion()} Python={sys.executable}\n')
     from ui.parameter_wheel_guard import install_parameter_wheel_guard
     install_parameter_wheel_guard(app)
     _load_application_style(app, _resource_base_dir())

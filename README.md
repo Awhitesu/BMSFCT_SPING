@@ -2,6 +2,12 @@
 
 BMS功能测试、APP刷写和机台设备调试软件，使用Python与PySide6开发。
 
+Qt运行库固定为PySide6/Shiboken 6.10.3。6.10.1存在官方PYSIDE-3246多线程崩溃缺陷，请使用项目虚拟环境启动；VS Code的调试配置也使用该环境。更新已有环境：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
 ## 功能
 
 - 配方与测试序列编辑、参数配置、数值/字符串判定和执行日志。
@@ -27,7 +33,7 @@ py -3.11 -m venv .venv
 
 首次运行会创建本地数据库。账户初始化逻辑位于`data/db_manager.py`。在硬件管理中心及各类板卡配置页填写本机台的地址、串口、启用状态和通道映射，再进行设备连接。
 
-GitHub中的系统配置已清空API密钥等私密字段。AI功能需在本机重新配置密钥；不要将实际密钥提交到仓库。现场数据库、运行日志、测试报告、虚拟环境、下载程序和压缩包不作为源码版本上传。
+首次克隆后，将 `config/sys_config.example.json` 复制为 `config/sys_config.json`，再填写本机配置。示例中的设备默认关闭。实际系统配置不纳入 Git；AI 密钥只保存在本机。现场数据库、运行日志、测试报告、虚拟环境、下载程序和压缩包不作为源码版本上传。
 
 ## 目录
 
@@ -58,4 +64,4 @@ $env:QT_QPA_PLATFORM='offscreen'
 
 实机测试脚本位于`tools/`，部分脚本会切换设备输出；应在明确对应机台配置和当前操作目的后运行。自动化软件测试不代替整套机台联测。
 
-此仓库首个版本为当前工作区的独立源码快照，没有导入原远程仓库历史。
+本项目以 GitHub 的 `main` 分支为主仓库：`https://github.com/pingsong1419-boop/BMSFCT`。首次提交为源码快照，没有导入原 Codeup 历史。

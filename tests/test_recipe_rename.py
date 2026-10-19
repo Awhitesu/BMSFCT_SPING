@@ -1,5 +1,7 @@
 import tempfile
 import unittest
+from pathlib import Path
+from contextlib import closing
 from unittest.mock import patch
 from data.db_manager import DBManager
 
@@ -7,8 +9,8 @@ from data.db_manager import DBManager
 class RecipeRenameTests(unittest.TestCase):
     def test_rename_preserves_steps_and_rejects_collision(self):
         with tempfile.TemporaryDirectory() as folder:
-            db = DBManager.__new__(DBManager)
-            with patch.object(db, 'get_recipe_dir', return_value=folder):
+            db = DBManager(str(Path(folder)/'test.db'))
+            with closing(db),patch.object(db, 'get_recipe_dir', return_value=folder):
                 original = {'name': '旧配方', 'items': [{'name': '下载', 'params': 'PROJECT:a.opj'}]}
                 self.assertTrue(db.save_recipe_json('旧配方', original))
                 self.assertTrue(db.rename_recipe('旧配方', '新配方'))

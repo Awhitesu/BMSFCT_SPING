@@ -1,9 +1,29 @@
 from datetime import datetime
-from PySide6.QtCore import QThread, Signal, QTimer
+from PySide6.QtCore import QObject, QCoreApplication, QThread, Signal, Slot, QTimer
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QGridLayout, QLabel, QLineEdit,
                               QSpinBox, QPushButton, QComboBox, QCheckBox,
                               QPlainTextEdit, QTabWidget, QScrollArea)
 from devices.keysight_34461a import Keysight34461A
+
+
+class _MeterTaskLifetime(QObject):
+    """Retain one-shot threads and their page closures until native exit."""
+    def __init__(self):
+        super().__init__(QCoreApplication.instance())
+        self.tasks = set()
+        self.timer = QTimer(self)
+        self.timer.setInterval(10)
+        self.timer.timeout.connect(self.retire)
+
+    @Slot()
+    def retire(self):
+        for task in tuple(self.tasks):
+            if not task.isRunning() and task.wait(0):
+                # Final page references are released here on the GUI thread.
+                task.action = None
+                self.tasks.remove(task)
+        if not self.tasks:
+            self.timer.stop()
 
 
 class MeterTask(QThread):
@@ -12,6 +32,18 @@ class MeterTask(QThread):
     def __init__(self, action):
         super().__init__()
         self.action = action
+        app = QCoreApplication.instance()
+        if app is None or QThread.currentThread() != app.thread():
+            raise RuntimeError('MeterTask must be created on the GUI thread')
+        if not hasattr(app, '_meter_task_lifetime'):
+            app._meter_task_lifetime = _MeterTaskLifetime()
+        self._lifetime = app._meter_task_lifetime
+        self.finished.connect(self._lifetime.retire)
+
+    def start(self, priority=QThread.InheritPriority):
+        self._lifetime.tasks.add(self)
+        self._lifetime.timer.start()
+        super().start(priority)
 
     def run(self):
         try:
@@ -191,6 +223,6 @@ class MultimeterTab(QWidget):
 
     def shutdown(self):
         self.timer.stop()
-        if self.task and self.task.isRunning():
+        if self.task:
             self.task.wait()
         self.driver.disconnect()

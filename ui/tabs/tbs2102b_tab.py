@@ -55,7 +55,7 @@ class TBS2102BTab(QWidget):
         self.channel_fields = {}
         for ch in (1, 2):
             grid = self.page(f'CH{ch}通道')
-            fields = self.channel_fields[ch] = {
+            self.channel_fields[ch] = {
                 'enabled': self.choice(grid, '通道显示', [('开启', 'ON'), ('关闭', 'OFF')], 0),
                 'coupling': self.choice(grid, '耦合：DC保留直流；AC过滤直流', [(x,x) for x in ('DC','AC')], 1),
                 'probe': self.number(grid, '探头倍率：必须与探头拨档一致，否则读数不准', 1, 1000, 10, 2),
@@ -306,4 +306,4 @@ class TBS2102BTab(QWidget):
         self.run(lambda d:d.command(command))
 
     def shutdown(self):
-        if self.task and self.task.isRunning(): self.task.wait()
+        if self.task: self.task.wait()

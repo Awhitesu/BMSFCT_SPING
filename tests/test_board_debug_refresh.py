@@ -24,7 +24,8 @@ class BoardRefreshTests(unittest.TestCase):
         self.page.close()
 
     def test_hidden_or_configuration_page_does_not_poll(self):
-        with patch.object(self.page, 'run') as run:
+        run = Mock()
+        with patch.object(self.page, 'run', lambda *args, **kwargs: run(*args, **kwargs)):
             self.page.poll_relays()
             run.assert_not_called()
             self.page.show()
@@ -43,7 +44,8 @@ class BoardRefreshTests(unittest.TestCase):
         states = [False] * 15
         self.page.show_relay_states(states)
         button = self.page.relay_buttons[0]
-        with patch.object(button, 'setStyleSheet', wraps=button.setStyleSheet) as style:
+        style = Mock(wraps=button.setStyleSheet)
+        with patch.object(button, 'setStyleSheet', lambda *args: style(*args)):
             self.page.polling = True
             self.page.result('poll', True, states)
             style.assert_not_called()

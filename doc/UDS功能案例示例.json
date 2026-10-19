@@ -1,0 +1,5 @@
+[
+  {"name": "扩展诊断会话（请确认ECU支持）", "request": "10 03"},
+  {"name": "读取VIN", "request": "22 F1 90"},
+  {"name": "读取DTC及状态", "request": "19 02 FF"}
+]
