@@ -21,7 +21,7 @@ def test_step_uses_imported_labels_and_actual_octal_offsets():
     mgr = manager()
     dialog = StepDialog(device_manager=mgr)
     try:
-        assert [cb.text() for cb in dialog.easy320_checks] == ['DO10 (连接器连接)', 'DO15 (KL30)', 'DO27']
+        assert [v[3].text() for v in dialog.relay_combination_form.cards.values()] == ['DO10 连接器连接', 'DO15 KL30', 'DO27']
         assert [cb.property('coil_index') for cb in dialog.easy320_checks] == [8,13,23]
         dialog.category_combo.setCurrentText('设备操作')
         dialog.sub_category_combo.setCurrentText('继电器')

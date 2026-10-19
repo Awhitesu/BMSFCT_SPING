@@ -351,11 +351,27 @@ class StepDialog(QDialog):
 
         # --- 页面 4: Easy320 参数 (勾选模式) ---
         self.page_easy320 = QWidget()
+        self.page_easy320.setObjectName('relayStepPage')
+        self.page_easy320.setStyleSheet('QWidget#relayStepPage { background:#0F172A; }')
         e_layout = QVBoxLayout(self.page_easy320)
         
         scroll = QScrollArea()
+        scroll.setObjectName('relayPointScroll')
+        scroll.setStyleSheet('''
+            QScrollArea#relayPointScroll { background:#0F172A; border:0; }
+            QScrollArea#relayPointScroll QScrollBar:vertical { background:#0F172A; width:10px; margin:0; }
+            QScrollArea#relayPointScroll QScrollBar::handle:vertical { background:#475569; border-radius:4px; min-height:24px; }
+            QScrollArea#relayPointScroll QScrollBar::add-line:vertical,
+            QScrollArea#relayPointScroll QScrollBar::sub-line:vertical { height:0; }
+            QScrollArea#relayPointScroll QScrollBar::add-page:vertical,
+            QScrollArea#relayPointScroll QScrollBar::sub-page:vertical { background:#0F172A; }
+        ''')
+        scroll.viewport().setObjectName('relayPointViewport')
+        scroll.viewport().setStyleSheet('QWidget#relayPointViewport { background:#0F172A; }')
         scroll_content = QWidget()
-        grid = QGridLayout(scroll_content)
+        scroll_content.setObjectName('relayScrollContent')
+        scroll_content.setStyleSheet('QWidget#relayScrollContent { background:#0F172A; }')
+        grid = QVBoxLayout(scroll_content)
         self.easy320_checks = []
         from core.easy320_channels import configured_channels
         try:
@@ -365,13 +381,11 @@ class StepDialog(QDialog):
             self.easy320_channels = []
             self.easy320_config_error = f'继电器导入配置无效：{exc}'
         self.easy320_missing_channels = set()
-        for i, row in enumerate(self.easy320_channels):
-            alias = f" ({row['name']})" if row['name'] else ''
-            cb = QCheckBox(row['do'] + alias)
-            cb.setToolTip(cb.text())
-            cb.setProperty('coil_index', row['index'])
-            grid.addWidget(cb, i, 0)
-            self.easy320_checks.append(cb)
+        from ui.widgets.relay_combination_form import RelayCombinationForm
+        self.relay_combination_form = RelayCombinationForm(self.easy320_channels)
+        self.relay_combination_form.mixed_requested.connect(lambda: self.action_combo.setCurrentText('组合设置ON/OFF'))
+        grid.addWidget(self.relay_combination_form)
+        self.easy320_checks = self.relay_combination_form.checks
         scroll.setWidget(scroll_content)
         scroll.setWidgetResizable(True)
         
@@ -1977,7 +1991,14 @@ class StepDialog(QDialog):
             # --- 继电器控制 (Page 4/8) ---
             try:
                 if "继电器" in step_type or "Easy320" in device:
-                    channels = params_str.split(",")
+                    from core.relay_combination import decode as decode_relays
+                    combination = decode_relays(params_str)
+                    if combination is not None:
+                        self.action_combo.setCurrentText('组合设置ON/OFF')
+                        self.relay_combination_form.load(combination)
+                        channels = []
+                    else:
+                        channels = params_str.split(",")
                     for c in channels:
                         try:
                             clean_c = re.sub(r'[^\d]', '', c) # 只保留数字
@@ -2169,7 +2190,7 @@ class StepDialog(QDialog):
         elif "公式计算" in device_text:
             self.action_combo.addItems(["公式计算"])
         elif "Easy320" in device_text:
-            self.action_combo.addItems(["闭合勾选通道", "断开勾选通道", "全部断开"])
+            self.action_combo.addItems(["组合设置ON/OFF", "闭合勾选通道", "断开勾选通道", "全部断开"])
         elif "瑞萨" in device_text or "rfp-cli" in device_text:
             self.action_combo.addItems(["连接检测", "查询状态", "执行烧录工程"])
         elif "SG400" in device_text or "力捷丰" in device_text:
@@ -2274,6 +2295,7 @@ class StepDialog(QDialog):
         elif "公式计算" in device:
             self.param_stack.setCurrentIndex(10)
         elif "继电器" in device or "Easy320" in device:
+            self.relay_combination_form.set_legacy(None if action == '组合设置ON/OFF' else '闭合' in action)
             if "全部" in action:
                 self.param_stack.setCurrentIndex(14)
             else:
@@ -3249,8 +3271,12 @@ class StepDialog(QDialog):
                 params.append(f"UNIT:{self.read_unit.currentText()}")
         elif idx == 4: # Easy320 / Relay
             step_type = "继电器控制"
-            selected = [str(cb.property('coil_index')+1) for cb in self.easy320_checks if cb.isChecked()]
-            params.append(",".join(selected))
+            if action == '组合设置ON/OFF':
+                from core.relay_combination import encode as encode_relays
+                params.append(encode_relays(self.relay_combination_form.config()))
+            else:
+                selected = [str(cb.property('coil_index')+1) for cb in self.easy320_checks if cb.isChecked()]
+                params.append(",".join(selected))
         elif idx == 1: # CAN
             from core.can_frame_config import can_id,response_matcher
             frame_id=can_id(self.c_id.text())

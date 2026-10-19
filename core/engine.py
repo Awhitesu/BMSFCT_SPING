@@ -1264,7 +1264,11 @@ class ChannelWorker(QObject):
                     from core.easy320_channels import configured_channels
                     channel_rows = configured_channels(mgr)
                     allowed = {row['index']: row for row in channel_rows}
-                    if "全部" in params.get("action", ""): 
+                    from core.relay_combination import decode as decode_relays, execute as execute_relays
+                    relay_targets = decode_relays(p_str)
+                    if relay_targets is not None:
+                        success = execute_relays(relay_targets, mgr.easy320, allowed, self.cancel_event.is_set, hw_logger)
+                    elif "全部" in params.get("action", ""):
                         success = True
                         for index in allowed:
                             if not mgr.easy320.write_relay(index, False):
