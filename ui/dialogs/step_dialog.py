@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                                QLineEdit, QComboBox, QPushButton, QDoubleSpinBox, 
                                QSpinBox, QStackedWidget, QWidget, QFormLayout, QFrame, 
                                 QCheckBox, QScrollArea, QGridLayout, QFileDialog, QInputDialog,
-                               QTableWidget, QTableWidgetItem, QAbstractItemView, QMessageBox, QListView, QGroupBox, QTabWidget, QApplication)
+                               QTableWidget, QTableWidgetItem, QAbstractItemView, QMessageBox, QListView, QGroupBox, QTabWidget, QApplication, QSizePolicy)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIntValidator, QShortcut, QKeySequence
 from core.measurement_units import CURRENT_UNITS, VOLTAGE_UNITS, configured_read_unit, supports_read_units
@@ -958,7 +958,9 @@ class StepDialog(QDialog):
         parameter_layout.setContentsMargins(0, 0, 0, 0)
         parameter_layout.setSpacing(8)
         row1_ext = QGridLayout()
-        row1_ext.setSpacing(6)
+        row1_ext.setContentsMargins(0, 0, 0, 0)
+        row1_ext.setHorizontalSpacing(8)
+        row1_ext.setVerticalSpacing(6)
         self.uds_extract_mode = QComboBox()
         self.uds_extract_mode.addItems(["无数据提取", "ASCII 字符串解码 (如 VIN/版本号)", "数值计算 CALC (原始值 * 比例 + 偏移)", "自定义公式 FORMULA (如 (val*0.05)+12)"])
         self.uds_extract_mode.addItem('HEX 十六进制字节输出')
@@ -993,22 +995,14 @@ class StepDialog(QDialog):
             row,column=divmod(index,2)
             row1_ext.addWidget(label,row,column*2)
             row1_ext.addWidget(field,row,column*2+1)
-            control=type(field).__name__
-            field.setStyleSheet(f'{control} {{ '+field.styleSheet()+' padding:2px 4px; min-height:22px; max-height:22px; }')
-            field.setFixedHeight(28)
-        label_width=max(label.sizeHint().width() for label in parameter_labels)
-        row1_ext.setColumnMinimumWidth(0,label_width)
-        row1_ext.setColumnMinimumWidth(2,label_width)
-        row1_ext.setColumnStretch(1,1)
-        row1_ext.setColumnStretch(3,1)
         parameter_layout.addLayout(row1_ext)
 
         # 第二行: 数值计算专属控件 (端序、有符号、比例、偏移量、单位、自定义公式)
         self.uds_ext_detail_widget = QWidget()
-        self.uds_ext_detail_widget.setMaximumWidth(650)
         row2_ext = QGridLayout(self.uds_ext_detail_widget)
         row2_ext.setContentsMargins(0, 0, 0, 0)
-        row2_ext.setSpacing(8)
+        row2_ext.setHorizontalSpacing(8)
+        row2_ext.setVerticalSpacing(6)
 
         self.uds_extract_endian = QComboBox()
         self.uds_extract_endian.addItems(["大端 (Big-Endian)", "小端 (Little-Endian)"])
@@ -1028,30 +1022,60 @@ class StepDialog(QDialog):
 
         self.uds_extract_unit = QLineEdit()
         self.uds_extract_unit.setPlaceholderText("单位(V, A, ℃)")
-        self.uds_extract_unit.setMaximumWidth(80)
 
         self.uds_extract_formula = QLineEdit()
         self.uds_extract_formula.setPlaceholderText("公式，如 (val * 0.05) + 12")
 
         # 标签引用方便切换
-        self.lbl_ext_endian = QLabel("端序:")
-        self.lbl_ext_scale = QLabel("比例:")
-        self.lbl_ext_offset = QLabel("偏移量:")
-        self.lbl_ext_unit = QLabel("单位:")
-        self.lbl_ext_formula = QLabel("公式:")
+        self.lbl_ext_endian = QLabel("端序：")
+        self.lbl_ext_scale = QLabel("比例：")
+        self.lbl_ext_offset = QLabel("偏移量：")
+        self.lbl_ext_unit = QLabel("单位：")
+        self.lbl_ext_formula = QLabel("公式：")
 
-        row2_ext.addWidget(self.lbl_ext_endian,0,0)
+        endian_options = QHBoxLayout()
+        endian_options.setContentsMargins(0,0,0,0)
+        endian_options.setSpacing(8)
+        endian_options.addWidget(self.lbl_ext_endian)
+        endian_options.addWidget(self.uds_extract_signed,0,Qt.AlignVCenter)
+        endian_options.addStretch()
+        row2_ext.addLayout(endian_options,0,0)
         row2_ext.addWidget(self.uds_extract_endian,0,1)
-        row2_ext.addWidget(self.uds_extract_signed,0,2)
-        row2_ext.addWidget(self.lbl_ext_unit,0,3)
-        row2_ext.addWidget(self.uds_extract_unit,0,4)
+        row2_ext.addWidget(self.lbl_ext_unit,0,2)
+        row2_ext.addWidget(self.uds_extract_unit,0,3)
         row2_ext.addWidget(self.lbl_ext_scale,1,0)
         row2_ext.addWidget(self.uds_extract_scale,1,1)
         row2_ext.addWidget(self.lbl_ext_offset,1,2)
-        row2_ext.addWidget(self.uds_extract_offset_val,1,3,1,2)
+        row2_ext.addWidget(self.uds_extract_offset_val,1,3)
         row2_ext.addWidget(self.lbl_ext_formula,2,0)
-        row2_ext.addWidget(self.uds_extract_formula,2,1,1,4)
-        row2_ext.setColumnStretch(1,1)
+        row2_ext.addWidget(self.uds_extract_formula,2,1,1,3)
+
+        # 上下两块使用相同的四列尺寸，模式切换和窗口缩放时保持对齐。
+        parameter_labels.extend((self.lbl_ext_endian, self.lbl_ext_scale,
+                                 self.lbl_ext_offset, self.lbl_ext_unit, self.lbl_ext_formula))
+        label_width=max(label.sizeHint().width() for label in parameter_labels)
+        for label in parameter_labels:
+            label.setFixedWidth(label_width)
+            label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.lbl_ext_endian.setFixedWidth(self.lbl_ext_endian.sizeHint().width())
+        self.uds_extract_signed.setFixedHeight(28)
+        for grid in (row1_ext,row2_ext):
+            grid.setColumnMinimumWidth(0,label_width)
+            grid.setColumnMinimumWidth(2,label_width)
+            grid.setColumnMinimumWidth(1,120)
+            grid.setColumnMinimumWidth(3,120)
+            grid.setColumnStretch(1,1)
+            grid.setColumnStretch(3,1)
+        for field in (self.uds_extract_mode, self.uds_extract_offset, self.uds_extract_len,
+                      self.uds_extract_var, self.uds_extract_endian, self.uds_extract_scale,
+                      self.uds_extract_offset_val, self.uds_extract_unit, self.uds_extract_formula):
+            control=type(field).__name__
+            field.setStyleSheet(f'{control} {{ '+field.styleSheet()+' padding:2px 4px; min-height:22px; max-height:22px; }')
+            field.setFixedHeight(28)
+            field.setMinimumWidth(0)
+            field.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Fixed)
+            if isinstance(field,QComboBox):
+                field.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
 
         parameter_layout.addWidget(self.uds_ext_detail_widget)
         parameter_band=QHBoxLayout()
