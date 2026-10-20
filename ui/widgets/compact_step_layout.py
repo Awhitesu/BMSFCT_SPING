@@ -1,6 +1,6 @@
 """Bound table height to visible data and ignore hidden stacked-page hints."""
 from PySide6.QtCore import Qt,QSize,QTimer,QObject,QEvent
-from PySide6.QtWidgets import QStackedWidget,QSizePolicy,QComboBox,QHeaderView
+from PySide6.QtWidgets import QStackedWidget,QTabWidget,QSizePolicy,QComboBox,QHeaderView
 
 class AdaptiveColumns(QObject):
     """Allocate the actual viewport width; never size columns from long values."""
@@ -55,14 +55,45 @@ class CurrentPageStack(QStackedWidget):
         page=self.currentWidget()
         return QSize(0,max(0,page.minimumSizeHint().height())) if page else QSize(0,0)
 
-def compact_table(table,max_rows=5):
+    def heightForWidth(self, width):
+        page=self.currentWidget()
+        return page.heightForWidth(width) if page and page.hasHeightForWidth() else -1
+
+    def hasHeightForWidth(self):
+        page=self.currentWidget()
+        return bool(page and page.hasHeightForWidth())
+
+
+class CurrentPageTabs(QTabWidget):
+    """Hidden parser/settings pages must not enlarge the sending workspace."""
+    def hasHeightForWidth(self):
+        # The current page receives the available height; the splitter's
+        # preferred height must not become a scroll-area minimum height.
+        return False
+
+    def _page_size(self, minimum):
+        page=self.currentWidget()
+        size=(page.minimumSizeHint() if minimum else page.sizeHint()) if page else QSize(0,0)
+        bar=self.tabBar().sizeHint()
+        return QSize(max(size.width(),bar.width())+4,size.height()+bar.height()+4)
+
+    def sizeHint(self):
+        return self._page_size(False)
+
+    def minimumSizeHint(self):
+        return self._page_size(True)
+
+def compact_table(table,max_rows=5,*,min_rows=0):
     table.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Fixed)
     def refresh(*_):
         count=table.rowCount()
-        body=sum(table.rowHeight(r) for r in range(min(count,max_rows)))
+        visible=min(count,max_rows)
+        body=sum(table.rowHeight(r) for r in range(visible))
+        body+=max(0,min_rows-visible)*table.verticalHeader().defaultSectionSize()
         height=table.horizontalHeader().height()+body+table.frameWidth()*2
-        if not count:height+=36
-        height+=table.horizontalScrollBar().sizeHint().height()
+        if not count and not min_rows:height+=36
+        if not min_rows or table.horizontalScrollBarPolicy()!=Qt.ScrollBarAlwaysOff:
+            height+=table.horizontalScrollBar().sizeHint().height()
         table.setFixedHeight(height)
         table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         parent=table.parentWidget()
@@ -74,6 +105,8 @@ def compact_table(table,max_rows=5):
     table.model().rowsRemoved.connect(lambda *_:QTimer.singleShot(0,refresh))
     table.model().modelReset.connect(lambda *_:QTimer.singleShot(0,refresh))
     table.verticalHeader().sectionResized.connect(refresh)
+    if min_rows:
+        table.horizontalHeader().geometriesChanged.connect(lambda *_:QTimer.singleShot(0,refresh))
     QTimer.singleShot(0,refresh)
 
 def compact_combos(root):

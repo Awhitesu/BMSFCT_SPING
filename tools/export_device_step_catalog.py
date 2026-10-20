@@ -73,9 +73,11 @@ def main():
         '| MES | moveInCheck校验 → 后续测试 |',
         '', '仿真运行不会连接真实硬件。新增测量步的仿真数值为0，仅用于流程检查，不代表实测或自动通过上下限。',
         '', '本次没有自动写入或替换现有生产配方。`设备测试工步清单.json`是各动作及默认参数的参考库，实际电压、通道、阻值和判定范围在编辑器中填写。']
-    folder=ROOT/'doc';folder.mkdir(exist_ok=True)
-    (folder/'设备测试工步清单.json').write_text(json.dumps(catalog,ensure_ascii=False,indent=2),encoding='utf-8')
-    (folder/'设备测试工步使用说明.md').write_text('\n'.join(rows)+'\n',encoding='utf-8')
+    folder=ROOT/'doc'
+    (folder/'templates').mkdir(parents=True,exist_ok=True)
+    (folder/'guides').mkdir(parents=True,exist_ok=True)
+    (folder/'templates'/'设备测试工步清单.json').write_text(json.dumps(catalog,ensure_ascii=False,indent=2),encoding='utf-8')
+    (folder/'guides'/'设备测试工步使用说明.md').write_text('\n'.join(rows)+'\n',encoding='utf-8')
     print(f'{len(DEVICES)} device types; {sum(map(len,ACTIONS.values()))} actions exported')
 
 

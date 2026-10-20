@@ -1,0 +1,7 @@
+发生异常: SyntaxError
+source code string cannot contain null bytes
+  File "D:\GX_APP刷写设备\ui\main_window.py", line 7, in <module>
+    from ui.tabs.hardware_config_tab import HardwareConfigTab
+  File "D:\GX_APP刷写设备\main.py", line 13, in <module>
+    from ui.main_window import MainWindow
+SyntaxError: source code string cannot contain null bytes

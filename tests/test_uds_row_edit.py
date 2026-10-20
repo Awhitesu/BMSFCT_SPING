@@ -75,7 +75,7 @@ def test_deleting_before_and_deleting_target_cannot_edit_wrong_row(page):
     assert page.uds_table.rowCount()==1
 
 
-def test_cancel_discards_draft_and_new_request_appends(page):
+def test_cancel_discards_draft_and_new_request_inserts_below_selection(page):
     page.load_uds_row(0)
     page.uds_request.setText('22 F1 AA')
     page.uds_cancel_edit.click()
@@ -83,6 +83,29 @@ def test_cancel_discards_draft_and_new_request_appends(page):
     page.uds_request.setText('22 F1 BB')
     page.uds_add_btn.click()
     assert page.uds_table.rowCount()==4
+    assert page.uds_table.item(1,1).text()=='22 F1 BB'
+    assert page.uds_table.item(2,1).text()=='22 F1 91'
+
+
+def test_insert_keeps_existing_output_and_assigns_options_to_new_row(page):
+    page.uds_table.item(1,6).setCheckState(Qt.Checked)
+    output=page.uds_table.item(1,0)
+    page.uds_table.selectRow(0)
+    page.uds_request.setText('22 F1 BB')
+    page.uds_workbench.address.setCurrentIndex(2)
+    page.uds_add_btn.click()
+    assert output.row()==2 and page.uds_table.item(2,6).checkState()==Qt.Checked
+    assert page.uds_table.item(1,0).data(Qt.UserRole)['address']=='functional'
+    assert page.uds_table.item(2,0).data(Qt.UserRole)['address']=='default'
+    # A second click follows the newly inserted selection.
+    page.uds_request.setText('22 F1 CC');page.uds_add_btn.click()
+    assert page.uds_table.item(2,1).text()=='22 F1 CC'
+    assert output.row()==3
+
+
+def test_add_without_selected_row_appends(page):
+    page.uds_table.clearSelection()
+    page.uds_request.setText('22 F1 BB');page.uds_add_btn.click()
     assert page.uds_table.item(3,1).text()=='22 F1 BB'
 
 

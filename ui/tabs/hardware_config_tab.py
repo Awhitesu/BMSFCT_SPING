@@ -20,7 +20,7 @@ class HardwareConfigTab(QWidget):
     DEVICE_SPECS = [
         ("pcan", "USB PCAN-FD", "USB CAN-FD", "pcan_channel", "PCAN_USBBUS1", "pcan_nominal_bitrate", "500000", "pcan_data_bitrate", "2000000"),
         ("zlg", "ZLG CANFDNET-400U 网络参数", "TCP", "zlg_ip", "192.168.0.177", "zlg_port", "8000", None, ""),
-        ("zlg_sdk", "ZLG 官方SDK目录", "目录", "zlg_sdk_path", "zlgcan(20260806)/zlgcan_x64", None, "", None, ""),
+        ("zlg_sdk", "ZLG 官方SDK目录", "目录", "zlg_sdk_path", "vendor/zlgcan(20260806)/zlgcan_x64", None, "", None, ""),
         ("hv", "NGI 高压源", "TCP", "hv_ip", "192.168.1.190", "hv_port", "7000", None, ""),
         ("dut_pwr", "IT6722A 被测物供电电源", "RS232", "dut_pwr_com", "COM1", None, "", "dut_pwr_baudrate", "9600"),
         ("it6333b", "IT6333B 三通道电源", "RS232", "it6333b_com", "", None, "", "it6333b_baudrate", "9600"),

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import can
 from devices.zlg_net_bus import ZLGNetBus
 
-ROOT = Path(__file__).resolve().parents[1] / 'zlgcan_python_260529'
+ROOT = Path(__file__).resolve().parents[1] / 'vendor' / 'zlgcan_python_260529'
 
 
 class ZLGTests(unittest.TestCase):

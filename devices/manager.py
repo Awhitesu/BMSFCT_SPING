@@ -13,7 +13,7 @@ if getattr(sys, "frozen", False):
     _PROJECT_ROOT = Path(sys._MEIPASS)
 else:
     _PROJECT_ROOT = Path(__file__).resolve().parent.parent
-_PCAN_BASIC_DIR = _PROJECT_ROOT / "PCAN-Basic" / "x64"
+_PCAN_BASIC_DIR = _PROJECT_ROOT / "vendor" / "PCAN-Basic" / "x64"
 _pcan_dll_dir_handle = None
 if os.name == "nt" and _PCAN_BASIC_DIR.is_dir():
     os.environ["PATH"] = str(_PCAN_BASIC_DIR) + os.pathsep + os.environ.get("PATH", "")
@@ -140,7 +140,7 @@ class DeviceManager:
             fd_enabled=bool(cfg.get("pcan_fd_enabled", True)),
             logical_channel=0,
         )
-        self.pcan.zlg_sdk_path = cfg.get('zlg_sdk_path') or str(_PROJECT_ROOT / 'zlgcan(20260806)' / 'zlgcan_x64')
+        self.pcan.zlg_sdk_path = cfg.get('zlg_sdk_path') or str(_PROJECT_ROOT / 'vendor' / 'zlgcan(20260806)' / 'zlgcan_x64')
         self.pcan.zlg_ip = cfg.get('zlg_ip', '192.168.0.177')
         self.pcan.zlg_port = int(cfg.get('zlg_port', 8000))
         from .rn_board import board_settings

@@ -33,14 +33,14 @@ def test_runtime_final_output_and_variable_are_selected_hex_only():
     assert ok and value=='00 1A FF' and worker.variables['RAW']=='00 1A FF'
 
 
-def test_shortcut_selection_expected_and_recipe_roundtrip():
+def test_mode_selection_expected_and_recipe_roundtrip():
     p=StepDialog()
     try:
         p.category_combo.setCurrentIndex(1);p.device_combo.setCurrentIndex(1)
         p.uds_request.setText('22 F1 90')
         p.uds_workbench._response('62 F1 90 00 1A FF')
         p.uds_byte_grid.set_selection(3,3,emit_signal=True)
-        p.btn_quick_hex.click()
+        p.uds_extract_mode.setCurrentIndex(4)
         p.uds_extract_var.setText('RAW')
         assert p.uds_extract_mode.currentIndex()==4
         assert p.uds_result_expected.text()=='00 1A FF'

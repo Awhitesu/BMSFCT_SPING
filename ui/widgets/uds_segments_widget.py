@@ -2,11 +2,12 @@
 from copy import deepcopy
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QCheckBox, QLabel,
-                              QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QCheckBox,
+                              QPushButton, QTableWidget, QTableWidgetItem,
                               QAbstractItemView, QSizePolicy)
 from core.uds_parser import parse_uds_response_data
 from ui.widgets.compact_step_layout import compact_table, adaptive_columns
+from ui.widgets.eliding_label import ElidingLabel
 
 
 class UDSSegmentsWidget(QWidget):
@@ -19,29 +20,26 @@ class UDSSegmentsWidget(QWidget):
         super().__init__(parent)
         self.rules = []
         self.raw = b''
+        self._separator = ''
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
         self.enabled = QCheckBox('多段组合（右键追加分段）')
         self.enabled.setChecked(True)
         layout.addWidget(self.enabled)
         self.panel = QWidget()
         body = QVBoxLayout(self.panel)
         body.setContentsMargins(0, 0, 0, 0)
-        tools = QHBoxLayout()
-        self.count = QLabel('已记录 0 段')
-        tools.addWidget(self.count)
-        self.separator = QLineEdit()
-        self.separator.setPlaceholderText('拼接分隔符（留空直接拼接）')
-        tools.addWidget(self.separator, 1)
-        body.addLayout(tools)
+        body.setSpacing(6)
         self.table = QTableWidget(0, 4)
+        self.table.verticalHeader().setDefaultSectionSize(28)
         self.table.setHorizontalHeaderLabels(['起始字节', '长度', '格式', '本段输出预览'])
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setToolTip('点击记录载入上方参数，修改后点击“修改选中段”。右键追加不会覆盖已有记录。')
         adaptive_columns(self.table, [1.2, .7, 1, 2.5])
-        compact_table(self.table, max_rows=4)
+        compact_table(self.table, max_rows=8, min_rows=8)
         body.addWidget(self.table)
         buttons = QHBoxLayout()
         for title, callback in [('追加当前段', self.append_requested.emit),
@@ -49,17 +47,19 @@ class UDSSegmentsWidget(QWidget):
                                 ('删除段', self.remove), ('上移', lambda: self.move(-1)),
                                 ('下移', lambda: self.move(1))]:
             button = QPushButton(title)
+            button.setStyleSheet('QPushButton { font-size:12px; padding:2px 5px; min-width:0px; min-height:22px; max-height:22px; }')
+            button.setFixedHeight(28)
+            if title in ('追加当前段','修改选中段'):
+                self.enabled.toggled.connect(button.setEnabled)
             button.clicked.connect(lambda checked=False, fn=callback: fn())
             buttons.addWidget(button)
         body.addLayout(buttons)
-        self.preview = QLabel('组合输出：尚未记录分段')
-        self.preview.setWordWrap(True)
-        self.preview.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.preview = ElidingLabel('组合输出：尚未记录分段')
+        self.preview.setStyleSheet('font-size:14px; color:#FBBF24; border:0; background:transparent;')
+        self.preview.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         body.addWidget(self.preview)
         layout.addWidget(self.panel)
-        self.enabled.toggled.connect(self.panel.setVisible)
         self.enabled.toggled.connect(self.changed)
-        self.separator.textChanged.connect(self._changed)
         self.table.cellClicked.connect(self._select)
 
     def _select(self, row, column=0):
@@ -97,14 +97,12 @@ class UDSSegmentsWidget(QWidget):
 
     def load(self, rule):
         self.rules = deepcopy(rule.get('segments', []))
-        self.separator.blockSignals(True)
-        self.separator.setText(rule.get('separator', ''))
-        self.separator.blockSignals(False)
+        self._separator = rule.get('separator', '')
         self._changed()
 
     def config(self, var_name=''):
         return dict(mode='COMBINE', segments=deepcopy(self.rules),
-                    separator=self.separator.text(), var_name=var_name)
+                    separator=self._separator, var_name=var_name)
 
     def _changed(self, *_):
         self.refresh()
@@ -113,7 +111,6 @@ class UDSSegmentsWidget(QWidget):
     def refresh(self, raw=None):
         if raw is not None:
             self.raw = raw
-        self.count.setText(f'已记录 {len(self.rules)} 段')
         self.table.setRowCount(len(self.rules))
         for row, rule in enumerate(self.rules):
             result = parse_uds_response_data(self.raw, rule) if self.raw else {}

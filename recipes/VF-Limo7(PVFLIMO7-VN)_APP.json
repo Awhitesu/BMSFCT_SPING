@@ -903,5 +903,17 @@
                 }
             ]
         }
-    ]
+    ],
+    "app_flash": {
+        "host_path": "D:\\BMSTest\\BMS_General.exe",
+        "model": "CLD-VR-23",
+        "flash_path": "456",
+        "model_history": [
+            "CLD-VR-23"
+        ],
+        "path_history": [
+            "CL22-GGDA-2",
+            "456"
+        ]
+    }
 }

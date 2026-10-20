@@ -142,15 +142,14 @@ class TestStepDialogUDSParser(unittest.TestCase):
         self.assertTrue(self.dialog.uds_byte_grid._blocks[4].is_selected)
         self.assertFalse(self.dialog.uds_byte_grid._blocks[5].is_selected)
 
-    def test_quick_action_buttons(self):
-        # 测试点击快捷设定按钮切换模式
-        self.dialog.btn_quick_ascii.click()
+    def test_parser_mode_selection(self):
+        self.dialog.uds_extract_mode.setCurrentIndex(1)
         self.assertEqual(self.dialog.uds_extract_mode.currentIndex(), 1) # ASCII
 
-        self.dialog.btn_quick_calc.click()
+        self.dialog.uds_extract_mode.setCurrentIndex(2)
         self.assertEqual(self.dialog.uds_extract_mode.currentIndex(), 2) # CALC
 
-        self.dialog.btn_quick_formula.click()
+        self.dialog.uds_extract_mode.setCurrentIndex(3)
         self.assertEqual(self.dialog.uds_extract_mode.currentIndex(), 3) # FORMULA
 
     def test_simplified_editor_controls_and_window_flags(self):
@@ -196,7 +195,7 @@ class TestStepDialogUDSParser(unittest.TestCase):
         self.dialog.uds_extract_mode.setCurrentIndex(1)
         self.dialog.uds_extract_len.setValue(17)
         self.dialog.uds_tabs.setCurrentIndex(2)
-        self.assertIn('22 F1 90', self.dialog.uds_draft_summary.text())
+        self.assertEqual(self.dialog.uds_request.text(), '22 F1 90')
         self.dialog.uds_add_btn.click()
         self.assertEqual(self.dialog.uds_table.rowCount(), 1)
         self.assertIn('ASCII(offset=3,len=17)', self.dialog._uds_script())

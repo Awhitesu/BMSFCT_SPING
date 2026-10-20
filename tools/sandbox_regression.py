@@ -124,13 +124,17 @@ def snapshot(root, target):
             ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '.pytest_cache'))
     for path in root.glob('*.py'):
         shutil.copy2(path, target / path.name)
-    for name in ('requirements.txt', 'pytest.ini', 'pyproject.toml', 'setup.cfg', '故障码.txt'):
+    for name in ('requirements.txt', 'pytest.ini', 'pyproject.toml', 'setup.cfg'):
         if (root / name).is_file(): shutil.copy2(root / name, target / name)
-    vendor = target / 'zlgcan_python_260529'
-    vendor.mkdir()
+    vendor = target / 'vendor' / 'zlgcan_python_260529'
+    vendor.mkdir(parents=True)
     for name in ('zlgcan.py', 'zlgcan.dll'):
-        shutil.copy2(root / vendor.name / name, vendor / name)
+        shutil.copy2(root / 'vendor' / vendor.name / name, vendor / name)
     (target / 'config').mkdir()
+    shutil.copy2(root / 'config' / '故障码.txt', target / 'config' / '故障码.txt')
+    guide = Path('doc/guides/统计追溯与现场安全升级_20261019.md')
+    (target / guide.parent).mkdir(parents=True)
+    shutil.copy2(root / guide, target / guide)
     (target / 'config/sys_config.json').write_text('{}', encoding='utf-8')
     (target / 'recipes').mkdir()
 

@@ -40,7 +40,7 @@ class OpteeQSG400:
             base = Path(sys._MEIPASS)
         else:
             base = Path(__file__).resolve().parent.parent
-        return base / "力捷峰U盘" / "Demo" / "OpteeQDLLx64.dll"
+        return base / "vendor" / "力捷峰U盘" / "Demo" / "OpteeQDLLx64.dll"
 
     def _load_dll(self):
         if self._dll is not None:

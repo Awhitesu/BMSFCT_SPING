@@ -43,7 +43,7 @@ def test_build_uses_staging_and_preserves_production_database(tmp_path, monkeypa
     import json
     import shutil
     source_root=package.ROOT
-    for name in ('tools/upgrade_app.ps1','tools/upgrade_app.cmd','doc/统计追溯与现场安全升级_20261019.md'):
+    for name in ('tools/upgrade_app.ps1','tools/upgrade_app.cmd','doc/guides/统计追溯与现场安全升级_20261019.md'):
         destination=tmp_path/name;destination.parent.mkdir(parents=True,exist_ok=True)
         shutil.copy2(source_root/name,destination)
     monkeypatch.chdir(tmp_path)

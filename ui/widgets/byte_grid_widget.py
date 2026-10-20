@@ -13,7 +13,7 @@ from PySide6.QtGui import QMouseEvent
 class ByteBlock(QFrame):
     """单字节可视化胶囊块"""
 
-    def __init__(self, index: int, byte_val: int, parent=None):
+    def __init__(self, index: int, byte_val: Optional[int], parent=None):
         super().__init__(parent)
         self.index = index
         self.byte_val = byte_val
@@ -22,7 +22,7 @@ class ByteBlock(QFrame):
 
         self.setFixedWidth(54)
         self.setFixedHeight(68)
-        self.setCursor(Qt.PointingHandCursor)
+        self.setCursor(Qt.PointingHandCursor if byte_val is not None else Qt.ArrowCursor)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(2, 4, 2, 4)
@@ -34,11 +34,11 @@ class ByteBlock(QFrame):
         self.lbl_idx.setAlignment(Qt.AlignCenter)
 
         # 2. 十六进制大字
-        self.lbl_hex = QLabel(f"{byte_val:02X}")
+        self.lbl_hex = QLabel(f"{byte_val:02X}" if byte_val is not None else '--')
         self.lbl_hex.setAlignment(Qt.AlignCenter)
 
         # 3. ASCII 字符 (不可打印字符显示点号 .)
-        char_repr = chr(byte_val) if 32 <= byte_val <= 126 else "."
+        char_repr = (chr(byte_val) if 32 <= byte_val <= 126 else ".") if byte_val is not None else ' '
         self.lbl_ascii = QLabel(char_repr)
         self.lbl_ascii.setAlignment(Qt.AlignCenter)
 
@@ -47,13 +47,24 @@ class ByteBlock(QFrame):
         layout.addWidget(self.lbl_ascii)
 
         self.update_style()
+        if byte_val is None:
+            self.setEnabled(False)
+            self.setToolTip('此位置暂无响应字节')
 
     def set_selected(self, selected: bool):
+        if self.byte_val is None:
+            return
         if self.is_selected != selected:
             self.is_selected = selected
             self.update_style()
 
     def update_style(self):
+        if self.byte_val is None:
+            self.setStyleSheet('QFrame#byte_block { background:#090E17; border:1px solid #1E293B; border-radius:6px; } QLabel { background:transparent; border:none; }')
+            self.lbl_idx.setStyleSheet('font-size:10px; color:#475569;')
+            self.lbl_hex.setStyleSheet('font-size:14px; color:#475569; font-family:Consolas,monospace;')
+            self.lbl_ascii.setStyleSheet('font-size:11px; color:#475569;')
+            return
         if self.is_selected:
             self.setStyleSheet("""
                 QFrame#byte_block {
@@ -101,10 +112,12 @@ class ByteGridWidget(QWidget):
     """
     range_selected = Signal(int, int, bytes)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, minimum_blocks=0):
         super().__init__(parent)
         self._raw_bytes = b""
         self._blocks: List[ByteBlock] = []
+        self._placeholder_blocks: List[ByteBlock] = []
+        self._minimum_blocks = minimum_blocks
         self._drag_start_idx: Optional[int] = None
         self._is_dragging = False
 
@@ -161,6 +174,7 @@ class ByteGridWidget(QWidget):
         self.lbl_empty = QLabel("请先在线抓取，或输入完整响应样本，再拖拽选择 DATA 字节")
         self.lbl_empty.setStyleSheet("color: #64748B; font-size: 12px; font-style: italic;")
         self.blocks_layout.addWidget(self.lbl_empty)
+        self.set_bytes(b'')
 
     def set_hex_string(self, hex_text: str):
         """传入十六进制字符串 (如 '62 01 01 0E 10') 并刷新字节块"""
@@ -180,12 +194,10 @@ class ByteGridWidget(QWidget):
         self._clear_blocks()
 
         if not raw_data:
-            self.lbl_empty.setVisible(True)
             self._start_offset = 0
             self._sel_length = 0
-            return
 
-        self.lbl_empty.setVisible(False)
+        self.lbl_empty.setVisible(not raw_data and not self._minimum_blocks)
         for i, b in enumerate(raw_data):
             block = ByteBlock(i, b, self.inner_widget)
             block.installEventFilter(self)
@@ -194,15 +206,22 @@ class ByteGridWidget(QWidget):
             self.blocks_layout.addWidget(block)
             self._blocks.append(block)
 
+        # Empty slots are visual guides, separate from received bytes and selection.
+        for index in range(len(raw_data), self._minimum_blocks):
+            block = ByteBlock(index, None, self.inner_widget)
+            self.blocks_layout.addWidget(block)
+            self._placeholder_blocks.append(block)
+
         # 如果已有选区，重新应用高亮
         if self._sel_length > 0:
             self._apply_selection(self._start_offset, self._sel_length, emit_signal=False)
 
     def _clear_blocks(self):
-        for block in self._blocks:
+        for block in self._blocks + self._placeholder_blocks:
             block.setParent(None)
             block.deleteLater()
         self._blocks.clear()
+        self._placeholder_blocks.clear()
 
     def set_selection(self, offset: int, length: int, emit_signal: bool = True):
         """通过代码设定选区 (如加载配方或双击表格时)"""

@@ -228,6 +228,7 @@ class ConfigTab(QWidget):
         hardware_dialog_layout.addWidget(hardware_note)
         hardware_close = QDialogButtonBox(QDialogButtonBox.Close)
         hardware_close.button(QDialogButtonBox.Close).setText("返回配方编辑")
+        hardware_close.button(QDialogButtonBox.Close).setAutoDefault(False)
         hardware_close.rejected.connect(self.recipe_hardware_dialog.reject)
         hardware_dialog_layout.addWidget(hardware_close)
         recipe_hw_layout = QGridLayout(recipe_hw_group)
@@ -279,6 +280,9 @@ class ConfigTab(QWidget):
         recipe_hw_layout.addWidget(QLabel('报告机种名称:'),7,0)
         recipe_hw_layout.addWidget(self.report_model_name,7,1)
         recipe_hw_layout.addWidget(self.dbc_import,8,0,1,2)
+        from ui.widgets.recipe_app_flash_form import RecipeAppFlashForm
+        self.recipe_app_flash = RecipeAppFlashForm()
+        recipe_hw_layout.addWidget(self.recipe_app_flash,9,0,1,2,Qt.AlignTop)
         recipe_hw_layout.setRowStretch(9, 1)
 
         self.recipe_can_mode.currentIndexChanged.connect(
@@ -494,6 +498,7 @@ class ConfigTab(QWidget):
         self.report_project_no.setText(data.get('project_no',''))
         self.report_model_name.setText(data.get('model_name',''))
         self.dbc_import.set_asset(data.get('dbc'))
+        self.recipe_app_flash.set_config(data.get('app_flash'))
         self.edit_sn_regex.setText(data.get("sn_regex", ""))
 
         for item_data in data.get("items", []):
@@ -1072,6 +1077,9 @@ class ConfigTab(QWidget):
             },
             "items": []
         }
+        app_flash = self.recipe_app_flash.get_config()
+        if any(app_flash.values()):
+            data['app_flash'] = app_flash
         if self.recipe_pcan_channel.currentData() == 'ZLG' and self._recipe_zlg_config:
             from copy import deepcopy
             config = deepcopy(self._recipe_zlg_config)
@@ -1282,6 +1290,7 @@ class ConfigTab(QWidget):
             self.recipe_number.setValue(0)
             self.report_project_no.clear();self.report_model_name.clear()
             self.dbc_import.set_asset(None)
+            self.recipe_app_flash.set_config(None)
             item = QTreeWidgetItem([text])
             self.recipe_tree.addTopLevelItem(item)
             self.recipe_tree.setCurrentItem(item)

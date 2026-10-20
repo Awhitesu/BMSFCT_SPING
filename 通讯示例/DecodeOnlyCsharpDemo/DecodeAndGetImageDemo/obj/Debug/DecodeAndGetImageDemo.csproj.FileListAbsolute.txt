@@ -1,9 +1,0 @@
-G:\infostepper.sdk\DecodeOnlyCsharpDemo\DecodeAndGetImageDemo\bin\Debug\DecodeAndGetImageDemo.exe
-G:\infostepper.sdk\DecodeOnlyCsharpDemo\DecodeAndGetImageDemo\bin\Debug\DecodeAndGetImageDemo.pdb
-G:\infostepper.sdk\DecodeOnlyCsharpDemo\DecodeAndGetImageDemo\obj\Debug\DecodeAndGetImageDemo.csproj.AssemblyReference.cache
-G:\infostepper.sdk\DecodeOnlyCsharpDemo\DecodeAndGetImageDemo\obj\Debug\DecodeAndGetImageDemo.Form1.resources
-G:\infostepper.sdk\DecodeOnlyCsharpDemo\DecodeAndGetImageDemo\obj\Debug\DecodeAndGetImageDemo.Properties.Resources.resources
-G:\infostepper.sdk\DecodeOnlyCsharpDemo\DecodeAndGetImageDemo\obj\Debug\DecodeAndGetImageDemo.csproj.GenerateResource.cache
-G:\infostepper.sdk\DecodeOnlyCsharpDemo\DecodeAndGetImageDemo\obj\Debug\DecodeAndGetImageDemo.csproj.CoreCompileInputs.cache
-G:\infostepper.sdk\DecodeOnlyCsharpDemo\DecodeAndGetImageDemo\obj\Debug\DecodeAndGetImageDemo.exe
-G:\infostepper.sdk\DecodeOnlyCsharpDemo\DecodeAndGetImageDemo\obj\Debug\DecodeAndGetImageDemo.pdb

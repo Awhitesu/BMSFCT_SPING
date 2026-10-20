@@ -43,6 +43,8 @@ class UDSSequenceWorkbench(QObject):
         self.last_response=''
         self._run_immediate=True
         self._run_items=[]
+        self._run_output_item=None
+        self._run_response=''
         self._opening_parser=False
         self.dtc_dictionary={}
         self.custom_cases=[]
@@ -71,8 +73,10 @@ class UDSSequenceWorkbench(QObject):
             title='UDS 2E 三字段写入' if field_write else 'UDS交互列表'
             summary.setText(title+'　|　'+p.can_binding_label.text()+'　|　'+p.can_physical_channel.currentText())
         def update_header(*_):
-            uds=p.param_stack.currentIndex()==13 or p.param_stack.currentWidget() is getattr(p,'uds_field_write_form',None)
-            compact.setVisible(uds);p.device_selection_frame.setVisible(not uds)
+            field_write=p.param_stack.currentWidget() is getattr(p,'uds_field_write_form',None)
+            uds=p.param_stack.currentIndex()==13
+            compact.setVisible(field_write);p.device_selection_frame.setVisible(not (uds or field_write))
+            p.device_separator.setVisible(not uds)
             update_summary()
         p.param_stack.currentChanged.connect(update_header)
         p.can_physical_channel.currentIndexChanged.connect(update_summary)
@@ -87,13 +91,19 @@ class UDSSequenceWorkbench(QObject):
         response_form=edit_page.takeAt(1).layout()
         request_form.setRowVisible(p.uds_service,False)
         # Keep result expectations beside their parser, leaving only PDU fields on the send page.
-        for widget in (p.uds_result_expected,p.uds_sync_expected):
-            taken=request_form.takeRow(widget)
-            if taken.labelItem:
-                row=QHBoxLayout();row.addWidget(taken.labelItem.widget());row.addWidget(taken.fieldItem.widget(),1)
-                edit_page.insertLayout(1,row)
-            else:edit_page.insertWidget(1,taken.fieldItem.widget())
+        expected=request_form.takeRow(p.uds_result_expected)
+        request_form.takeRow(p.uds_sync_expected)
+        expected_row=QHBoxLayout()
+        expected_row.addWidget(p.uds_sync_expected)
+        expected_row.addWidget(expected.labelItem.widget())
+        expected_row.addWidget(p.uds_result_expected,1)
+        edit_page.insertLayout(1,expected_row)
+        edit_page.setContentsMargins(6,6,6,6)
+        edit_page.setSpacing(8)
         self.response_sample=QLineEdit()
+        for field in (self.response_sample,p.uds_result_expected):
+            field.setStyleSheet('QLineEdit { padding:2px 4px; min-height:22px; max-height:22px; }')
+            field.setFixedHeight(28)
         self.response_sample.setPlaceholderText('在线抓取自动填入，也可手输完整UDS响应，例如 62 F1 90 41 42 43')
         self.response_sample.setToolTip('这是用于选区的响应样本，不是报文前缀校验。使用重组后的UDS PDU，不包含CAN长度或ISO-TP分帧头。')
         sample_row=QHBoxLayout();sample_row.addWidget(QLabel('期望响应／实际响应样本（HEX）：'));sample_row.addWidget(self.response_sample,1)
@@ -101,11 +111,20 @@ class UDSSequenceWorkbench(QObject):
         self.response_length.setToolTip('ISO-TP重组后的PDU长度，包含肯定响应服务号、DID及DATA；不包含分帧头、流控和填充。长度单独展示，不改变已有解析偏移。')
         sample_row.addWidget(self.response_length)
         edit_page.insertLayout(1,sample_row)
-        hint=QLabel('先发送列表或在线抓取 → 选择最终输出行 → 拖选 DATA 字节 → 选择 ASCII／数值／公式 → 保存。偏移从UDS响应服务字节开始计数，不含ISO-TP头。')
-        hint.setWordWrap(True);edit_page.insertWidget(2,hint)
+        description=edit_page.takeAt(0).widget()
+        description.hide()
+        description.deleteLater()
         self.response_sample.textChanged.connect(self._sample_changed)
         edit_page.removeWidget(p.uds_edit_actions)
-        send_page=tabs.widget(3).widget().layout()
+        # The sending workspace fits the tab directly. Only its table, service
+        # browser and log scroll; an enclosing scroll area steals their height.
+        send_scroll=tabs.widget(3)
+        send_content=send_scroll.takeWidget()
+        tabs.removeTab(3);tabs.insertTab(3,send_content,'服务与发送序列')
+        send_scroll.deleteLater()
+        send_page=send_content.layout()
+        send_page.setContentsMargins(6,6,6,6)
+        send_page.setSpacing(6)
         while send_page.count():
             item=send_page.takeAt(0)
             if item.widget():item.widget().setParent(None)
@@ -158,10 +177,13 @@ class UDSSequenceWorkbench(QObject):
                 p.uds_expected.clear();p.uds_result_expected.clear();p.uds_extract_mode.setCurrentIndex(0)
                 self.check.setChecked(False)
         self.suppress.toggled.connect(suppression_changed)
-        options.addWidget(QLabel('请求地址：'));options.addWidget(self.address)
-        options.addWidget(self.suppress);options.addWidget(self.check);options.addStretch()
-        layout.addLayout(options);layout.addLayout(response_form)
-        layout.addWidget(p.uds_edit_actions)
+        response_form.removeWidget(p.uds_auto_response)
+        response_form.deleteLater()
+        options.addWidget(QLabel('请求地址：'));options.addWidget(self.address,1)
+        options.addWidget(self.suppress);options.addWidget(self.check)
+        options.addWidget(p.uds_auto_response);options.addStretch()
+        options.addWidget(p.uds_edit_actions,0,Qt.AlignRight)
+        layout.addLayout(options)
         row=QHBoxLayout()
         parse=QPushButton('配置数据解析');parse.clicked.connect(lambda:tabs.setCurrentIndex(3))
         row.addWidget(parse)
@@ -178,39 +200,40 @@ class UDSSequenceWorkbench(QObject):
         row.addWidget(self.run_button);row.addWidget(self.stop_button)
         row.setSpacing(4)
         # This toolbar belongs only to the UDS sending page.
+        compact_button_style='QPushButton { font-size:12px; padding:2px 5px; min-width:0px; min-height:22px; max-height:22px; }'
         for i in range(row.count()):
             widget=row.itemAt(i).widget()
             if isinstance(widget,QPushButton):
-                widget.setStyleSheet(widget.styleSheet()+'QPushButton { font-size:12px; padding:2px 5px; min-width:0px; min-height:0px; }')
+                widget.setStyleSheet(widget.styleSheet()+compact_button_style)
                 widget.setFixedHeight(28)
                 widget.setFixedWidth(widget.fontMetrics().horizontalAdvance(widget.text())+16)
         p.uds_cycles.setFixedWidth(68);p.uds_cycles.setFixedHeight(28)
         p.uds_interval.setFixedWidth(94);p.uds_interval.setFixedHeight(28)
         row.addStretch()
         layout.addLayout(row)
-        layout.addWidget(p.uds_draft_summary)
         # Address/suppression columns stay with their row through reorder and import.
         p.uds_table.setColumnCount(10)
         from ui.widgets.uds_output_delegate import UDSOutputDelegate
         p.uds_table.setItemDelegateForColumn(6,UDSOutputDelegate(p.uds_table))
-        p.uds_table.setMinimumHeight(150)
+        # Let the list shrink on shorter windows so the enlarged log remains visible.
+        row_height=p.uds_table.verticalHeader().defaultSectionSize()
+        p.uds_table.setMinimumHeight(max(0,90-row_height))
         p.uds_table.setHorizontalHeaderLabels(['名称','请求PDU','响应前缀校验（选填）','校验状态','数据提取/计算','期望结果','最终输出','请求地址','抑制响应','校验响应'])
         from ui.widgets.compact_step_layout import adaptive_columns
         adaptive_columns(p.uds_table, [1.3, 1.8, 1.5, .8, 2, 1.4, .8, 1, .8, .8])
         layout.addWidget(p.uds_table,1)
         logbar=QHBoxLayout()
-        self.format=QComboBox();self.format.addItems(['十六进制','ASCII'])
-        self.format.currentIndexChanged.connect(self.show_last_response)
-        logbar.addWidget(self.format)
         export=QPushButton('导出日志');export.clicked.connect(self.export_log);logbar.addWidget(export)
         self.realtime=QPushButton('实时保存日志');self.realtime.setCheckable(True);self.realtime.toggled.connect(self.toggle_log);logbar.addWidget(self.realtime)
         clear=QPushButton('清空日志');logbar.addWidget(clear)
         self.stats=QLabel();logbar.addWidget(self.stats,1)
         reset=QPushButton('重置统计');reset.clicked.connect(self.reset_stats);logbar.addWidget(reset)
+        for button in (export,self.realtime,clear,reset):
+            button.setStyleSheet(button.styleSheet()+compact_button_style)
+            button.setFixedHeight(28)
         layout.addLayout(logbar)
-        self.last=QLineEdit();self.last.setReadOnly(True);self.last.setPlaceholderText('最近一次响应PDU')
-        layout.addWidget(self.last)
-        self.log=QPlainTextEdit();self.log.setReadOnly(True);self.log.setMaximumBlockCount(2000);self.log.setMinimumHeight(80);self.log.setMaximumHeight(140)
+        # Transfer one list row and the 36 -> 28px toolbar saving to the log.
+        self.log=QPlainTextEdit();self.log.setReadOnly(True);self.log.setMaximumBlockCount(2000);self.log.setFixedHeight(120+row_height+8)
         clear.clicked.connect(self.log.clear)
         layout.addWidget(self.log)
         splitter.addWidget(right);splitter.setStretchFactor(1,1);splitter.setSizes([240,900])
@@ -240,6 +263,7 @@ class UDSSequenceWorkbench(QObject):
         parser_page=tabs.widget(2)
         tabs.removeTab(2);tabs.insertTab(3,parser_page,'数据解析')
         tabs.currentChanged.connect(self._tab_changed)
+        tabs.currentChanged.connect(lambda *_:tabs.updateGeometry())
         tabs.setCurrentIndex(2)
         p.btn_live_sniff.clicked.disconnect()
         p.btn_live_sniff.clicked.connect(lambda:self.run(True,capture=True))
@@ -365,17 +389,21 @@ class UDSSequenceWorkbench(QObject):
 
     def _log(self,text):
         self.log.appendPlainText(text)
-        match=re.search(r'RX=([0-9A-F]{2}(?: [0-9A-F]{2})*)',text)
+        match=re.search(r'RX=([0-9A-F]{2}(?: [0-9A-F]{2})*)(?=$|\s+(?:->|PASS\b))',text)
         if match:
             text_response=match.group(1)
+            row_match=re.search(r'轮次\d+/\d+ 序号(\d+)',text)
+            index=int(row_match.group(1))-1 if row_match else -1
+            item=self._run_items[index] if 0<=index<len(self._run_items) else None
+            # Capture before result validation: a mismatching response is still
+            # useful for parsing. Keep-alive replies are not request results.
+            if self.task.isRunning() and row_match and (self._run_immediate or (item is not None and item is self._run_output_item)):
+                self._run_response=text_response
             if bytes.fromhex(text_response)[0]!=0x7F:
-                if self._run_immediate:self._response(text_response)
+                if self._run_immediate and 'UDS[会话保持]' not in text:self._response(text_response)
                 else:
-                    row_match=re.search(r'轮次\d+/\d+ 序号(\d+)',text)
                     if row_match:
-                        index=int(row_match.group(1))-1
                         if 0<=index<len(self._run_items):
-                            item=self._run_items[index]
                             from shiboken6 import isValid
                             if isValid(item) and item.tableWidget() is self.page.uds_table:
                                 options=dict(item.data(Qt.UserRole) or {})
@@ -389,7 +417,7 @@ class UDSSequenceWorkbench(QObject):
                 self.log.appendPlainText('日志保存失败：'+str(exc))
 
     def _response(self,text):
-        self.last_response=text;self.show_last_response()
+        self.last_response=text
         raw=bytes.fromhex(text)
         if raw[:2]==b'\x59\x02':
             self.dtc_table.setRowCount(0)
@@ -401,9 +429,6 @@ class UDSSequenceWorkbench(QObject):
                         self.dtc_table.setItem(row,col,QTableWidgetItem(value))
         self.response_sample.setText(text)
         self._sample_changed(text)
-
-    def show_last_response(self,*_):
-        self.last.setText(self.last_response if self.format.currentIndex()==0 else bytes.fromhex(self.last_response).decode('ascii',errors='replace'))
 
     def reset_stats(self):
         self.count=self.passed=self.failed=0;self.update_stats()
@@ -440,7 +465,10 @@ class UDSSequenceWorkbench(QObject):
         except Exception as exc:QMessageBox.warning(p,'无法发送',str(exc));return
         self.cancel=threading.Event()
         self._run_immediate=immediate
-        self._run_items=[p.uds_table.item(r,0) for r in range(p.uds_table.rowCount())]
+        self._run_response=''
+        self._run_items=[p.uds_table.item(r,0) for r in range(p.uds_table.rowCount()) if p.uds_table.item(r,1).text().strip()]
+        self._run_output_item=next((item for item,config in zip(self._run_items,options)
+                                   if config.get('output') and config.get('enabled',True)),None) if not immediate else None
         p.destroyed.connect(self.cancel.set)
         cancel=self.cancel;manager=p.device_manager
         def perform():
@@ -455,9 +483,17 @@ class UDSSequenceWorkbench(QObject):
             self._log(('PASS: ' if success else 'NG: ')+str(value[1] if ok else value))
             from ui.widgets.uds_online import restore_controls
             restore_controls(self.frozen,self.stop_button)
-            if success and not immediate:
-                p.uds_tabs.setCurrentIndex(3)
-                self._tab_changed(3)
+            if self._run_response:
+                self._opening_parser=True
+                try:
+                    if not immediate:
+                        from shiboken6 import isValid
+                        item=self._run_output_item
+                        if item is None or not isValid(item) or item.tableWidget() is not p.uds_table:return
+                        p.load_uds_row(item.row())
+                    p.uds_tabs.setCurrentIndex(3)
+                    self._response(self._run_response)
+                finally:self._opening_parser=False
         from ui.widgets.uds_online import freeze_controls,restore_controls
         self.frozen=freeze_controls(p,p.page_uds,self.stop_button)
         if self.task.run(perform,done) is False:

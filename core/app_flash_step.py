@@ -89,7 +89,7 @@ def find_configured_app_program(
     if not os.path.isfile(resolved_ini_path):
         return _find_failure("INI文件不存在", resolved_ini_path, logger)
 
-    parser = configparser.ConfigParser()
+    parser = configparser.ConfigParser(interpolation=None)
     loaded = False
     last_error = None
     for encoding in ("utf-8-sig", "gbk", "utf-8"):
@@ -99,7 +99,7 @@ def find_configured_app_program(
             loaded = True
             break
         except (UnicodeError, configparser.Error) as exc:
-            parser = configparser.ConfigParser()
+            parser = configparser.ConfigParser(interpolation=None)
             last_error = exc
         except OSError as exc:
             return _find_failure("INI读取失败", str(exc), logger)

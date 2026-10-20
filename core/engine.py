@@ -179,6 +179,7 @@ class ChannelWorker(QObject):
         self.step_outputs={}
         self.last_output=None
         self.sn_barcode = ""
+        self.app_flash_config = None
         from core.user_session import get_current_user
         self.operator_name = get_current_user()
         self.record_error = ""
@@ -442,6 +443,14 @@ class ChannelWorker(QObject):
             # 清洗可能存在的重复冒号 (如 INDEX::0)
             value = value.strip().lstrip(":")
             values[key.strip().upper()] = value.strip()
+        return values
+
+    def _app_flash_values(self, params):
+        from core.recipe_app_flash import validate_app_flash
+        values = self._parse_key_values(str(params.get('params', '')))
+        configured = validate_app_flash(self.app_flash_config)
+        if configured is not None:
+            values.update(HOST=configured['host_path'], INI='config.ini', SECTION='App', KEY='Addr')
         return values
 
     def _parse_int(self, value: Any, default: int = 0) -> int:
@@ -713,9 +722,9 @@ class ChannelWorker(QObject):
             return False, 'STOPPED'
         
         if eol_cfg["op_name"] in ("DTC诊断", "DTU诊断"):
-            # 外部故障码定义文件路径 (优先探测 exe 所在目录，源码运行探测工程根目录)
+            # EXE 保留同级故障码表；源码读取 config 下的故障码表。
             exe_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            fault_file_path = os.path.join(exe_dir, "故障码.txt")
+            fault_file_path = os.path.join(exe_dir, "故障码.txt") if getattr(sys, 'frozen', False) else os.path.join(exe_dir, "config", "故障码.txt")
             if not os.path.exists(fault_file_path):
                 cwd_path = os.path.join(os.getcwd(), "故障码.txt")
                 if os.path.exists(cwd_path):
@@ -1491,7 +1500,7 @@ class ChannelWorker(QObject):
                                         continue
                                     raw = bytes(response.raw)
                                     raw_text = raw.hex(" ").upper() if raw else response.error or "无响应"
-                                    hw_logger(f'UDS[收发] TX={request.hex(" ").upper()} RX={raw_text}')
+                                    hw_logger(f'UDS[收发] 轮次{cycle}/{cycles} 序号{row_index} TX={request.hex(" ").upper()} RX={raw_text}')
                                     if not response.positive:
                                         nrc_text = f" NRC=0x{response.nrc:02X} {response.nrc_name}" if response.nrc is not None else ""
                                         raise RuntimeError(f"第{cycle}轮第{row_index}行UDS失败: {raw_text}{nrc_text}")
@@ -1697,7 +1706,8 @@ class ChannelWorker(QObject):
 
             elif sub_step.type == SubStepType.APP_FLASH_CONFIG:
                 from core.app_flash_step import find_configured_app_program
-                values = self._parse_key_values(str(params.get("params", "")))
+                if self.cancel_event.is_set():return False, 'STOPPED'
+                values = self._app_flash_values(params)
                 success, result_value = find_configured_app_program(
                     values.get("HOST", ""),
                     values.get("INI", "config.ini"),
@@ -1710,7 +1720,8 @@ class ChannelWorker(QObject):
 
             elif sub_step.type == SubStepType.APP_FLASH:
                 from core.app_flash_step import run_configured_app_flash
-                values = self._parse_key_values(str(params.get("params", "")))
+                if self.cancel_event.is_set():return False, 'STOPPED'
+                values = self._app_flash_values(params)
                 timeout = max(0.1, float(values.get("TIMEOUT", "300")))
                 success, result_value = run_configured_app_flash(
                     values.get("HOST", ""), timeout, logger=hw_logger,
@@ -2049,7 +2060,7 @@ class TestEngine(QObject):
         # API 客户端与后台心跳默认保持关闭，按配置或环境变量启用。
 
 
-    def start_channel_test(self, cid, recipe_data, test_id=-1, sn_barcode="", recipe_name="", operator_name=None, debug_run=False):
+    def start_channel_test(self, cid, recipe_data, test_id=-1, sn_barcode="", recipe_name="", operator_name=None, debug_run=False, app_flash_config=None):
         trace("ENGINE_START_CHANNEL_BEGIN", cid, test_id=test_id, recipe_items=len(recipe_data or []), sn=sn_barcode)
         with self._lock:
             if self.workers:
@@ -2128,6 +2139,8 @@ class TestEngine(QObject):
                 self.device_error.emit(f"[ERROR] Channel {cid} 创建测试记录失败: {exc}")
                 return False
         t = QThread(); w = ChannelWorker(cid, steps, self.device_manager, self.db_manager, engine=self)
+        from copy import deepcopy
+        w.app_flash_config = deepcopy(app_flash_config)
         w.debug_run = bool(debug_run)
         if operator_name is not None:
             w.operator_name = operator_name

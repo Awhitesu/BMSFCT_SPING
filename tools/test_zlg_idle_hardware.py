@@ -45,5 +45,5 @@ def run(folder,ip,sdk):
     return result
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--output',required=True);p.add_argument('--ip',default='192.168.1.106');p.add_argument('--sdk',default='zlgcan(20260806)/zlgcan_x64');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--output',required=True);p.add_argument('--ip',default='192.168.1.106');p.add_argument('--sdk',default='vendor/zlgcan(20260806)/zlgcan_x64');a=p.parse_args()
     sys.exit(0 if run(Path(a.output),a.ip,a.sdk)['passed'] else 2)

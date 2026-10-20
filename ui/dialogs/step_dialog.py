@@ -207,6 +207,7 @@ class StepDialog(QDialog):
         
         # 分割线
         line = QFrame(self)
+        self.device_separator = line
         line.setFrameShape(QFrame.HLine)
         line.setFrameShadow(QFrame.Sunken)
         line.setStyleSheet("background-color: #0F3460;")
@@ -894,46 +895,29 @@ class StepDialog(QDialog):
         uds_layout.addLayout(uds_rule_row)
 
         # --- 新增: UDS 响应数据提取与数值计算配置卡片 (可视化拖拽选区增强) ---
-        self.uds_extract_group = QGroupBox("📊 响应数据提取、ASCII转换与多字节算术计算")
+        self.uds_extract_group = QGroupBox()
         self.uds_extract_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
                 border: 1px solid #334155;
                 border-radius: 6px;
-                margin-top: 6px;
-                padding-top: 10px;
+                margin-top: 0px;
+                padding-top: 0px;
                 background-color: #0F172A;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 12px;
-                padding: 0 5px;
-                color: #38BDF8;
             }
         """)
         uds_ext_vbox = QVBoxLayout(self.uds_extract_group)
-        output_help = QLabel('配置数据提取后，测试值只输出提取后的字符串或数值，原始报文仅记日志。循环读取保留最后一轮各行结果；读取VIN可留空期望响应，选择ASCII、偏移3、长度17。')
-        output_help.setWordWrap(True)
-        uds_ext_vbox.addWidget(output_help)
-        uds_ext_vbox.setSpacing(6)
+        uds_ext_vbox.setSpacing(5)
         uds_ext_vbox.setContentsMargins(10, 8, 10, 8)
 
-        sniff_row = QHBoxLayout()
-        sniff_row.addStretch()
         self.btn_live_sniff = QPushButton("📡 在线抓取 (Sniff)")
         self.btn_live_sniff.setToolTip("通过 PCAN 向真实被测 BMS 发送当前请求并抓取真实回包，瞬间生成方块")
         self.btn_live_sniff.setStyleSheet("background-color: #7C3AED; color: white; font-weight: bold; padding: 4px 10px; border-radius: 4px; font-size: 11px;")
         self.btn_live_sniff.clicked.connect(self._on_live_sniff_clicked)
 
-        sniff_row.addWidget(self.btn_live_sniff)
-        uds_ext_vbox.addLayout(sniff_row)
-
         # 1. 可视化交互式拖拽字节流组件 (Byte Blocks)
-        lbl_grid_tip = QLabel("🖱️ 响应报文方块 (在下方方块上按住鼠标左键直接滑动拖拽选区，系统自动计算偏移量和长度):")
-        lbl_grid_tip.setStyleSheet("font-size: 11px; color: #94A3B8; font-weight: normal;")
-        uds_ext_vbox.addWidget(lbl_grid_tip)
-
         self.uds_byte_grid = ByteGridWidget(self)
+        self.uds_byte_grid.scroll_area.setFixedHeight(96)
         self.uds_byte_grid.setContextMenuPolicy(Qt.CustomContextMenu)
         self.uds_byte_grid.customContextMenuRequested.connect(self._uds_selection_menu)
         self.uds_byte_grid.range_selected.connect(self._on_byte_grid_range_selected)
@@ -941,8 +925,9 @@ class StepDialog(QDialog):
 
         # 2. 实时全息预览栏 (选区、Hex、大端整数、物理换算值)
         self.uds_preview_frame = QFrame()
+        self.uds_preview_frame.setObjectName('udsSelectionPreview')
         self.uds_preview_frame.setStyleSheet("""
-            QFrame {
+            QFrame#udsSelectionPreview {
                 background-color: #090E17;
                 border: 1px dashed #0284C7;
                 border-radius: 6px;
@@ -950,16 +935,16 @@ class StepDialog(QDialog):
         """)
         prev_layout = QHBoxLayout(self.uds_preview_frame)
         prev_layout.setContentsMargins(8, 4, 8, 4)
-        prev_layout.setSpacing(14)
+        prev_layout.setSpacing(10)
 
         self.lbl_byte_range = ElidingLabel("【拖拽选区】 未选择")
-        self.lbl_byte_range.setStyleSheet("font-size: 11px; color: #38BDF8; font-weight: bold;")
+        self.lbl_byte_range.setStyleSheet("font-size: 14px; color: #38BDF8; font-weight: bold; border: 0; background: transparent;")
         self.lbl_byte_hex = ElidingLabel("Hex: --")
-        self.lbl_byte_hex.setStyleSheet("font-size: 11px; color: #A78BFA; font-family: Consolas, monospace;")
+        self.lbl_byte_hex.setStyleSheet("font-size: 14px; color: #A78BFA; font-family: Consolas, monospace; border: 0; background: transparent;")
         self.lbl_byte_int = ElidingLabel("大端整数: --")
-        self.lbl_byte_int.setStyleSheet("font-size: 11px; color: #34D399;")
+        self.lbl_byte_int.setStyleSheet("font-size: 14px; color: #34D399; border: 0; background: transparent;")
         self.lbl_byte_phys = ElidingLabel("换算物理值: --")
-        self.lbl_byte_phys.setStyleSheet("font-size: 11px; color: #FBBF24;")
+        self.lbl_byte_phys.setStyleSheet("font-size: 14px; color: #FBBF24; border: 0; background: transparent;")
 
         prev_layout.addWidget(self.lbl_byte_range,1)
         prev_layout.addWidget(self.lbl_byte_hex,1)
@@ -967,37 +952,13 @@ class StepDialog(QDialog):
         prev_layout.addWidget(self.lbl_byte_phys,1)
         uds_ext_vbox.addWidget(self.uds_preview_frame)
 
-        # 3. 快捷设定操作行
-        row_quick_btns = QHBoxLayout()
-        row_quick_btns.setSpacing(8)
-        self.btn_quick_ascii = QPushButton("设为 ASCII 字符串")
-        self.btn_quick_ascii.setStyleSheet("background-color: #334155; color: white; padding: 4px 10px; border-radius: 4px; font-size: 11px;")
-        self.btn_quick_ascii.clicked.connect(lambda: self.uds_extract_mode.setCurrentIndex(1))
-
-        self.btn_quick_calc = QPushButton("设为数值计算 (Scale/Offset)")
-        self.btn_quick_calc.setStyleSheet("background-color: #0E7490; color: white; font-weight: bold; padding: 4px 12px; border-radius: 4px; font-size: 11px;")
-        self.btn_quick_calc.clicked.connect(lambda: self.uds_extract_mode.setCurrentIndex(2))
-
-        self.btn_quick_formula = QPushButton("设为自定义公式")
-        self.btn_quick_formula.setStyleSheet("background-color: #334155; color: white; padding: 4px 10px; border-radius: 4px; font-size: 11px;")
-        self.btn_quick_formula.clicked.connect(lambda: self.uds_extract_mode.setCurrentIndex(3))
-
-        self.btn_quick_hex = QPushButton('设为 HEX 输出')
-        self.btn_quick_hex.setToolTip('按原顺序输出选中字节，例如 00 1A FF；保留前导零，不转换为ASCII或数值。')
-        self.btn_quick_hex.clicked.connect(lambda: self.uds_extract_mode.setCurrentIndex(4))
-
-        row_quick_btns.addWidget(QLabel("快捷操作:"))
-        row_quick_btns.addWidget(self.btn_quick_ascii)
-        row_quick_btns.addWidget(self.btn_quick_calc)
-        row_quick_btns.addWidget(self.btn_quick_formula)
-        row_quick_btns.addWidget(self.btn_quick_hex)
-        row_quick_btns.addStretch()
-        self.uds_quick_widget = QWidget()
-        self.uds_quick_widget.setLayout(row_quick_btns)
-        uds_ext_vbox.addWidget(self.uds_quick_widget)
-
         # 4. 第一行: 提取模式、起始偏移、截取长度、写入变量名
-        row1_ext = QFormLayout()
+        self.uds_parameter_widget = QWidget()
+        parameter_layout = QVBoxLayout(self.uds_parameter_widget)
+        parameter_layout.setContentsMargins(0, 0, 0, 0)
+        parameter_layout.setSpacing(8)
+        row1_ext = QGridLayout()
+        row1_ext.setSpacing(6)
         self.uds_extract_mode = QComboBox()
         self.uds_extract_mode.addItems(["无数据提取", "ASCII 字符串解码 (如 VIN/版本号)", "数值计算 CALC (原始值 * 比例 + 偏移)", "自定义公式 FORMULA (如 (val*0.05)+12)"])
         self.uds_extract_mode.addItem('HEX 十六进制字节输出')
@@ -1021,15 +982,31 @@ class StepDialog(QDialog):
         self.uds_extract_var.setPlaceholderText("写入变量名 (如 ECU_VIN, BMS_VOLT)")
         self.uds_extract_var.setToolTip("提取或计算后的结果将存入 self.variables[变量名]，供后续工步或判定使用")
 
-        row1_ext.addRow("当前段解析格式：", self.uds_extract_mode)
-        row1_ext.addRow("起始字节偏移（从0开始）：", self.uds_extract_offset)
-        row1_ext.addRow("提取长度（0表示到末尾）：", self.uds_extract_len)
-        row1_ext.addRow("结果变量名（选填）：", self.uds_extract_var)
-        uds_ext_vbox.addLayout(row1_ext)
+        parameter_labels=[]
+        for index,(title,field) in enumerate((
+                ('当前段解析格式：',self.uds_extract_mode),
+                ('起始字节偏移（从0开始）：',self.uds_extract_offset),
+                ('提取长度（0表示到末尾）：',self.uds_extract_len),
+                ('结果变量名（选填）：',self.uds_extract_var))):
+            label=QLabel(title)
+            parameter_labels.append(label)
+            row,column=divmod(index,2)
+            row1_ext.addWidget(label,row,column*2)
+            row1_ext.addWidget(field,row,column*2+1)
+            control=type(field).__name__
+            field.setStyleSheet(f'{control} {{ '+field.styleSheet()+' padding:2px 4px; min-height:22px; max-height:22px; }')
+            field.setFixedHeight(28)
+        label_width=max(label.sizeHint().width() for label in parameter_labels)
+        row1_ext.setColumnMinimumWidth(0,label_width)
+        row1_ext.setColumnMinimumWidth(2,label_width)
+        row1_ext.setColumnStretch(1,1)
+        row1_ext.setColumnStretch(3,1)
+        parameter_layout.addLayout(row1_ext)
 
         # 第二行: 数值计算专属控件 (端序、有符号、比例、偏移量、单位、自定义公式)
         self.uds_ext_detail_widget = QWidget()
-        row2_ext = QFormLayout(self.uds_ext_detail_widget)
+        self.uds_ext_detail_widget.setMaximumWidth(650)
+        row2_ext = QGridLayout(self.uds_ext_detail_widget)
         row2_ext.setContentsMargins(0, 0, 0, 0)
         row2_ext.setSpacing(8)
 
@@ -1063,38 +1040,30 @@ class StepDialog(QDialog):
         self.lbl_ext_unit = QLabel("单位:")
         self.lbl_ext_formula = QLabel("公式:")
 
-        row2_ext.addRow(self.lbl_ext_endian, self.uds_extract_endian)
-        row2_ext.addRow(self.uds_extract_signed)
-        row2_ext.addRow(self.lbl_ext_scale, self.uds_extract_scale)
-        row2_ext.addRow(self.lbl_ext_offset, self.uds_extract_offset_val)
-        row2_ext.addRow(self.lbl_ext_formula, self.uds_extract_formula)
-        row2_ext.addRow(self.lbl_ext_unit, self.uds_extract_unit)
+        row2_ext.addWidget(self.lbl_ext_endian,0,0)
+        row2_ext.addWidget(self.uds_extract_endian,0,1)
+        row2_ext.addWidget(self.uds_extract_signed,0,2)
+        row2_ext.addWidget(self.lbl_ext_unit,0,3)
+        row2_ext.addWidget(self.uds_extract_unit,0,4)
+        row2_ext.addWidget(self.lbl_ext_scale,1,0)
+        row2_ext.addWidget(self.uds_extract_scale,1,1)
+        row2_ext.addWidget(self.lbl_ext_offset,1,2)
+        row2_ext.addWidget(self.uds_extract_offset_val,1,3,1,2)
+        row2_ext.addWidget(self.lbl_ext_formula,2,0)
+        row2_ext.addWidget(self.uds_extract_formula,2,1,1,4)
+        row2_ext.setColumnStretch(1,1)
 
-        uds_ext_vbox.addWidget(self.uds_ext_detail_widget)
+        parameter_layout.addWidget(self.uds_ext_detail_widget)
+        parameter_band=QHBoxLayout()
+        parameter_band.addWidget(self.uds_parameter_widget,3)
+        capture_actions=QHBoxLayout()
+        capture_actions.addStretch()
+        capture_actions.addWidget(self.btn_live_sniff)
+        parameter_band.addLayout(capture_actions,2)
+        uds_ext_vbox.addLayout(parameter_band)
         from ui.widgets.uds_segments_widget import UDSSegmentsWidget
         self.uds_segments = UDSSegmentsWidget(self)
-        from PySide6.QtWidgets import QSplitter
-        selection_index = uds_ext_vbox.indexOf(self.uds_byte_grid)
-        selection_left = QWidget()
-        selection_layout = QVBoxLayout(selection_left)
-        selection_layout.setContentsMargins(0, 0, 0, 0)
-        selection_layout.addWidget(QLabel('拖选字节后右键选择格式，追加到右侧分段表'))
-        for widget in (self.uds_byte_grid, self.uds_preview_frame, self.uds_quick_widget):
-            uds_ext_vbox.removeWidget(widget)
-            selection_layout.addWidget(widget)
-        selection_layout.addStretch()
-        self.uds_selection_splitter = QSplitter(Qt.Horizontal)
-        self.uds_selection_splitter.setChildrenCollapsible(False)
-        self.uds_selection_splitter.addWidget(selection_left)
-        self.uds_selection_splitter.addWidget(self.uds_segments)
-        self.uds_selection_splitter.setSizes([650, 450])
-        uds_ext_vbox.insertWidget(selection_index, self.uds_selection_splitter)
-        self.uds_segments.enabled.toggled.connect(lambda multi: self.uds_quick_widget.setVisible(not multi))
-        self.uds_quick_widget.setVisible(False)
-        self.uds_segments.enabled.toggled.connect(lambda multi: output_help.setVisible(not multi))
-        self.uds_segments.enabled.toggled.connect(lambda multi: lbl_grid_tip.setVisible(not multi))
-        output_help.setVisible(False)
-        lbl_grid_tip.setVisible(False)
+        uds_ext_vbox.addWidget(self.uds_segments)
         self.uds_segments.changed.connect(self._refresh_byte_grid_preview)
         self.uds_segments.enabled.toggled.connect(self._on_uds_multi_toggled)
         self.uds_segments.selected_rule.connect(self._load_uds_segment_for_edit)
@@ -2389,7 +2358,8 @@ class StepDialog(QDialog):
             root.removeItem(layout)
         for widget in (self.uds_security, self.uds_unlock_add, self.uds_extract_group, self.uds_table):
             root.removeWidget(widget)
-        self.uds_tabs = QTabWidget()
+        from ui.widgets.compact_step_layout import CurrentPageTabs
+        self.uds_tabs = CurrentPageTabs()
         self.uds_tabs.setMinimumHeight(440)
         root.addWidget(self.uds_tabs, 1)
         pages = []
@@ -2423,15 +2393,13 @@ class StepDialog(QDialog):
         self.uds_edit_actions = QWidget()
         edit_actions = QHBoxLayout(self.uds_edit_actions)
         edit_actions.setContentsMargins(0, 0, 0, 0)
-        self.uds_edit_hint = QLabel()
-        self.uds_edit_hint.setWordWrap(True)
         self.uds_save_edit = QPushButton('保存修改并返回列表')
         self.uds_save_edit.setAutoDefault(False)
         self.uds_save_edit.clicked.connect(lambda: self.save_uds_edited_row())
         self.uds_cancel_edit = QPushButton('取消修改／新增请求')
         self.uds_cancel_edit.setAutoDefault(False)
         self.uds_cancel_edit.clicked.connect(self.cancel_uds_edit)
-        edit_actions.addWidget(self.uds_edit_hint, 1)
+        edit_actions.addStretch()
         edit_actions.addWidget(self.uds_save_edit)
         edit_actions.addWidget(self.uds_cancel_edit)
         self.uds_edit_actions.hide()
@@ -2444,9 +2412,6 @@ class StepDialog(QDialog):
         controls.removeWidget(self.uds_add_btn)
         header.addWidget(self.uds_add_btn)
         pages[3].addLayout(header)
-        self.uds_draft_summary = QLabel()
-        self.uds_draft_summary.setWordWrap(True)
-        pages[3].addWidget(self.uds_draft_summary)
         pages[3].addLayout(controls)
         self.uds_table.setMinimumHeight(220)
         pages[3].addWidget(self.uds_table, 1)
@@ -2471,15 +2436,11 @@ class StepDialog(QDialog):
         self.uds_previous.setEnabled(page > 0)
         self.uds_next.setEnabled(page < 3)
         self.uds_next.setText('下一步：数据解析' if page == 2 else '下一步')
-        request = self.uds_request.text().strip()
         editing = self._uds_edit_row()
         if editing >= 0:
-            self.uds_draft_summary.setText(f'正在修改第{editing+1}行：{request}（保存后覆盖原行，不增加行数）')
             self.uds_add_btn.setText('保存本行修改')
-            self.uds_edit_hint.setText(f'正在编辑第{editing+1}行。切换其他行或确认指令时也会保存；取消可放弃本次修改。')
         else:
             self.uds_add_btn.setText('添加到列表')
-            self.uds_draft_summary.setText(f'待添加请求：{request}' if request else '尚无待添加请求。请到第3页填写；单击已有行可修改。')
 
     def _capture_signature(self,uds=False):
         driver=getattr(self.device_manager,'pcan',None)
@@ -2890,8 +2851,9 @@ class StepDialog(QDialog):
             item.setText(rule_text or '--')
             item.setToolTip(rule_text)
 
-    def _append_uds_table_row(self, name, request, expected, rule_str="", expected_result=""):
-        row = self.uds_table.rowCount()
+    def _append_uds_table_row(self, name, request, expected, rule_str="", expected_result="", *, row=None):
+        if row is None:
+            row = self.uds_table.rowCount()
         self.uds_table.insertRow(row)
         rule_display = rule_str.strip() if rule_str.strip() else "--"
         values = [name, request.upper(), expected.upper(), "校验" if expected else "不校验", rule_display, expected_result]
@@ -2914,6 +2876,7 @@ class StepDialog(QDialog):
         self.uds_table.setItem(row, 6, output)
         self._set_uds_row_options(row, {})
         self.uds_table.selectRow(row)
+        return row
 
     def _set_uds_row_options(self, row, options):
         options={key:options.get(key,default) for key,default in (('address','default'),('suppress',False),('check',True),('response_sample',''))}
@@ -3004,8 +2967,10 @@ class StepDialog(QDialog):
             return
         case=getattr(self,'_uds_case_name',None)
         name=case[1] if case and case[0]==request else self.uds_service.currentText()
-        self._append_uds_table_row(name, request, expected, rule_str, expected_result)
-        self._set_uds_row_options(self.uds_table.rowCount()-1, self.uds_workbench.row_options())
+        current = self.uds_table.currentRow()
+        row = current + 1 if self.uds_table.selectionModel().hasSelection() else self.uds_table.rowCount()
+        self._append_uds_table_row(name, request, expected, rule_str, expected_result, row=row)
+        self._set_uds_row_options(row, self.uds_workbench.row_options())
         self.uds_request.clear()
         self.uds_expected.clear()
 

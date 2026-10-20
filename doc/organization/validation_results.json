@@ -1,0 +1,60 @@
+{
+  "ok": true,
+  "original_files_verified": 2015,
+  "cleanup_files": 315,
+  "moved_files": 1238,
+  "python_files_syntax_checked": 337,
+  "spec_resource_paths_checked": 10,
+  "documented_folders": 156,
+  "documented_files": 1862,
+  "original_recipe_files_unchanged": true,
+  "project_bytes_excluding_git_and_generated": 106790435,
+  "errors": [],
+  "scope": "离线文件/哈希/语法/打包路径/说明覆盖检查，不代表硬件或已打包EXE运行验收。",
+  "date": "2026-10-19",
+  "original_bytes": 112110817,
+  "cleaned_bytes": 6421903,
+  "modified_original_files": 26,
+  "preserved_preexisting_deleted_scripts": [
+    "start_app.cmd",
+    "启动BMS上位机.bat",
+    "启动机台连接器.bat",
+    "打包应用程序.bat"
+  ],
+  "integration_checks": {
+    "sg400_source_dll_path": true,
+    "zlg_definition_module_load": true,
+    "sandbox_snapshot_new_vendor_config_and_doc_paths": true
+  },
+  "software_tests": {
+    "passed": 52,
+    "baseline_passed": 11,
+    "command": "python -m pytest tests/test_package_app.py tests/test_project_identity.py tests/test_result_reaudit.py tests/test_sg400_readchip_decode.py tests/test_sg400_project_binding.py tests/test_opteeq_tab_subtabs.py tests/test_opteeq_tab_remote_projects.py -q -p no:cacheprovider",
+    "log": "D:\\GIT\\BMSFCT_整理备份_20261019\\pytest_reorganization.txt",
+    "unavailable_modules": [
+      "tests/test_zlg_net_bus.py",
+      "tests/test_recipe_can_physical_channel.py"
+    ],
+    "unavailable_reason": "测试收集因缺少 python-can (can) 失败",
+    "unavailable_log": "D:\\GIT\\BMSFCT_整理备份_20261019\\unavailable_can_tests.txt",
+    "execution_trace": "D:/GIT/BMSFCT_整理备份_20261019/test_execution_trace_20261019.log"
+  },
+  "environment": {
+    "python": "3.14.0",
+    "PySide6": "6.11.0",
+    "project_required_PySide6": "6.10.3",
+    "missing_dependencies": [
+      "python-can",
+      "cantools",
+      "xlwt",
+      "regex"
+    ]
+  },
+  "not_performed": [
+    "真实仪器与机台联调",
+    "完整依赖环境中的全量回归",
+    "EXE构建与运行验收",
+    "Git提交或推送"
+  ],
+  "backup": "D:\\GIT\\BMSFCT_整理备份_20261019\\original"
+}

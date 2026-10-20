@@ -29,7 +29,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe main.py
 ```
 
-也可以双击`start_app.cmd`启动。该入口绕过Windows虚拟环境启动器的光标反馈，同时使用本项目虚拟环境。
+`launch_app.py` 是辅助启动入口。当前工作区的 `start_app.cmd` 和中文启动、打包批处理脚本在本次整理前已被删除；使用上面的 Python 命令启动。
 
 首次运行会创建本地数据库。账户初始化逻辑位于`data/db_manager.py`。在硬件管理中心及各类板卡配置页填写本机台的地址、串口、启用状态和通道映射，再进行设备连接。
 
@@ -45,11 +45,34 @@ py -3.11 -m venv .venv
 | `data/` | 数据库管理 |
 | `config/`、`recipes/` | 配置与配方 |
 | `tests/` | 驱动、执行逻辑及界面测试 |
-| `doc/` | 协议、功能说明、Excel模板与审查报告 |
+| `doc/guides/` | 功能使用和部署指南 |
+| `doc/design/` | 项目需求、架构、UI设计 |
+| `doc/protocols/`、`doc/板卡协议/` | 通讯协议与板卡寄存器 |
+| `doc/templates/`、`doc/DBC示例/` | 导入模板、工步参考和DBC仿真示例 |
+| `doc/hardware/`、`doc/samples/` | 仪器手册和测试报告样本 |
+| `doc/audits/`、`doc/history/` | 历史检查、修复和开发记录 |
+| `doc/flowcharts/`、`doc/preview/` | 历史流程图与界面预览 |
+| `doc/organization/` | 本次分类、清理、备份清单及验证结果 |
 | `tools/` | 配套检查与导出工具 |
-| `GIT/`、`RES_MODBUS_TCP_2.0/` | 工作区内的板卡固件源码 |
+| `vendor/` | PCAN、ZLG、SG400厂商包与SeedKey DLL |
+| `firmware/` | 电阻板、继电器板的STM32固件源码 |
+| `examples/` | 独立厂商通讯示例 |
+| `packaging/` | 主程序和机台互联工具的PyInstaller配置 |
 
 硬件SDK、DLL及示例保留各自的供应商说明和许可证。使用对应硬件前请确认架构和驱动安装情况。
+
+源码使用 `config/故障码.txt`，EXE 部署仍使用 EXE 同级故障码表。ZLG SDK 默认路径为 `vendor/zlgcan(20260806)/zlgcan_x64`。若从旧机台复制配置，应在硬件管理中检查其中保存的旧相对路径。Vinfast SeedKey DLL 已归入 `vendor/seedkey/`，使用该 DLL 时选择新位置。
+
+## 打包与维护说明
+
+在依赖完整的项目 Python 环境中，从项目根目录执行：
+
+```powershell
+.\.venv\Scripts\python.exe tools/package_app.py --check
+.\.venv\Scripts\python.exe tools/package_app.py
+```
+
+详见 [打包说明](doc/guides/一键打包说明.md)。运行 `python tools/verify_project_layout.py` 可检查迁移记录、源码语法和打包资源路径。
 
 ## 测试
 

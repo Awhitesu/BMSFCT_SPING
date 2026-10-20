@@ -92,12 +92,12 @@ def check_environment(root=ROOT):
                 ('pyinstaller', 'PySide6', 'shiboken6', 'python-can', 'pyserial','xlwt','cantools','regex')}
     if versions['PySide6'] != versions['shiboken6']:
         raise RuntimeError('PySide6 与 shiboken6 版本不一致，请先修复项目虚拟环境。')
-    required = ['main.py', 'AgingTest_BMS.spec', 'resources/style.qss', 'resources/icon.ico',
+    required = ['main.py', 'packaging/AgingTest_BMS.spec', 'resources/style.qss', 'resources/icon.ico',
                 'resources/test_report_layout.json',
                 'resources/seedkey/SeedKeyHost-x86.exe', 'resources/seedkey/SeedKeyHost-x64.exe',
-                '故障码.txt', 'PCAN-Basic/x64/PCANBasic.dll', '力捷峰U盘/Demo/OpteeQDLLx64.dll',
-                '力捷峰U盘/Demo/libcrypto-3.dll', 'zlgcan(20260806)/zlgcan_x64/zlgcan.dll',
-                'zlgcan_python_260529/zlgcan.py']
+                'config/故障码.txt', 'vendor/PCAN-Basic/x64/PCANBasic.dll', 'vendor/力捷峰U盘/Demo/OpteeQDLLx64.dll',
+                'vendor/力捷峰U盘/Demo/libcrypto-3.dll', 'vendor/zlgcan(20260806)/zlgcan_x64/zlgcan.dll',
+                'vendor/zlgcan_python_260529/zlgcan.py']
     missing = [p for p in required if not (root / p).is_file()]
     if missing:
         raise RuntimeError('缺少打包文件：' + '、'.join(missing))
@@ -175,7 +175,7 @@ def build_release(args, versions):
                '--workpath', str(work)]
     if args.clean:
         command.append('--clean')
-    command.append(str(ROOT / 'AgingTest_BMS.spec'))
+    command.append(str(ROOT / 'packaging' / 'AgingTest_BMS.spec'))
     started = time.monotonic()
     print('开始构建：V' + manifest['app_version'] + '；' + mode + '；日志：' + str(log_path), flush=True)
     with log_path.open('w', encoding='utf-8') as log:
@@ -205,7 +205,7 @@ def build_release(args, versions):
         shutil.copy2(ROOT / 'tools' / name, output / name)
     guide=output/'使用说明'/'统计追溯与现场安全升级_20261019.md'
     guide.parent.mkdir(parents=True,exist_ok=True)
-    shutil.copy2(ROOT/'doc'/'统计追溯与现场安全升级_20261019.md',guide)
+    shutil.copy2(ROOT/'doc'/'guides'/'统计追溯与现场安全升级_20261019.md',guide)
     for name in ('config', 'recipes'):
         copy_missing(ROOT / name, output / name)
     copied_database = copy_database(ROOT / 'bms_test_data.db', output / 'bms_test_data.db')

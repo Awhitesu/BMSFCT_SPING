@@ -95,7 +95,7 @@ def test_engine_step_uses_shared_recipe_adapter_and_channel():
 
 def test_zlg_transmit_uses_correct_native_handle():
     root=Path(__file__).resolve().parents[1]
-    spec=importlib.util.spec_from_file_location('test_route_types',root/'zlgcan_python_260529/zlgcan.py')
+    spec=importlib.util.spec_from_file_location('test_route_types',root/'vendor/zlgcan_python_260529/zlgcan.py')
     types=importlib.util.module_from_spec(spec);spec.loader.exec_module(types)
     bus=ZLGNetBus.__new__(ZLGNetBus)
     bus.types=types;bus.lock=threading.RLock();bus.physical_channel=0

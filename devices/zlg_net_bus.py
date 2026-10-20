@@ -25,7 +25,7 @@ class ZLGNetBus:
             raise RuntimeError('ZLG DLL位数不匹配：当前程序需要官方64位开发包' if required == 0x8664 else '需要官方32位开发包')
         definitions = root / 'zlgcan.py'
         if not definitions.is_file():
-            definitions = Path(__file__).resolve().parents[1] / 'zlgcan_python_260529' / 'zlgcan.py'
+            definitions = Path(__file__).resolve().parents[1] / 'vendor' / 'zlgcan_python_260529' / 'zlgcan.py'
         spec = importlib.util.spec_from_file_location('_zlg_sdk_definitions', definitions)
         self.types = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.types)

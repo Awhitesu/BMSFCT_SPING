@@ -10,7 +10,7 @@ def main():
     summaries=[json.loads((folder/'summary.json').read_text(encoding='utf-8')) for folder in folders]
     for summary in summaries:
         assert summary['findings']==0,summary
-    output=root/'doc'/'控件布局逐项验收_20261018.html'
+    output=root/'doc'/'audits'/'控件布局逐项验收_20261018.html'
     inventory=[]
     for folder,summary in zip(folders,summaries):
         for line in (folder/'controls.jsonl').read_text(encoding='utf-8').splitlines():

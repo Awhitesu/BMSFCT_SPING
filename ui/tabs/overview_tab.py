@@ -66,6 +66,7 @@ class OverviewTab(QWidget):
         self._pending_plc_recipe = None
         self._plc_config_error = ""
         self._recipe_can_error = ''
+        self._selected_app_flash_config = None
         self._closing = False
         self._confirmed_barcode = ""
         self._scan_pending = False
@@ -927,7 +928,7 @@ class OverviewTab(QWidget):
         self._drain_plc_recipe()
 
     def apply_selected_recipe_can(self, recipe):
-        """Apply selected project timing outside the GUI thread, before scanning."""
+        """在选择型号后后台同步 APP 的 INI，并应用配方 CAN 参数。"""
         if self._closing or self._prepare_task.isRunning():
             return False
         snapshot = copy.deepcopy(recipe)
@@ -935,27 +936,38 @@ class OverviewTab(QWidget):
         self.preparing = True
         self._prepare_cancel.clear()
         self.combo_recipe.setEnabled(False)
-        self.lbl_big_status.setText('CAN CONFIG')
+        self.lbl_big_status.setText('CONFIGURING')
         self.run_activity_changed.emit(True)
         def completed(ok, result):
             self.preparing = False
             self.combo_recipe.setEnabled(True)
             if self._closing or self._prepare_cancel.is_set():
-                self._recipe_can_error = '配方 CAN 参数应用已取消，请重新选择配方。'
+                self._recipe_can_error = '配方参数应用已取消，请重新选择型号。'
             else:
+                if '_synced_app_flash' in snapshot:
+                    self._selected_app_flash_config = snapshot['_synced_app_flash']
                 success = ok and result[0]
                 self._recipe_can_error = '' if success else (str(result[1]) if ok else str(result))
-                self.lbl_big_status.setText('CAN ERROR' if self._recipe_can_error else 'READY')
+                self.lbl_big_status.setText('CONFIG ERROR' if self._recipe_can_error else 'READY')
                 self.lbl_big_status.setToolTip(self._recipe_can_error or str(result[1]))
-                self._log_test_event('配方 CAN 配置失败：' + self._recipe_can_error if self._recipe_can_error else '配方 CAN 配置已应用：' + str(result[1]))
+                self._log_test_event('配方参数应用失败：' + self._recipe_can_error if self._recipe_can_error else '配方参数已应用：' + str(result[1]))
                 if self._recipe_can_error:
-                    QMessageBox.warning(self, '配方 CAN 配置失败', self._recipe_can_error)
+                    QMessageBox.warning(self, '配方参数应用失败', self._recipe_can_error)
             self.run_activity_changed.emit(False)
-        accepted = self._prepare_task.run(lambda: self._apply_recipe_hardware(snapshot), completed)
+        def apply_selection():
+            if self._prepare_cancel.is_set():return False, '已取消'
+            try:
+                from core.recipe_app_flash import prepare_app_flash
+                snapshot['_synced_app_flash'] = prepare_app_flash(snapshot.get('app_flash'), self.preparation_log.emit)
+            except Exception as exc:
+                return False, f'APP刷写参数同步失败：{exc}'
+            if self._prepare_cancel.is_set():return False, '已取消'
+            return self._apply_recipe_hardware(snapshot)
+        accepted = self._prepare_task.run(apply_selection, completed)
         if not accepted:
             self.preparing = False
             self.combo_recipe.setEnabled(True)
-            self._recipe_can_error = '配方 CAN 配置任务未启动，请重新选择配方。'
+            self._recipe_can_error = '配方参数应用任务未启动，请重新选择型号。'
             self.run_activity_changed.emit(False)
         return accepted
 
@@ -1006,6 +1018,7 @@ class OverviewTab(QWidget):
             "project_no": self.current_recipe_data.get('project_no',''),
             "model_name": self.current_recipe_data.get('model_name',''),
             "dbc": copy.deepcopy(self.current_recipe_data.get('dbc')),
+            "app_flash": copy.deepcopy(self.current_recipe_data.get('app_flash')),
             "plc_recipe_register": 0,
             "can_config": self.current_recipe_data.get("can_config"),
             "items": items_list
@@ -1252,7 +1265,16 @@ class OverviewTab(QWidget):
             QMessageBox.warning(self, "Preparation", "PLC recipe confirmation is pending")
             return False
         if self._recipe_can_error:
-            QMessageBox.warning(self, 'CAN 参数未就绪', self._recipe_can_error)
+            QMessageBox.warning(self, '配方参数未就绪', self._recipe_can_error)
+            return False
+        from core.recipe_app_flash import validate_app_flash
+        try:
+            selected_app_flash = validate_app_flash(recipe_dict.get('app_flash'))
+        except ValueError as exc:
+            QMessageBox.warning(self, 'APP刷写参数无效', str(exc))
+            return False
+        if selected_app_flash is not None and selected_app_flash != self._selected_app_flash_config:
+            QMessageBox.warning(self, 'APP刷写参数未同步', '请在测试界面重新选择型号，成功同步当前配方的 config.ini 后再开始测试。')
             return False
         snapshot = copy.deepcopy(recipe_dict)
         snapshot['_debug_run'] = self._debug_requested_indices is not None
@@ -1421,6 +1443,7 @@ class OverviewTab(QWidget):
             success = self.engine.start_channel_test(
                 self.channel_id, items, test_id=self._prepared_test_id, sn_barcode=sn_barcode,
                 recipe_name=recipe_dict.get("name", self.current_recipe_name), operator_name=recipe_dict["operator_name"],
+                app_flash_config=recipe_dict.get('app_flash'),
                 **({'debug_run': True} if self._active_debug_run else {}))
         except Exception as exc:
             success = False

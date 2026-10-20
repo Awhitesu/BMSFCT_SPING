@@ -9,6 +9,9 @@ env/
 .pytest_cache/
 .vscode/
 .idea/
+.vs/
+examples/**/obj/
+examples/**/bin/
 *.log
 *.pen
 scratch/

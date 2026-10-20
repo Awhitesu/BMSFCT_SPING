@@ -17,7 +17,7 @@ def run(folder,cycles=12):
     bus=None
     trace=(folder/'sdk.jsonl').open('w',encoding='utf-8')
     try:
-        bus=ZLGNetBus('zlgcan(20260806)/zlgcan_x64','192.168.1.106',8000)
+        bus=ZLGNetBus('vendor/zlgcan(20260806)/zlgcan_x64','192.168.1.106',8000)
         real=bus.dll
         class TracedDLL:
             def __getattr__(self,name):return getattr(real,name)

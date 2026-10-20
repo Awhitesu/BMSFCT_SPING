@@ -4,7 +4,7 @@ import time
 from types import SimpleNamespace
 from unittest.mock import Mock
 import pytest
-from PySide6.QtWidgets import QApplication,QDialog,QMessageBox,QFileDialog
+from PySide6.QtWidgets import QApplication,QDialog,QMessageBox,QFileDialog,QScrollArea,QPushButton
 from PySide6.QtCore import Qt,QTimer
 from core.engine import ChannelWorker,SubStep,SubStepType
 from core.uds_result_config import encode,decode
@@ -180,11 +180,12 @@ def test_service_cases_prefill_only_and_settings_popup_restores_forms(page,monke
     assert p.uds_tabs.currentIndex()==2
 
 
-def test_immediate_send_and_capture_do_not_block_gui_and_fill_parser(page,monkeypatch):
+@pytest.mark.parametrize('capture',[False,True])
+def test_immediate_send_and_capture_do_not_block_gui_and_fill_parser(page,monkeypatch,capture):
     p,events=page;workbench=p.uds_workbench
     warnings=[];monkeypatch.setattr(QMessageBox,'warning',lambda *args:warnings.append(args))
     p.uds_request.setText('22 F1 90');p.uds_extract_mode.setCurrentIndex(1);p.uds_extract_len.setValue(2)
-    workbench.run(True,capture=True)
+    workbench.run(True,capture=capture)
     assert workbench.task.isRunning() and workbench.stop_button.isEnabled()
     assert not p.btn_ok.isEnabled()
     wait_done(workbench)
@@ -192,6 +193,95 @@ def test_immediate_send_and_capture_do_not_block_gui_and_fill_parser(page,monkey
     assert p.uds_result_expected.text()=='AB'
     assert workbench.last_response=='62 F1 90 41 42'
     assert workbench.passed==1 and p.btn_ok.isEnabled()
+    assert p.uds_tabs.currentIndex()==3
+
+
+def test_immediate_parser_keeps_draft_instead_of_loading_list_output(page):
+    p,_=page;w=p.uds_workbench
+    p._append_uds_table_row('output','22 F1 91','')
+    p.uds_table.item(0,6).setCheckState(Qt.Checked)
+    p.uds_request.setText('22 F1 90')
+    w.run(True);wait_done(w)
+    assert p.uds_tabs.currentIndex()==3 and p._uds_edit_row()==-1
+    assert p.uds_request.text()=='22 F1 90'
+    assert w.response_sample.text()=='62 F1 90 41 42'
+
+
+def test_list_without_output_does_not_switch_parser(page):
+    p,_=page;w=p.uds_workbench
+    p._append_uds_table_row('read','22 F1 90','')
+    w.run(False);wait_done(w)
+    assert w.passed==1 and p.uds_tabs.currentIndex()==2
+
+
+@pytest.mark.parametrize('immediate',[False,True])
+def test_response_opens_parser_even_when_prefix_validation_fails(page,immediate):
+    p,_=page;w=p.uds_workbench
+    if immediate:
+        p.uds_request.setText('22 F1 90');p.uds_expected.setText('62 F1 91')
+    else:
+        p._append_uds_table_row('read','22 F1 90','62 F1 91')
+        p.uds_table.item(0,6).setCheckState(Qt.Checked)
+    w.run(immediate);wait_done(w)
+    assert w.failed==1 and p.uds_tabs.currentIndex()==3
+    assert w.response_sample.text()=='62 F1 90 41 42'
+
+
+def test_other_row_response_cannot_open_output_parser(page):
+    p,_=page;w=p.uds_workbench
+    p._append_uds_table_row('fails first','22 F1 90','62 F1 91')
+    p._append_uds_table_row('not reached','22 F1 91','')
+    p.uds_table.item(1,6).setCheckState(Qt.Checked)
+    w.run(False);wait_done(w)
+    assert w.failed==1 and p.uds_tabs.currentIndex()==2
+
+
+@pytest.mark.parametrize('immediate',[False,True])
+@pytest.mark.parametrize('raw',[b'',b'\x7f\x22\x31'])
+def test_no_response_stays_and_negative_response_opens_parser(page,immediate,raw):
+    p,_=page;w=p.uds_workbench
+    # A stale sample from an earlier operation must not trigger this run.
+    w._response('62 F1 90 41');p.uds_tabs.setCurrentIndex(2)
+    client=Client([],0x7E0)
+    client.request=lambda *a,**kw:UDSResponse(0x22,raw,False,error='timeout' if not raw else 'negative')
+    p.device_manager.pcan.create_uds_client.side_effect=lambda **kw:client
+    if immediate:p.uds_request.setText('22 F1 90')
+    else:
+        p._append_uds_table_row('read','22 F1 90','')
+        p.uds_table.item(0,6).setCheckState(Qt.Checked)
+    w.run(immediate);wait_done(w)
+    assert w.failed==1
+    assert p.uds_tabs.currentIndex()==(3 if raw else 2)
+    if raw:assert w.response_sample.text()=='7F 22 31'
+
+
+def test_can_error_text_is_not_mistaken_for_response_bytes(page):
+    p,_=page;w=p.uds_workbench
+    client=Client([],0x7E0)
+    client.request=lambda *a,**kw:UDSResponse(0x22,b'',False,error='CAN receive timeout')
+    p.device_manager.pcan.create_uds_client.side_effect=lambda **kw:client
+    p.uds_request.setText('22 F1 90')
+    w.run(True);wait_done(w)
+    assert w.failed==1 and p.uds_tabs.currentIndex()==2
+    assert w.response_sample.text()==''
+
+
+@pytest.mark.parametrize('size',[(1680,900),(1280,800)])
+def test_send_page_fits_without_outer_scroll_and_table_grows(page,size):
+    p,_=page;w=p.uds_workbench
+    for i in range(20):p._append_uds_table_row(str(i),'22 F1 90','')
+    p.resize(*size);p.show()
+    for _ in range(6):app.processEvents()
+    assert not isinstance(p.uds_tabs.widget(2),QScrollArea)
+    assert not p.main_scroll.verticalScrollBar().isVisible()
+    assert p.main_scroll.verticalScrollBar().maximum()==0
+    assert not p.device_separator.isVisible()
+    assert not any(b.isVisible() and b.text()=='工步设备／CAN通道' for b in p.findChildren(QPushButton))
+    assert w.log.mapTo(p.main_scroll.viewport(),w.log.rect().bottomRight()).y()<p.main_scroll.viewport().height()
+    before=p.uds_table.height()
+    p.resize(size[0],size[1]+150)
+    for _ in range(6):app.processEvents()
+    assert p.uds_table.height()>=before+140
 
 
 def test_settings_cancel_restores_form_values(page):
