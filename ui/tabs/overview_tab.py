@@ -16,6 +16,7 @@ from PySide6.QtGui import QColor
 
 from ui.dialogs.flash_status_dialog import FlashStatusDialog
 from ui.widgets.test_status_delegate import TestStatusDelegate
+from ui.widgets.test_sequence_tree import TestSequenceTree
 
 
 
@@ -333,7 +334,7 @@ class OverviewTab(QWidget):
         content_layout.setSpacing(10)
 
         # ====== 左侧测试序列列表 (7列标头) ======
-        self.step_tree = QTreeWidget(self)
+        self.step_tree = TestSequenceTree(self)
         self.step_tree.setItemDelegateForColumn(6, TestStatusDelegate(self.step_tree))
         self.step_tree.setHeaderLabels(["序号", "名称", "下限", "上限", "测试值", "单位", "判定"])
         self.step_tree.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -928,7 +929,7 @@ class OverviewTab(QWidget):
         self._drain_plc_recipe()
 
     def apply_selected_recipe_can(self, recipe):
-        """在选择型号后后台同步 APP 的 INI，并应用配方 CAN 参数。"""
+        """选择型号后按配方使能重启上位机、同步 INI，并应用 CAN 参数。"""
         if self._closing or self._prepare_task.isRunning():
             return False
         snapshot = copy.deepcopy(recipe)
@@ -958,7 +959,8 @@ class OverviewTab(QWidget):
             if self._prepare_cancel.is_set():return False, '已取消'
             try:
                 from core.recipe_app_flash import prepare_app_flash
-                snapshot['_synced_app_flash'] = prepare_app_flash(snapshot.get('app_flash'), self.preparation_log.emit)
+                snapshot['_synced_app_flash'] = prepare_app_flash(
+                    snapshot.get('app_flash'), self.preparation_log.emit, self._prepare_cancel.is_set)
             except Exception as exc:
                 return False, f'APP刷写参数同步失败：{exc}'
             if self._prepare_cancel.is_set():return False, '已取消'
@@ -1380,6 +1382,8 @@ class OverviewTab(QWidget):
     def _on_preparation_log(self, message):
         if not self._closing:
             self._log_test_event(message)
+            if self.preparing and message.startswith('[上位机准备]'):
+                self.lbl_big_status.setToolTip(message)
 
     def _abort_prepared_record(self):
         identity = self._prepared_test_id
@@ -1428,6 +1432,8 @@ class OverviewTab(QWidget):
                 sub_node.setText(6, "等待")
                 sub_node.setBackground(6, QColor("#1A1A2E"))
                 sub_node.setForeground(6, QColor("#E0E0E0"))
+
+        self.step_tree.scrollToTop()
 
         # 清空并开始新的测试记录
         if hasattr(self, 'test_log_view'):
@@ -1652,6 +1658,7 @@ class OverviewTab(QWidget):
             item_node.setText(6, "RUNNING")
             item_node.setBackground(6, QColor("#FFC107"))
             item_node.setForeground(6, QColor("#000000"))
+            self.step_tree.show_running_item(item_node)
         self._log_test_event(f"▶ 步骤{step_idx + 1} 开始: {step_name}")
 
     @Slot(int, int, int, str, object)

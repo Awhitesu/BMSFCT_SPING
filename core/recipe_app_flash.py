@@ -1,9 +1,11 @@
-"""配方 APP 刷写参数校验及同级 config.ini 的定点更新。"""
+"""配方上位机使能、重启及同级 config.ini 的定点更新。"""
 import configparser
 import os
 from pathlib import Path
 import re
 import tempfile
+
+from core.host_process import check_cancelled, start_host, stop_host, wait_seconds
 
 
 def validate_app_flash(config):
@@ -11,8 +13,11 @@ def validate_app_flash(config):
         return None
     if not isinstance(config, dict):
         raise ValueError('APP刷写参数格式无效')
-    labels = {'host_path': '上位机路径', 'model': 'App刷写型号', 'flash_path': 'App刷写路径'}
-    values = {}
+    if config.get('enabled') is not True:
+        return None  # 旧配方默认关闭；隐藏参数不参与校验、同步及工步参数覆盖。
+    labels = {'host_path': '上位机路径', 'model': 'App刷写型号', 'flash_path': 'App刷写路径',
+              'restart_name': '重启上位机名称'}
+    values = {'enabled': True}
     for key, label in labels.items():
         value = config.get(key, '')
         if not isinstance(value, str) or any(char in value for char in '\r\n\0'):
@@ -20,21 +25,59 @@ def validate_app_flash(config):
         values[key] = value.strip()
         if key == 'host_path':
             values[key] = values[key].strip('"').strip()
-    if not any(values.values()):
-        return None  # 旧配方及未启用此功能的配方继续使用原工步配置。
     missing = [label for key, label in labels.items() if not values[key]]
     if missing:
         raise ValueError('APP刷写参数未填写完整：' + '、'.join(missing))
+    name = values['restart_name']
+    if (not name.casefold().endswith('.exe') or any(char in name for char in '<>:"/\\|?*')
+            or any(ord(char) < 32 for char in name)):
+        raise ValueError('重启上位机名称必须是单独的 exe 文件名，例如 BMS_General.exe')
     return values
 
 
-def prepare_app_flash(config, logger=None):
-    """选择测试型号时同步两项键值；刷写工步不重复写入。"""
+def prepare_app_flash(config, logger=None, cancel=None):
+    """选择型号时停止上位机、校验写入并重启；任何失败均不进入下一阶段。"""
     values = validate_app_flash(config)
     if values is None:
         return None
+    check_cancelled(cancel)
+    try:
+        ini, encoding, raw, updated, program = _prepare_ini_update(values)
+    except Exception as exc:
+        raise ValueError(f'上位机参数检查失败：{exc}') from exc
+    stages = (
+        ('停止上位机', lambda: stop_host(values['restart_name'], cancel)),
+        ('停止确认后等待 500 ms', lambda: wait_seconds(.5, cancel)),
+        ('写入并校验 config.ini', lambda: _write_and_verify_ini(ini, encoding, raw, updated, values)),
+        ('写入确认后等待 500 ms', lambda: wait_seconds(.5, cancel)),
+        ('启动并确认上位机', lambda: start_host(program, cancel)),
+    )
+    for label, action in stages:
+        check_cancelled(cancel)
+        if logger:
+            logger(f'[上位机准备] {label}：{program.name if "上位机" in label else ini}')
+        try:
+            action()
+        except Exception as exc:
+            raise RuntimeError(f'{label}失败：{exc}') from exc
+    if logger:
+        logger(f'[APP刷写参数] {ini} → [App] Type={values["model"]}；Addr={values["flash_path"]}；上位机已启动')
+    return values
+
+
+def _prepare_ini_update(values):
     host = Path(os.path.abspath(os.path.expandvars(values['host_path'])))
     directory = host if host.is_dir() else host.parent
+    if not host.is_file() and not host.is_dir():
+        raise ValueError(f'未找到上位机程序文件或目录：{host}')
+    # 文件路径决定实际启动的 EXE；目录形式仅兼容之前保存的配方。
+    program = directory / values['restart_name'] if host.is_dir() else host
+    if program.suffix.casefold() != '.exe':
+        raise ValueError(f'启用上位机重启时，请将上位机路径填写为 exe 文件：{host}')
+    if program.name.casefold() != values['restart_name'].casefold():
+        raise ValueError('重启上位机名称与上位机路径中的 exe 文件名不一致，请检查配方参数')
+    if not program.is_file():
+        raise ValueError(f'未找到重启上位机程序：{program}')
     ini = directory / 'config.ini'
     if not ini.is_file():
         raise ValueError(f'未找到上位机同级配置文件：{ini}')
@@ -90,10 +133,27 @@ def prepare_app_flash(config, logger=None):
             lines[end - 1] += newline
         lines[end:end] = missing
     updated = ''.join(lines).encode(encoding)
+    _verify_ini_values(updated.decode(encoding), values)
+    return ini, encoding, raw, updated, program
+
+
+def _verify_ini_values(text, values):
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.read_string(text)
+    sections = [name for name in parser.sections() if name.strip().casefold() == 'app']
+    if len(sections) != 1 or any(parser.get(sections[0], key, fallback=None) != values[value]
+                                 for key, value in (('Type', 'model'), ('Addr', 'flash_path'))):
+        raise ValueError('config.ini 回读校验失败：Type 或 Addr 与当前配方不一致')
+
+
+def _write_and_verify_ini(ini, encoding, raw, updated, values):
+    # 停止程序可能触发其退出保存；重新基于最新文件定点更新，保留其他配置。
+    if ini.read_bytes() != raw:
+        ini, encoding, raw, updated, _ = _prepare_ini_update(values)
     if updated != raw:
         temporary = None
         try:
-            with tempfile.NamedTemporaryFile(dir=directory, prefix='.app_config_', suffix='.tmp', delete=False) as stream:
+            with tempfile.NamedTemporaryFile(dir=ini.parent, prefix='.app_config_', suffix='.tmp', delete=False) as stream:
                 temporary = Path(stream.name)
                 stream.write(updated)
                 stream.flush()
@@ -102,6 +162,4 @@ def prepare_app_flash(config, logger=None):
         finally:
             if temporary is not None and temporary.exists():
                 temporary.unlink()
-    if logger:
-        logger(f'[APP刷写参数] {ini} → [App] Type={values["model"]}；Addr={values["flash_path"]}')
-    return values
+    _verify_ini_values(ini.read_bytes().decode(encoding), values)

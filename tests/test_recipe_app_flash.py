@@ -22,7 +22,15 @@ app = QApplication.instance() or QApplication([])
 
 
 def config(directory, model='型号 A', path='Slate SR'):
-    return dict(host_path=str(directory / 'Host.exe'), model=model, flash_path=path)
+    (directory / 'Host.exe').touch()
+    return dict(enabled=True, restart_name='Host.exe', host_path=str(directory / 'Host.exe'), model=model, flash_path=path)
+
+
+@pytest.fixture(autouse=True)
+def simulated_host(monkeypatch):
+    """离线回归保留真实 INI 读写；只替换进程操作及等待，不操作现场上位机。"""
+    for name in ('stop_host', 'start_host', 'wait_seconds'):
+        monkeypatch.setattr('core.recipe_app_flash.' + name, Mock())
 
 
 def read_ini(path, encoding='utf-8-sig'):
@@ -62,7 +70,7 @@ def test_missing_target_keys_or_section_are_added(tmp_path, content):
 def test_directory_host_percent_and_full_path_values_are_literal(tmp_path):
     ini = tmp_path / 'config.ini'
     ini.write_text('[App]\nType=old\nAddr=old\n', encoding='utf-8')
-    values = dict(host_path=str(tmp_path), model='100% 完整', flash_path=r'D:\Flash Files\A=B')
+    values = dict(config(tmp_path), host_path=str(tmp_path), model='100% 完整', flash_path=r'D:\Flash Files\A=B')
     prepare_app_flash(values)
     parsed = read_ini(ini)
     assert parsed['App']['Type'] == values['model']
@@ -84,7 +92,7 @@ def test_windows_copy_as_path_quotes_do_not_change_ini_directory(tmp_path):
                                    dict(host_path='x', model='y', flash_path='\0')])
 def test_partial_and_multiline_settings_are_rejected(values):
     with pytest.raises(ValueError):
-        validate_app_flash(values)
+        validate_app_flash(dict(values, enabled=True, restart_name='Host.exe'))
 
 
 def test_missing_malformed_and_ambiguous_ini_are_not_overwritten(tmp_path):
@@ -104,7 +112,7 @@ def test_failed_atomic_replace_keeps_original_and_removes_temporary_file(tmp_pat
     original = b'[App]\nType=Old\nAddr=Old\n'
     ini.write_bytes(original)
     monkeypatch.setattr('core.recipe_app_flash.os.replace', Mock(side_effect=PermissionError('locked')))
-    with pytest.raises(PermissionError):
+    with pytest.raises(RuntimeError, match='写入并校验.*locked'):
         prepare_app_flash(config(tmp_path))
     assert ini.read_bytes() == original
     assert not list(tmp_path.glob('.app_config_*.tmp'))
@@ -114,6 +122,8 @@ def test_typed_choices_commit_without_duplicates_and_restore_per_recipe(tmp_path
     form = RecipeAppFlashForm()
     form.show()
     try:
+        form.enable_sync.setChecked(True)
+        form.restart_name.setText('Host.exe')
         form.host_path.setText(str(tmp_path / 'Host.exe'))
         for combo, first, second in ((form.model, 'A', 'B'), (form.flash_path, 'Path A', 'Path B')):
             combo.lineEdit().setFocus()
@@ -287,12 +297,14 @@ def test_app_form_occupies_only_the_blank_row_below_dbc():
         assert grid.getItemPosition(grid.indexOf(page.recipe_app_flash)) == (9, 0, 1, 2)
         assert grid.getItemPosition(grid.indexOf(page.dbc_import)) == (8, 0, 1, 2)
         form = page.recipe_app_flash
+        form.enable_sync.setChecked(True)
+        app.processEvents()
         assert form.y() >= page.dbc_import.geometry().bottom()
         assert form.geometry().bottom() < form.parentWidget().height()
         assert form.model.parentWidget().geometry().y() == form.flash_path.parentWidget().geometry().y()
         assert abs(form.model.width() - form.flash_path.width()) <= 1
         assert form.model.height() > 26 and form.flash_path.height() > 26
-        assert dialog.size().width() == 950 and dialog.size().height() == 650
+        assert dialog.size().width() == 950 and dialog.size().height() == 790
         existing = (page.dbc_import, page.recipe_pcan_channel, page.report_model_name)
         before = [widget.geometry() for widget in existing]
         grid.removeWidget(form)

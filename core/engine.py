@@ -1382,6 +1382,8 @@ class ChannelWorker(QObject):
                             write_config=decode_write(values['WRITE64'])
                             if write_config.get('variable'):self.variables.pop(write_config['variable'],None)
                             compiled,write_text=execution_values(write_config,self.sn_barcode,getattr(self,"_uds_field_write_now",None))
+                            self.variables['主板序列号']=write_text
+                            hw_logger('[UDS写入变量] 主板序列号='+write_text)
                             values.update(compiled)
                             hw_logger('[UDS 2E 三字段写入] ASCII='+write_text)
                             literal_length=len(write_config['literal'])
@@ -1562,8 +1564,6 @@ class ChannelWorker(QObject):
                                         heartbeat.wait(interval)
                             heartbeat.check()
                         if 'WRITE64' in values:
-                            self.variables['主板序列号']=write_text
-                            hw_logger('[UDS写入变量] 主板序列号='+write_text)
                             if write_config.get('variable'):
                                 self.variables[write_config['variable']]=write_text
                                 hw_logger('[UDS写入变量] '+write_config['variable']+'='+write_text)

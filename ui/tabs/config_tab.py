@@ -216,7 +216,7 @@ class ConfigTab(QWidget):
         self.recipe_hardware_dialog = QDialog(self)
         self.recipe_hardware_dialog.setWindowTitle("配方硬件关联")
         self.recipe_hardware_dialog.setWindowFlags(self.recipe_hardware_dialog.windowFlags() | Qt.WindowMinMaxButtonsHint)
-        self.recipe_hardware_dialog.resize(950, 650)
+        self.recipe_hardware_dialog.resize(950, 790)
         hardware_dialog_layout = QVBoxLayout(self.recipe_hardware_dialog)
         hardware_scroll = QScrollArea()
         hardware_scroll.setWidgetResizable(True)
@@ -424,8 +424,10 @@ class ConfigTab(QWidget):
         if not self.edit_container.isEnabled():
             return
         self.recipe_hardware_dialog.setWindowTitle(f"配方硬件关联 — {self.current_recipe_name or '新配方'}")
-        from ui.layout_safety import protect_form_layout
-        protect_form_layout(self.recipe_hardware_dialog)
+        # 此窗口已有内容滚动区，保持底部说明及返回按钮固定可见。
+        available = self.recipe_hardware_dialog.screen().availableGeometry()
+        self.recipe_hardware_dialog.resize(min(950, available.width() - 20),
+                                           min(790, available.height() - 50))
         self.recipe_hardware_dialog.exec()
 
     def set_editor_enabled(self, enabled):
@@ -512,6 +514,7 @@ class ConfigTab(QWidget):
             parent.setData(0, Qt.UserRole + 20, item_data.get("step_id") or uuid.uuid4().hex)
             parent.setData(0, Qt.UserRole, item_data.get("standard_type", "数值"))
             parent.setData(1, Qt.UserRole, item_data.get("retry_count", "不复测"))
+            parent.setData(3, Qt.UserRole, item_data.get("strategy", "任何NG停止"))
             parent.setData(2, Qt.UserRole, item_data.get("unit", "NULL"))
 
             if item_data['name'].strip().startswith("#"):
@@ -728,6 +731,7 @@ class ConfigTab(QWidget):
                 "max": item.text(3),
                 "standard_type": item.data(0, Qt.UserRole) or "数值",
                 "retry_count": item.data(1, Qt.UserRole) or "不复测",
+                "strategy": item.data(3, Qt.UserRole) or "任何NG停止",
                 "unit": item.data(2, Qt.UserRole) or "NULL",
                 "sub_steps": []
             }
@@ -799,6 +803,7 @@ class ConfigTab(QWidget):
                 ])
                 new_item.setData(0, Qt.UserRole, data.get('standard_type', '数值'))
                 new_item.setData(1, Qt.UserRole, data.get('retry_count', '不复测'))
+                new_item.setData(3, Qt.UserRole, data.get('strategy', '任何NG停止'))
                 new_item.setData(2, Qt.UserRole, data.get('unit', 'NULL'))
 
                 # 保留屏蔽或正常的高保真色彩
@@ -920,6 +925,9 @@ class ConfigTab(QWidget):
                 # 统一修改 NG 复测选择
                 if cfg["change_retry"]:
                     item.setData(1, Qt.UserRole, cfg['retry_count'])
+
+                if cfg.get("change_stop", False):
+                    item.setData(3, Qt.UserRole, cfg['strategy'])
 
 
     def validate_recipe(self) -> List[str]:
@@ -1078,8 +1086,7 @@ class ConfigTab(QWidget):
             "items": []
         }
         app_flash = self.recipe_app_flash.get_config()
-        if any(app_flash.values()):
-            data['app_flash'] = app_flash
+        data['app_flash'] = app_flash
         if self.recipe_pcan_channel.currentData() == 'ZLG' and self._recipe_zlg_config:
             from copy import deepcopy
             config = deepcopy(self._recipe_zlg_config)
@@ -1094,6 +1101,7 @@ class ConfigTab(QWidget):
                 "min": item_node.text(2), "max": item_node.text(3),
                 "standard_type": item_node.data(0, Qt.UserRole) or "数值",
                 "retry_count": item_node.data(1, Qt.UserRole) or "不复测",
+                "strategy": item_node.data(3, Qt.UserRole) or "任何NG停止",
                 "unit": item_node.data(2, Qt.UserRole) or "NULL",
                 "sub_steps": []
             }
@@ -1137,6 +1145,7 @@ class ConfigTab(QWidget):
             # 存储新字段元数据
             item.setData(0, Qt.UserRole, data['standard_type'])
             item.setData(1, Qt.UserRole, data['retry_count'])
+            item.setData(3, Qt.UserRole, data.get('strategy', '任何NG停止'))
             item.setData(2, Qt.UserRole, data.get('unit', 'NULL'))
 
             item.setForeground(0, QColor("#00E5FF"))
@@ -1210,6 +1219,7 @@ class ConfigTab(QWidget):
                 'max': item.text(3),
                 'standard_type': item.data(0, Qt.UserRole) or '数值',
                 'retry_count': item.data(1, Qt.UserRole) or '不复测',
+                'strategy': item.data(3, Qt.UserRole) or '任何NG停止',
                 'unit': item.data(2, Qt.UserRole) or 'NULL'
             }
             dialog = TestItemDialog(self, data=data)
@@ -1223,6 +1233,7 @@ class ConfigTab(QWidget):
                 # 保存新字段元数据
                 item.setData(0, Qt.UserRole, new_data['standard_type'])
                 item.setData(1, Qt.UserRole, new_data['retry_count'])
+                item.setData(3, Qt.UserRole, new_data.get('strategy', '任何NG停止'))
                 item.setData(2, Qt.UserRole, new_data.get('unit', 'NULL'))
         else:
             # 这是一个『子工步』(Child)

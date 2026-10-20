@@ -54,7 +54,7 @@ def test_missing_scan_never_sends():
     client.request.assert_not_called()
 
 
-def test_written_text_variable_only_published_on_success():
+def test_optional_variable_only_published_on_success():
     w,client=worker(bytes.fromhex('6e 1e 5e'))
     c=config(variable='EXPECTED_WRITE')
     sub=SubStep(SubStepType.CAN_INTERACT,dict(device=DEVICE,params='WRITE64:'+encode(c)))
@@ -75,7 +75,52 @@ def test_fixed_board_serial_without_optional_variable():
     assert w.variables['主板序列号']==client.request.call_args.args[1][2:].decode('ascii')
     client.request.return_value=UDSResponse(request_sid=0x2e,raw=bytes.fromhex('6e 1e 5f'),positive=True,service_id=0x6e,data=bytes.fromhex('1e 5f'))
     assert not w._execute_sub_step_logic(sub)[0]
+    assert w.variables['主板序列号']==client.request.call_args.args[1][2:].decode('ascii')
+
+
+@pytest.mark.parametrize('failure',['connect','timeout','negative_response','wrong_did'])
+def test_board_serial_saved_before_communication_and_retained_on_failure(failure):
+    w,client=worker(bytes.fromhex('6e 1e 5e'))
+    c=config(variable='EXPECTED_WRITE')
+    w._uds_field_write_now=datetime(2026,10,20)
+    expected=build(c,w.sn_barcode,w._uds_field_write_now)[1]
+    w.variables.update({'主板序列号':'OLD','EXPECTED_WRITE':'OLD'})
+    observed=[]
+    def fail_connect():
+        observed.append(w.variables.get('主板序列号'))
+        return False
+    def fail_request(*args,**kwargs):
+        observed.append(w.variables.get('主板序列号'))
+        if failure=='timeout':
+            raise TimeoutError('模拟写入超时')
+        raw=bytes.fromhex('7f 2e 31' if failure=='negative_response' else '6e 1e 5f')
+        return UDSResponse(request_sid=0x2e,raw=raw,positive=raw[0]==0x6e,service_id=raw[0],data=raw[1:])
+    if failure=='connect':
+        driver=w.device_manager.pcan
+        driver.is_connected=False;driver.last_error='模拟连接失败'
+        driver.connect.side_effect=fail_connect
+    else:
+        client.request.side_effect=fail_request
+    sub=SubStep(SubStepType.CAN_INTERACT,dict(device=DEVICE,params='WRITE64:'+encode(c)))
+    ok,value=w._execute_sub_step_logic(sub)
+    assert not ok and value!='6E'
+    assert observed==[expected]
+    assert w.variables['主板序列号']==expected
+    assert 'EXPECTED_WRITE' not in w.variables
+    assert client.request.call_count==(0 if failure=='connect' else 1)
+
+
+@pytest.mark.parametrize('barcode',['','ab','abcd','a中文xx'])
+def test_invalid_barcode_clears_old_serial_without_publishing_or_sending(barcode):
+    w,client=worker(bytes.fromhex('6e 1e 5e'))
+    w.sn_barcode=barcode
+    w.variables.update({'主板序列号':'OLD','EXPECTED_WRITE':'OLD'})
+    sub=SubStep(SubStepType.CAN_INTERACT,dict(device=DEVICE,params='WRITE64:'+encode(config(variable='EXPECTED_WRITE'))))
+    assert not w._execute_sub_step_logic(sub)[0]
     assert '主板序列号' not in w.variables
+    assert 'EXPECTED_WRITE' not in w.variables
+    client.request.assert_not_called()
+    w.device_manager.pcan.connect.assert_not_called()
 
 
 @pytest.mark.parametrize('actual,expected,passed',[('00123','00123',True),('00123','123',False),('ABC','ABC',True),('ABC',None,False)])

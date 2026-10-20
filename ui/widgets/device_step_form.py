@@ -1,21 +1,27 @@
-from PySide6.QtWidgets import QWidget,QFormLayout,QLabel,QComboBox,QSpinBox,QDoubleSpinBox,QLineEdit
+from PySide6.QtWidgets import QWidget,QLabel,QComboBox,QSpinBox,QDoubleSpinBox,QLineEdit
 from core.device_steps import validate
+from ui.widgets.compact_step_layout import ResponsiveFieldsLayout
 
 
 class DeviceStepForm(QWidget):
     def __init__(self,parent=None):
         super().__init__(parent)
-        self.form=QFormLayout(self)
+        self.form=ResponsiveFieldsLayout(self)
         self.controls={}
         self.device=None
         self.spec=None
 
     def configure(self,device,spec,values=None):
         if self.device==device and self.spec==spec and values is None:return
-        while self.form.rowCount():self.form.removeRow(0)
+        while self.form.count():
+            item=self.form.takeAt(0)
+            if item.widget():
+                item.widget().hide()
+                item.widget().deleteLater()
         self.controls={};self.device=device;self.spec=spec
         help_label=QLabel(spec.help or ('回读返回数值，单位随结果记录；可参与测试项上下限判定。' if spec.read else '操作成功返回 PASS；失败执行所选失败策略。'))
-        help_label.setWordWrap(True);self.form.addRow(help_label)
+        help_label.setWordWrap(True)
+        fields=[]
         for field in spec.fields:
             value=(values or {}).get(field.key,field.default)
             if field.choices:
@@ -31,7 +37,8 @@ class DeviceStepForm(QWidget):
                 control=QLineEdit(str(value))
             control.setMinimumHeight(40)
             self.controls[field.key]=control
-            self.form.addRow(field.label,control)
+            fields.append((QLabel(field.label),control))
+        self.form.set_fields(help_label,fields)
         if device=='tbs2102b' and spec.key=='trigger':
             for key in ('kind','when','source'):
                 self.controls[key].currentIndexChanged.connect(self.update_trigger_fields)

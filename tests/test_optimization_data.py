@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 
 from openpyxl import load_workbook
@@ -68,7 +69,7 @@ def test_context_is_immutable_and_credentials_are_filtered():
     assert len(context['recipe_sha256'])==64
 
 
-def test_trace_is_saved_atomically_with_test_and_exported(tmp_path):
+def test_trace_stays_in_database_and_export_creates_only_xls(tmp_path):
     db=DBManager(str(tmp_path/'tests.db'))
     db.load_sys_config=lambda:{'hv_ip':'192.0.2.1','password':'secret'}
     try:
@@ -81,6 +82,10 @@ def test_trace_is_saved_atomically_with_test_and_exported(tmp_path):
         path=export_test_record(db.db_path,identity,str(tmp_path/'reports'))
         from pathlib import Path
         report=Path(path)
-        trace=json.loads((report.parent/'.trace'/(report.name+'.json')).read_text(encoding='utf-8'))
-        assert trace['context']['recipe_sha256']==evidence['recipe_sha256']
+        assert list(report.parent.iterdir())==[report]
+        with sqlite3.connect(db.db_path) as conn:
+            retained=json.loads(conn.execute('SELECT context_json FROM test_main WHERE test_id=?',(identity,)).fetchone()[0])
+            owner=conn.execute('SELECT test_id FROM report_exports WHERE report_path=?',
+                               (os.path.normcase(str(report.resolve())),)).fetchone()
+        assert retained==evidence and owner==(identity,)
     finally:db.close()

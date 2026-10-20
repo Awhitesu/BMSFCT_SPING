@@ -153,7 +153,7 @@ class StepDialog(QDialog):
         main_layout = QVBoxLayout(self)
         self.setStyleSheet(_resolve_resource_stylesheet(self.styleSheet()))
         main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(15)
+        main_layout.setSpacing(12)
         
         # 1. 设备与大类选择 (分类整理)
         top_frame = QFrame(self)
@@ -223,7 +223,7 @@ class StepDialog(QDialog):
         self.main_scroll_content = QWidget() # 容器 Widget
         self.scroll_layout = QVBoxLayout(self.main_scroll_content)
         self.scroll_layout.setContentsMargins(0, 0, 0, 0)
-        self.scroll_layout.setSpacing(15)
+        self.scroll_layout.setSpacing(12)
         
         # 动态参数配置区
         from ui.widgets.compact_step_layout import CurrentPageStack
@@ -328,8 +328,11 @@ class StepDialog(QDialog):
         self.read_group.addButton(self.rb_volt)
         self.read_group.addButton(self.rb_curr)
         
-        read_layout.addWidget(self.rb_volt)
-        read_layout.addWidget(self.rb_curr)
+        read_choices = QHBoxLayout()
+        read_choices.addWidget(self.rb_volt)
+        read_choices.addWidget(self.rb_curr)
+        read_choices.addStretch()
+        read_layout.addLayout(read_choices)
         self.read_unit_row = QWidget()
         read_unit_layout = QHBoxLayout(self.read_unit_row)
         read_unit_layout.setContentsMargins(0, 0, 0, 0)
@@ -352,6 +355,7 @@ class StepDialog(QDialog):
 
         # --- 页面 4: Easy320 参数 (勾选模式) ---
         self.page_easy320 = QWidget()
+        self.page_easy320.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.page_easy320.setObjectName('relayStepPage')
         self.page_easy320.setStyleSheet('QWidget#relayStepPage { background:#0F172A; }')
         e_layout = QVBoxLayout(self.page_easy320)
@@ -801,6 +805,7 @@ class StepDialog(QDialog):
 
         # --- 页面 12: UDS 服务交互列表 ---
         self.page_uds = QWidget()
+        self.page_uds.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.page_uds.setStyleSheet("""
             QCheckBox::indicator, QGroupBox::indicator, QAbstractItemView::indicator {
                 width: 20px; height: 20px; background: transparent;

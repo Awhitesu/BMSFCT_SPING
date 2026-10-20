@@ -43,7 +43,7 @@ class UDSFieldWriteForm(QWidget):
         form.addRow('写入结果变量名',self.variable)
         self.variable.hide();form.labelForField(self.variable).hide()
         layout.addWidget(fields)
-        output_tip=QLabel('收到匹配DID的肯定响应后，工步输出6E；完整拼接字符串保存到变量“主板序列号”，供后续读取判定使用。')
+        output_tip=QLabel('三字段拼接成功后，先保存到变量“主板序列号”，再发送2E；通信失败仍保留本次字符串。收到匹配DID的肯定响应后，工步输出6E。')
         output_tip.setWordWrap(True);layout.addWidget(output_tip)
         capture=QGroupBox('3. 预览与在线抓取');form=QFormLayout(capture)
         self.sample=QLineEdit();self.sample.setPlaceholderText('仅调试：人工输入、粘贴或键盘扫码；生产执行使用本次扫码条码')

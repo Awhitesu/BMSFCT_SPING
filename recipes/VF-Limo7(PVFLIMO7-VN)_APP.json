@@ -25,9 +25,9 @@
             "sub_steps": [
                 {
                     "step_id": "9efc067ffa644fcfb65eac7ef5648a94",
-                    "name": "Easy320 继电器 (Easy320)-闭合勾选通道 (6,7)",
-                    "action": "闭合勾选通道",
-                    "params": "6,7",
+                    "name": "Easy320 继电器 (Easy320)-组合设置ON/OFF (RELAY64:W3siaW5kZXgiOjUsIm9uIjp0cnVlfSx7ImluZGV4Ijo2LCJvbiI6dHJ1ZX1d)",
+                    "action": "组合设置ON/OFF",
+                    "params": "RELAY64:W3siaW5kZXgiOjUsIm9uIjp0cnVlfSx7ImluZGV4Ijo2LCJvbiI6dHJ1ZX1d",
                     "device": "Easy320 继电器 (Easy320)",
                     "type": "继电器控制",
                     "is_judgment": false,
@@ -782,10 +782,10 @@
                     "fail_strategy": "失败停止"
                 },
                 {
-                    "step_id": "15835085b3654b06a0f0fe7d891bbe4d",
-                    "name": "等待 (Wait)-固定延时 (4000ms)",
+                    "step_id": "653f8ce6827643189c314248693fa5cf",
+                    "name": "等待 (Wait)-固定延时 (2000ms)",
                     "action": "固定延时",
-                    "params": "4000ms",
+                    "params": "2000ms",
                     "device": "等待 (Wait)",
                     "type": "等待",
                     "is_judgment": false,
@@ -802,10 +802,20 @@
                     "fail_strategy": "失败停止"
                 },
                 {
+                    "step_id": "15835085b3654b06a0f0fe7d891bbe4d",
+                    "name": "等待 (Wait)-固定延时 (1000ms)",
+                    "action": "固定延时",
+                    "params": "1000ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "失败停止"
+                },
+                {
                     "step_id": "12a3bfb5b57c4ab49da2dcd65c86a6d0",
-                    "name": "IT6722A 被测物供电电源 (IT6722A DUT Power)-设置参数 (12.0V / 3.0A / 关闭输出)",
+                    "name": "IT6722A 被测物供电电源 (IT6722A DUT Power)-设置参数 (关闭输出)",
                     "action": "设置参数",
-                    "params": "12.0V / 3.0A / 关闭输出",
+                    "params": "关闭输出",
                     "device": "IT6722A 被测物供电电源 (IT6722A DUT Power)",
                     "type": "设置仪表",
                     "is_judgment": false,
@@ -833,19 +843,9 @@
                 },
                 {
                     "step_id": "a45e3d5e0dea405f824b8894ea86f492",
-                    "name": "Easy320 继电器 (Easy320)-断开勾选通道 (2)",
-                    "action": "断开勾选通道",
-                    "params": "2",
-                    "device": "Easy320 继电器 (Easy320)",
-                    "type": "继电器控制",
-                    "is_judgment": false,
-                    "fail_strategy": "失败停止"
-                },
-                {
-                    "step_id": "5fb7b5db649e44748d853ca49e40827b",
-                    "name": "Easy320 继电器 (Easy320)-闭合勾选通道 (3)",
-                    "action": "闭合勾选通道",
-                    "params": "3",
+                    "name": "Easy320 继电器 (Easy320)-组合设置ON/OFF (RELAY64:W3siaW5kZXgiOjEsIm9uIjpmYWxzZX0seyJpbmRleCI6Miwib24iOnRydWV9XQ==)",
+                    "action": "组合设置ON/OFF",
+                    "params": "RELAY64:W3siaW5kZXgiOjEsIm9uIjpmYWxzZX0seyJpbmRleCI6Miwib24iOnRydWV9XQ==",
                     "device": "Easy320 继电器 (Easy320)",
                     "type": "继电器控制",
                     "is_judgment": false,
@@ -863,19 +863,9 @@
                 },
                 {
                     "step_id": "8aaec872a84f4d0ab136921755bf0cc6",
-                    "name": "Easy320 继电器 (Easy320)-断开勾选通道 (5)",
-                    "action": "断开勾选通道",
-                    "params": "5",
-                    "device": "Easy320 继电器 (Easy320)",
-                    "type": "继电器控制",
-                    "is_judgment": false,
-                    "fail_strategy": "失败停止"
-                },
-                {
-                    "step_id": "da95d7431cd9404fbeb93771030e876f",
-                    "name": "Easy320 继电器 (Easy320)-闭合勾选通道 (4)",
-                    "action": "闭合勾选通道",
-                    "params": "4",
+                    "name": "Easy320 继电器 (Easy320)-组合设置ON/OFF (RELAY64:W3siaW5kZXgiOjQsIm9uIjpmYWxzZX0seyJpbmRleCI6NSwib24iOnRydWV9XQ==)",
+                    "action": "组合设置ON/OFF",
+                    "params": "RELAY64:W3siaW5kZXgiOjQsIm9uIjpmYWxzZX0seyJpbmRleCI6NSwib24iOnRydWV9XQ==",
                     "device": "Easy320 继电器 (Easy320)",
                     "type": "继电器控制",
                     "is_judgment": false,

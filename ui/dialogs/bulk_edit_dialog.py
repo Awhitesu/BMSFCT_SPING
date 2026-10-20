@@ -89,6 +89,18 @@ class BulkEditDialog(QDialog):
         self.retry_combo.setEnabled(False)
         self.cb_retry.toggled.connect(self.retry_combo.setEnabled)
         layout.addWidget(self.retry_combo)
+
+        stop_row = QHBoxLayout()
+        self.cb_stop = QCheckBox("统一修改停止策略")
+        self.stop_combo = QComboBox()
+        self.stop_combo.addItem("失败停止", "任何NG停止")
+        self.stop_combo.addItem("失败继续", "NG继续")
+        self.stop_combo.setToolTip("先执行复测；最终仍失败时，停止当前测试序列或保留FAIL并执行下一个父工步。")
+        self.stop_combo.setEnabled(False)
+        self.cb_stop.toggled.connect(self.stop_combo.setEnabled)
+        stop_row.addWidget(self.cb_stop)
+        stop_row.addWidget(self.stop_combo, 1)
+        layout.addLayout(stop_row)
         
         layout.addSpacing(10)
         
@@ -145,5 +157,7 @@ class BulkEditDialog(QDialog):
             "change_unit": self.cb_unit.isChecked(),
             "unit": self.unit_edit.text().strip(),
             "change_retry": self.cb_retry.isChecked(),
-            "retry_count": self.retry_combo.currentText()
+            "retry_count": self.retry_combo.currentText(),
+            "change_stop": self.cb_stop.isChecked(),
+            "strategy": self.stop_combo.currentData()
         }

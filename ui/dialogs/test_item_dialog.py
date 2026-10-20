@@ -9,7 +9,7 @@ class TestItemDialog(QDialog):
     def __init__(self, parent=None, data=None):
         super().__init__(parent)
         self.setWindowTitle("编辑测试项 (判定条件)")
-        self.setFixedSize(450, 560)
+        self.setFixedSize(450, 600)
         self.setStyleSheet("""
             QDialog { background-color: #1F1F35; color: white; }
             QLabel { font-size: 13px; color: #B0B0B0; margin-top: 5px; }
@@ -89,6 +89,13 @@ class TestItemDialog(QDialog):
         self.retry_combo.addItems(["不复测", "复测1次", "复测3次"])
         layout.addWidget(self.retry_combo)
 
+        layout.addWidget(QLabel("停止策略:"))
+        self.stop_combo = QComboBox()
+        self.stop_combo.addItem("失败停止", "任何NG停止")
+        self.stop_combo.addItem("失败继续", "NG继续")
+        self.stop_combo.setToolTip("先执行复测；最终仍失败时，停止当前测试序列或保留FAIL并执行下一个父工步。")
+        layout.addWidget(self.stop_combo)
+
         # 绑定类型切换逻辑
         self.type_combo.currentTextChanged.connect(self.on_type_changed)
         
@@ -100,6 +107,11 @@ class TestItemDialog(QDialog):
             self.max_edit.setText(str(data.get('max', '') if data.get('max') is not None and data.get('max') != "--" else ''))
             self.unit_edit.setText(data.get('unit', '') if data.get('unit') is not None and data.get('unit') != "NULL" else '')
             self.retry_combo.setCurrentText(data.get('retry_count', '不复测'))
+            strategy = data.get('strategy', '任何NG停止')
+            if strategy == '关键NG停止':
+                # Keep the legacy token and its existing engine behavior.
+                self.stop_combo.setItemData(1, strategy)
+            self.stop_combo.setCurrentIndex(max(0, self.stop_combo.findData(strategy)))
             if data.get('standard_type')=='变量':self.variable_combo.setCurrentText(str(data.get('min','')))
         self.on_type_changed(self.type_combo.currentText())
         
@@ -157,5 +169,6 @@ class TestItemDialog(QDialog):
             'max': mx if mx else "--",
             'standard_type': self.type_combo.currentText(),
             'retry_count': self.retry_combo.currentText(),
+            'strategy': self.stop_combo.currentData(),
             'unit': unit_val if unit_val else "NULL"
         }

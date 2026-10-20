@@ -21,6 +21,7 @@ DEFAULT_MODEL = "kimi-k3"
 
 STANDARD_TYPES = ("数值", "字符串", "不判断")
 RETRY_COUNTS = ("不复测", "复测1次", "复测3次")
+STOP_STRATEGIES = ("任何NG停止", "NG继续", "关键NG停止")
 FAIL_STRATEGIES = ("失败停止", "忽略继续", "重试3次")
 CAN_MODES = ("经典 CAN", "CAN-FD", "CAN-FD + BRS")
 
@@ -43,6 +44,7 @@ SYSTEM_PROMPT = """你是一名 BMS 测试配方编辑助手。用户会给你�
   - min / max: 字符串形式的下限/上限；字符串比对时 min 为期望字符串，max 用 "--"；不判断时都用 "--"
   - standard_type: "数值" | "字符串" | "不判断"
   - retry_count: "不复测" | "复测1次" | "复测3次"
+  - strategy: "任何NG停止"（界面“失败停止”，默认） | "NG继续"（界面“失败继续”）；先执行复测，最终仍NG才执行停止策略；失败继续仍保留FAIL结果
   - unit: 单位字符串（如 "mA"、"V"），无单位用 "NULL"
   - sub_steps: 子工步数组，每个子工步：
     - name: 显示名称，格式通常为 "设备-动作 (参数)"
@@ -167,6 +169,8 @@ def validate_recipe(data: Any, original_name: str = "") -> List[str]:
             errors.append(f"{prefix} standard_type 非法: {item.get('standard_type')}")
         if item.get("retry_count", "不复测") not in RETRY_COUNTS:
             errors.append(f"{prefix} retry_count 非法: {item.get('retry_count')}")
+        if item.get("strategy", "任何NG停止") not in STOP_STRATEGIES:
+            errors.append(f"{prefix} strategy 非法: {item.get('strategy')}")
         for key in ("min", "max", "unit"):
             if not isinstance(item.get(key, ""), str):
                 errors.append(f"{prefix} {key} 必须是字符串")
@@ -220,7 +224,8 @@ def summarize_changes(old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
             continue
         details = []
         for key, label in (("min", "下限"), ("max", "上限"), ("unit", "单位"),
-                           ("standard_type", "标准类型"), ("retry_count", "复测")):
+                           ("standard_type", "标准类型"), ("retry_count", "复测"),
+                           ("strategy", "停止策略")):
             if o.get(key) != n.get(key):
                 details.append(f"{label}: {o.get(key)} → {n.get(key)}")
         o_subs = [s.get("name", "") for s in o.get("sub_steps", [])]
