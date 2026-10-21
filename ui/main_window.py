@@ -160,6 +160,9 @@ class MainWindow(QMainWindow):
 
         # 模拟器控制
         self.tab_simulator = SimulatorTab(self.device_manager)
+        self.tab_simulator.hardware_configuration_requested.connect(
+            lambda: self.tabs.setCurrentWidget(self.tab_hardware))
+        self.tab_hardware.configuration_changed.connect(self.tab_simulator.refresh_configuration)
         self.tab_debug_center.add_debug_tab(self.tab_simulator, "电池模拟器控制")
 
         # NGI 高压源

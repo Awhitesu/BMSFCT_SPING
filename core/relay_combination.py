@@ -1,6 +1,7 @@
 """Mixed relay targets. Missing points are deliberately untouched."""
 import base64
 import json
+from core.easy320_channels import MAX_DO_INDEX
 
 PREFIX = 'RELAY64:'
 ACTION = '组合设置ON/OFF'
@@ -13,7 +14,7 @@ def validate(rows):
     for row in rows:
         if not isinstance(row, dict) or type(row.get('index')) is not int or type(row.get('on')) is not bool:
             raise ValueError('继电器组合参数无效')
-        if not 0 <= row['index'] <= 0xffff - 0xfc08 or row['index'] in seen:
+        if not 0 <= row['index'] <= MAX_DO_INDEX or row['index'] in seen:
             raise ValueError('继电器点位重复或越界')
         seen.add(row['index'])
     return rows

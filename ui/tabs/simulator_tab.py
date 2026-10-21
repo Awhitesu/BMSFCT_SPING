@@ -1,18 +1,34 @@
 from ui.device_task import DeviceTask
 from core.simulator_control import control_simulator, read_simulator
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QGroupBox, QDoubleSpinBox, QGridLayout, QSpinBox, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget, QScrollArea, QMessageBox, QSizePolicy
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QGroupBox, QDoubleSpinBox, QGridLayout, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget, QScrollArea, QSizePolicy
 from PySide6.QtCore import Qt, QThread, Signal, QTimer,QSignalBlocker
+import math
+
+
+def _current_reading(value):
+    if isinstance(value, bool) or value is None:
+        raise ValueError('电流数据缺失或类型无效')
+    value = float(value)
+    if not math.isfinite(value) or abs(value) >= 9e37:
+        raise ValueError('电流数据无效或超量程')
+    return value
 
 class ReadAllWorker(QThread):
     """
     后台回读线程，避免阻塞 UI
     """
-    progress = Signal(int, float) # ch, voltage
+    progress = Signal(int, float) # global channel, measured value
     diagnostic = Signal(int, str)
-    def __init__(self, channels):
+    read_failed = Signal(int, str)
+    def __init__(self, channels, quantity='voltage'):
         super().__init__()
+        if quantity not in ('voltage', 'current'):raise ValueError('回读类型无效')
         self.channels = channels
+        self.quantity = quantity
     def run(self):
+        if self.quantity == 'current':
+            self._read_currents()
+            return
         try:
             from concurrent.futures import ThreadPoolExecutor
             grouped={}
@@ -51,7 +67,38 @@ class ReadAllWorker(QThread):
         finally:
             pass  # Use QThread.finished after the thread actually exits.
 
+    def _read_currents(self):
+        from concurrent.futures import ThreadPoolExecutor
+        grouped = {}
+        for global_ch, sim, local in self.channels:
+            grouped.setdefault(id(sim), (sim, []))[1].append((global_ch, local))
+        def acquire(entry):
+            sim, channels = entry
+            results = []
+            for global_ch, local in channels:
+                try:
+                    if self.isInterruptionRequested():raise RuntimeError('电流回读已停止')
+                    value = _current_reading(sim.read_current_sample(local, cancelled=self.isInterruptionRequested))
+                    results.append((global_ch, local, value, ''))
+                except Exception as exc:
+                    results.append((global_ch, local, None, str(exc)))
+            return sim, results
+        with ThreadPoolExecutor(max_workers=max(1, len(grouped))) as pool:
+            snapshots = list(pool.map(acquire, grouped.values()))
+        for sim, results in snapshots:
+            for global_ch, local, value, error in results:
+                context = f'CH{global_ch} / 第{getattr(sim,"sequence_number",0)}台 CH{local}'
+                if value is None:
+                    text = context+'：电流读取失败：'+error
+                    self.read_failed.emit(global_ch, text)
+                else:
+                    text = context+f'：实测电流 {value:.9g} mA'
+                    self.progress.emit(global_ch, value)
+                self.diagnostic.emit(global_ch, text)
+
 class SimulatorTab(QWidget):
+    hardware_configuration_requested = Signal()
+
     def __init__(self, device_manager=None):
         super().__init__()
         self.mgr = device_manager
@@ -61,6 +108,7 @@ class SimulatorTab(QWidget):
         self.operation=DeviceTask(self)
         self.operation.finished.connect(self._operation_finished)
         self.voltage_warnings={}
+        self.current_warnings={}
         self._init_ui()
 
     def _init_ui(self):
@@ -77,8 +125,8 @@ class SimulatorTab(QWidget):
         self.lbl_status = QLabel()
         run_layout.addWidget(self.lbl_summary)
         run_layout.addWidget(self.lbl_status)
-        self.btn_settings = QPushButton("配置电池模拟器…")
-        self.btn_settings.clicked.connect(lambda: self.tabs.setCurrentIndex(1))
+        self.btn_settings = QPushButton("到硬件管理中心配置…")
+        self.btn_settings.clicked.connect(self.hardware_configuration_requested.emit)
         run_layout.addWidget(self.btn_settings)
         self.control_buttons = []
 
@@ -115,6 +163,11 @@ class SimulatorTab(QWidget):
         self.btn_on = button("开启输出", lambda: self.control_output(True), single, 2, 0)
         self.btn_off = button("关闭输出", lambda: self.control_output(False), single, 2, 1)
         self.btn_read = button("回读电压", self.read_sim_volt, single, 2, 2)
+        single.addWidget(QLabel("实测电流 (mA)"), 3, 0)
+        self.lbl_read_current = QLabel('—')
+        single.addWidget(self.lbl_read_current, 3, 1)
+        self.btn_read_current = button("回读电流", self.read_sim_current, single, 3, 2)
+        self.spin_ch.currentIndexChanged.connect(self._clear_current_display)
 
         batch = group("整套设备控制 · 所有已启用的实际通道")
         batch.addWidget(QLabel("电压 (V)"), 0, 0)
@@ -130,9 +183,13 @@ class SimulatorTab(QWidget):
         self.btn_one_key = button("设压并全部开启", self.one_key_global_action, batch, 1, 2)
         self.btn_all_on = self.btn_global_on
         self.btn_all_off = self.btn_global_off
-        self.btn_read_all = button("回读全部通道电压", self.read_all_channels, batch, 2, 0, 3)
-        self.table = QTableWidget(0, 2)
-        self.table.setHorizontalHeaderLabels(["全局通道 / 设备通道", "实测电压 (V)"])
+        reads = QGridLayout()
+        reads.setColumnStretch(0, 1);reads.setColumnStretch(1, 1)
+        batch.addLayout(reads, 2, 0, 1, 3)
+        self.btn_read_all = button("回读全部通道电压", self.read_all_channels, reads, 0, 0)
+        self.btn_read_all_current = button("回读全部通道电流", self.read_all_currents, reads, 0, 1)
+        self.table = QTableWidget(0, 3)
+        self.table.setHorizontalHeaderLabels(["全局通道 / 设备通道", "实测电压 (V)", "实测电流 (mA)"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setMinimumHeight(240)
@@ -217,140 +274,74 @@ class SimulatorTab(QWidget):
         if sim:self.run_device("Read parameters",lambda:sim.read_source_settings(ch),completed)
 
     def _init_settings(self):
-        from devices.simulator_config import simulator_settings
         page = QWidget()
         layout = QVBoxLayout(page)
-        tip = QLabel("最多6台，每台1–24通道。已启用设备按设备序号排序，按配置的通道数量连续编号；未启用设备不占编号。保存并应用后生效。")
+        tip = QLabel("IP、端口、设备序号、实际通道数和使能状态统一在硬件管理中心设置。本页只显示已应用参数，独立调试与测试工步共用同一套设备和通道；已启用设备按序号连续编号，未启用设备不占编号。")
         tip.setWordWrap(True)
         layout.addWidget(tip)
-        cfg = self.mgr.db_manager.load_sys_config() or {} if self.mgr and self.mgr.db_manager else {}
-        settings = simulator_settings(cfg)
-        self.settings_table = QTableWidget(6, 7)
-        self.settings_table.setHorizontalHeaderLabels(["启用", "配置", "IP地址", "端口", "设备序号", "通道数量", "有效全局通道"])
+        self.settings_table = QTableWidget(0, 7)
+        self.settings_table.setHorizontalHeaderLabels(["启用状态", "配置", "IP地址", "端口", "设备序号", "实际通道数", "有效全局通道"])
+        self.settings_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.settings_table.verticalHeader().setVisible(False)
         self.settings_table.verticalHeader().setDefaultSectionSize(58)
         self.settings_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.settings_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.settings_controls = []
-        for row, setting in enumerate(settings):
-            check = QTableWidgetItem()
-            check.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
-            check.setCheckState(Qt.Checked if setting['enabled'] else Qt.Unchecked)
-            self.settings_table.setItem(row, 0, check)
-            name = QTableWidgetItem(str(row + 1))
-            name.setFlags(name.flags() & ~Qt.ItemIsEditable)
-            self.settings_table.setItem(row, 1, name)
-            ip = QLineEdit(setting['ip'])
-            port, number, count = QSpinBox(), QSpinBox(), QSpinBox()
-            for control, maximum, value in ((port, 65535, setting['port']), (number, 6, setting['number']), (count, 24, setting['channels'])):
-                control.setRange(1, maximum)
-                control.setValue(value)
-                control.setMinimumHeight(42)
-            ip.setMinimumHeight(42)
-            for col, control in enumerate((ip, port, number, count), 2):
-                self.settings_table.setCellWidget(row, col, control)
-            self.settings_controls.append((ip, port, number, count))
-            number.valueChanged.connect(self._update_ranges)
-            count.valueChanged.connect(self._update_ranges)
-        self._update_ranges()
-        self.settings_table.itemChanged.connect(lambda item: self._update_ranges() if item.column() == 0 else None)
         layout.addWidget(self.settings_table, 1)
-        self.btn_save_settings = QPushButton("保存并应用模拟器配置")
-        self.btn_save_settings.setMinimumHeight(44)
-        self.btn_save_settings.clicked.connect(self.save_simulator_settings)
-        layout.addWidget(self.btn_save_settings)
-        self.tabs.addTab(page, "设备设置（最多6台）")
+        self.btn_hardware_config = QPushButton("到硬件管理中心修改")
+        self.btn_hardware_config.setMinimumHeight(44)
+        self.btn_hardware_config.clicked.connect(self.hardware_configuration_requested.emit)
+        layout.addWidget(self.btn_hardware_config)
+        self.tabs.addTab(page, "硬件配置（只读）")
 
-    def _update_ranges(self):
-        from devices.simulator_config import channel_routes
+    def _update_settings(self, channels):
+        devices = list(getattr(self.mgr, 'simulators', ()))
+        settings = [(self.mgr.is_enabled(f'sim{slot}'), slot,
+                     str(getattr(sim, 'ip', '')), getattr(sim, 'port', ''),
+                     sim.sequence_number, sim.max_channels)
+                    for slot, sim in enumerate(devices, 1)]
         ranges = {}
-        error = ''
-        try:
-            routes = channel_routes((number.value(), count.value(), row)
-                                    for row, (_, _, number, count) in enumerate(self.settings_controls)
-                                    if self.settings_table.item(row, 0).checkState() == Qt.Checked)
-            for global_ch, row, _ in routes:
-                ranges.setdefault(row, []).append(global_ch)
-        except ValueError as exc:
-            error = str(exc)
+        for global_ch, sim, _ in channels:
+            ranges.setdefault(id(sim), []).append(global_ch)
+        rows = []
+        for sim, (enabled, slot, ip, port, number, count) in zip(devices, settings):
+            mapped = ranges.get(id(sim), [])
+            extent = f'{mapped[0]}–{mapped[-1]}' if mapped else ('无有效通道' if enabled else '未启用')
+            rows.append(('已启用' if enabled else '未启用', str(slot), ip, str(port), str(number), str(count), extent))
+        if getattr(self, '_settings_signature', None) == rows:return
+        self._settings_signature = rows
         with QSignalBlocker(self.settings_table):
-            for row in range(len(self.settings_controls)):
-                enabled = self.settings_table.item(row, 0).checkState() == Qt.Checked
-                channels = ranges.get(row, [])
-                text = '未启用' if not enabled else ('配置无效' if error else f'{channels[0]}–{channels[-1]}')
-                item = QTableWidgetItem(text)
-                item.setToolTip(error if enabled else '')
-                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-                self.settings_table.setItem(row, 6, item)
+            self.settings_table.setRowCount(len(rows))
+            for row, values in enumerate(rows):
+                for col, text in enumerate(values):
+                    item = QTableWidgetItem(text)
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable & ~Qt.ItemIsUserCheckable)
+                    self.settings_table.setItem(row, col, item)
 
-    def save_simulator_settings(self):
-        if self.operation.isRunning():return
-        if self.batch_worker and self.batch_worker.isRunning(): return
-        from devices.simulator_config import simulator_settings
-        if not self.mgr or not self.mgr.db_manager:
-            QMessageBox.warning(self, "无法保存", "未连接配置管理器。")
-            return
-        if self.read_all_worker and not self.read_all_worker.wait(0):
-            QMessageBox.warning(self, "正在回读", "请等待回读完成后保存配置。")
-            return
-        cfg = dict(self.mgr.db_manager.load_sys_config() or {})
-        for row, (ip, port, number, count) in enumerate(self.settings_controls):
-            key = f"sim{row+1}"
-            cfg.update({f"{key}_enabled": self.settings_table.item(row, 0).checkState() == Qt.Checked,
-                        f"{key}_ip": ip.text().strip(), f"{key}_port": port.value(),
-                        f"{key}_number": number.value(), f"{key}_channels": count.value()})
-        try:
-            simulator_settings(cfg)
-            import ipaddress
-            for row, (ip, _, _, _) in enumerate(self.settings_controls):
-                if cfg[f"sim{row+1}_enabled"]:
-                    ipaddress.IPv4Address(ip.text().strip())
-        except ValueError as exc:
-            QMessageBox.warning(self, "配置错误", str(exc))
-            return
-        if not self.mgr.db_manager.save_sys_config(cfg):
-            QMessageBox.warning(self, "保存失败", "模拟器配置未保存。")
-            return
-        previous=list(self.mgr.simulators)
-        def apply():
-            from devices.ngi_83624 import NGI83624
-            for sim in previous:sim.disconnect()
-            result=[]
-            for setting in simulator_settings(cfg):
-                sim=NGI83624(setting['ip'],setting['port'],setting['channels'])
-                sim.sequence_number=setting['number']
-                result.append(sim)
-            return result
-        def completed(ok,value):
-            if not ok:self._notify_status(str(value));return
-            self.mgr.simulators=value
-            for setting in simulator_settings(cfg):
-                self.mgr.enabled_devices[f"sim{setting['slot']}"]=setting['enabled']
-            parent=self.parent()
-            while parent:
-                hardware=getattr(parent,'tab_hardware',None)
-                if hardware:
-                    hardware.load_config();break
-                parent=parent.parent()
-            self.tabs.setCurrentIndex(0)
-            self._notify_status("模拟器配置已保存并应用")
-        self.run_device("Apply configuration",apply,completed)
+    def refresh_configuration(self):
+        self.update_net_info(force=True)
 
-    def update_net_info(self, index=0):
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.refresh_configuration()
+
+    def update_net_info(self, index=0, *, force=False):
         if self.operation.isRunning():return
-        if not self.isVisible() and hasattr(self,'_channel_signature'): return
+        if not force and not self.isVisible() and hasattr(self,'_channel_signature'): return
         if self.batch_worker and self.batch_worker.isRunning(): return
         if not self.mgr:
             return
         if self.read_all_worker and not self.read_all_worker.wait(0):
             return
         channels = self.mgr.simulator_channels()
-        signature = [(ch, id(sim), local) for ch, sim, local in channels]
+        self._update_settings(channels)
+        signature = [(ch, id(sim), local, sim.sequence_number, getattr(sim, 'ip', ''), getattr(sim, 'port', ''))
+                     for ch, sim, local in channels]
         if getattr(self, '_channel_signature', None) != signature:
             selected = self.spin_ch.currentData()
             selected_param=self.spin_param_ch.currentData()
             with QSignalBlocker(self.spin_ch), QSignalBlocker(self.spin_param_ch):
                 self._channel_signature = signature
+                self._clear_current_display()
                 self.spin_ch.clear()
                 self.spin_param_ch.clear()
                 self.table.setRowCount(len(channels))
@@ -361,6 +352,7 @@ class SimulatorTab(QWidget):
                     self.spin_param_ch.addItem(f"CH{ch}（第{sim.sequence_number}台 / CH{local}）", ch)
                     self.table.setItem(row, 0, QTableWidgetItem(f"CH{ch} / 第{sim.sequence_number}台 CH{local}"))
                     self.table.setItem(row, 1, QTableWidgetItem("—"))
+                    self.table.setItem(row, 2, QTableWidgetItem("—"))
                 idx = self.spin_ch.findData(selected)
                 if idx >= 0:
                     self.spin_ch.setCurrentIndex(idx)
@@ -377,15 +369,13 @@ class SimulatorTab(QWidget):
     def run_device(self,label,action,callback=None):
         if self.operation.isRunning() or (self.batch_worker and self.batch_worker.isRunning()) or (self.read_all_worker and not self.read_all_worker.wait(0)): return
         for button in self.control_buttons:button.setEnabled(False)
-        self.btn_save_settings.setEnabled(False)
         def completed(ok,value):
             if callback:callback(ok,value)
             else:self._notify_status(label+("成功" if ok and value is not False else "失败："+str(value)))
         self.operation.run(action,completed)
 
     def _operation_finished(self):
-        self.btn_save_settings.setEnabled(True)
-        self.update_net_info()
+        self.refresh_configuration()
 
     def set_sim_volt(self):
         if self.mgr:
@@ -407,9 +397,32 @@ class SimulatorTab(QWidget):
                 else:self._notify_status(str(value))
             if sim:self.run_device(f"CH{ch}电压回读",lambda:read_simulator(sim,'voltage',local),completed)
 
+    def _clear_current_display(self, *_):
+        self.lbl_read_current.setText('—')
+        self.lbl_read_current.setToolTip('')
+
+    def read_sim_current(self):
+        if not self.mgr:return
+        ch = self.spin_ch.currentData()
+        sim, local = self.mgr._get_sim_and_ch(ch)
+        if not sim:return
+        def completed(ok, value):
+            if ok:
+                self.on_current_read_progress(ch, value)
+            else:
+                self.on_current_read_error(ch, str(value))
+                self._notify_status(f'CH{ch}电流回读失败：{value}')
+        self.run_device(f'CH{ch}电流回读',
+                        lambda:_current_reading(read_simulator(sim, 'current', local)), completed)
+
     def read_all_channels(self):
+        self._start_read_all('voltage')
+
+    def read_all_currents(self):
+        self._start_read_all('current')
+
+    def _start_read_all(self, quantity):
         if self.operation.isRunning():return
-        """异步回读物理设备通道 1。"""
         if not self.mgr: return
         if self.batch_worker and self.batch_worker.isRunning(): return
         if self.read_all_worker and not self.read_all_worker.wait(0): return
@@ -417,14 +430,62 @@ class SimulatorTab(QWidget):
         if not channels:
             self._notify_status("请先配置并启用模拟器。")
             return
-        self.btn_read_all.setText("正在读取整套设备...")
-        self.voltage_warnings={}
+        if quantity == 'current':
+            self.btn_read_all_current.setText('正在读取全部电流…')
+            self.current_warnings={}
+            self._clear_current_display()
+            for row in self._rows.values():
+                self.table.setItem(row, 2, QTableWidgetItem('—'))
+        else:
+            self.btn_read_all.setText("正在读取整套设备...")
+            self.voltage_warnings={}
         self.btn_read_all.setEnabled(False)
-        self.read_all_worker = ReadAllWorker(channels)
-        self.read_all_worker.progress.connect(self.on_read_all_progress)
-        self.read_all_worker.diagnostic.connect(self.on_channel_diagnostic)
+        self.btn_read_all_current.setEnabled(False)
+        self.read_all_worker = ReadAllWorker(channels, quantity)
+        if quantity == 'current':
+            self.read_all_worker.progress.connect(self.on_current_read_progress)
+            self.read_all_worker.read_failed.connect(self.on_current_read_error)
+            self.read_all_worker.diagnostic.connect(self.on_current_diagnostic)
+        else:
+            self.read_all_worker.progress.connect(self.on_read_all_progress)
+            self.read_all_worker.diagnostic.connect(self.on_channel_diagnostic)
         self.read_all_worker.finished.connect(self.on_read_all_finished)
         self.read_all_worker.start()
+
+    def on_current_read_progress(self, ch, value):
+        if ch not in self._rows:return
+        try:value = _current_reading(value)
+        except (TypeError, ValueError) as exc:
+            self.on_current_read_error(ch, str(exc));return
+        item = self.table.item(self._rows[ch], 2)
+        if item is None:
+            item = QTableWidgetItem();self.table.setItem(self._rows[ch], 2, item)
+        item.setText(f'{value:.9g}')
+        item.setToolTip(f'CH{ch}：实测电流 {value:.9g} mA')
+        from PySide6.QtGui import QBrush
+        item.setBackground(QBrush())
+        self.current_warnings.pop(ch, None)
+        if self.spin_ch.currentData() == ch:
+            self.lbl_read_current.setText(item.text())
+            self.lbl_read_current.setToolTip(item.toolTip())
+
+    def on_current_read_error(self, ch, error):
+        if ch not in self._rows:return
+        self.current_warnings[ch] = error
+        item = QTableWidgetItem('Error')
+        item.setToolTip(error)
+        from PySide6.QtGui import QColor
+        item.setBackground(QColor('#78350f'))
+        self.table.setItem(self._rows[ch], 2, item)
+        if self.spin_ch.currentData() == ch:
+            self.lbl_read_current.setText('Error')
+            self.lbl_read_current.setToolTip(error)
+
+    def on_current_diagnostic(self, ch, text):
+        if ch in self._rows:
+            item = self.table.item(self._rows[ch], 2)
+            if item:item.setToolTip(text)
+        print(f'[Simulator] {text}')
 
     def on_read_all_progress(self, ch, v):
         import math
@@ -455,8 +516,13 @@ class SimulatorTab(QWidget):
 
     def on_read_all_finished(self):
         self.btn_read_all.setText("回读全部通道电压")
+        self.btn_read_all_current.setText("回读全部通道电流")
         self.btn_read_all.setEnabled(True)
-        self._notify_status("整套设备所有通道刷新完成"+('；异常通道：'+','.join(f'CH{ch}' for ch in self.voltage_warnings) if self.voltage_warnings else ''))
+        self.btn_read_all_current.setEnabled(True)
+        current = self.read_all_worker.quantity == 'current'
+        warnings = self.current_warnings if current else self.voltage_warnings
+        self._notify_status("整套设备所有通道"+('电流' if current else '电压')+"回读完成"+('；异常通道：'+','.join(f'CH{ch}' for ch in warnings) if warnings else ''))
+        QTimer.singleShot(0, self.refresh_configuration)
 
     def batch_control(self, state):
         if self.mgr:
@@ -507,12 +573,11 @@ class SimulatorTab(QWidget):
             self._notify_status('请先启用模拟器');return
         position=self.run_scroll.verticalScrollBar().value()
         # Disabling an entire tab moves keyboard focus and scrolls its next child into view.
-        # Keep navigation/scrolling active; only lock commands and configuration saving.
+        # Keep navigation/scrolling active; only lock device commands.
         from PySide6.QtWidgets import QApplication
         if QApplication.focusWidget() in self.control_buttons:
             self.run_scroll.setFocus(Qt.OtherFocusReason)
         for button in self.control_buttons:button.setEnabled(False)
-        self.btn_save_settings.setEnabled(False)
         self.run_scroll.verticalScrollBar().setValue(position)
         QTimer.singleShot(0,lambda:self.run_scroll.verticalScrollBar().setValue(position))
         self._notify_status('正在并行批量设置并回读确认…')
@@ -531,7 +596,7 @@ class SimulatorTab(QWidget):
                             self.table.setItem(self._rows[ch],1,item)
             self._notify_status(('批量设置及校验成功' if value['ok'] else '批量操作失败')+f'，耗时{value["elapsed"]:.3f}s'+('；'+'；'.join(errors) if errors else ''))
         def finished():
-            self.btn_save_settings.setEnabled(True);self.update_net_info()
+            self.refresh_configuration()
             if read_after and self._batch_result_ok:self.read_all_channels()
         self.batch_worker.result.connect(result);self.batch_worker.finished.connect(finished);self.batch_worker.start()
 

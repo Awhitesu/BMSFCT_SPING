@@ -1,0 +1,207 @@
+VERSION ""
+
+
+NS_ : 
+	NS_DESC_
+	CM_
+	BA_DEF_
+	BA_
+	VAL_
+	CAT_DEF_
+	CAT_
+	FILTER
+	BA_DEF_DEF_
+	EV_DATA_
+	ENVVAR_DATA_
+	SGTYPE_
+	SGTYPE_VAL_
+	BA_DEF_SGTYPE_
+	BA_SGTYPE_
+	SIG_TYPE_REF_
+	VAL_TABLE_
+	SIG_GROUP_
+	SIG_VALTYPE_
+	SIGTYPE_VALTYPE_
+	BO_TX_BU_
+	BA_DEF_REL_
+	BA_REL_
+	BA_DEF_DEF_REL_
+	BU_SG_REL_
+	BU_EV_REL_
+	BU_BO_REL_
+	SG_MUL_VAL_
+
+BS_:
+
+BU_: BMS
+
+
+BO_ 1285 CAN_PCB_NTC0: 8 Vector__XXX
+ SG_ PCB_NTC3 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ PCB_NTC2 : 39|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ PCB_NTC1 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ PCB_NTC0 : 7|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+
+
+BO_ 1286 CAN_PCB_NTC1: 8 Vector__XXX
+ SG_ PCB_NTC7 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ PCB_NTC6 : 39|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ PCB_NTC5 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ PCB_NTC4 : 7|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+
+
+BO_ 1287 CAN_CELL_NTC: 8 Vector__XXX
+ SG_ NTC_INDEX0 M : 7|8@0+ (1,0) [0|63] "" Vector__XXX
+ SG_ NTC_INDEX1 : 39|8@0+ (1,0) [0|63] "" Vector__XXX
+ SG_ CELL_NTC_1 m0 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_2 m0 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_3 m2 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_4 m2 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_5 m4 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_6 m4 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_7 m6 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_8 m6 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_9 m8 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_10 m8 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_11 m10 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_12 m10 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_13 m12 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_14 m12 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_15 m14 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_16 m14 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_17 m16 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_18 m16 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_19 m18 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_20 m18 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_21 m20 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_22 m20 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_23 m22 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_24 m22 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_25 m24 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_26 m24 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_27 m26 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_28 m26 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_29 m28 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_30 m28 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_31 m30 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_32 m30 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_33 m32 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_34 m32 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_35 m34 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_36 m34 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_37 m36 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_38 m36 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_39 m38 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_40 m38 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_41 m40 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_42 m40 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_43 m42 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_44 m42 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_45 m44 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_46 m44 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_47 m46 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_48 m46 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_49 m48 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_50 m48 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_51 m50 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_52 m50 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_53 m52 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_54 m52 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_55 m54 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_56 m54 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_57 m56 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_58 m56 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_59 m58 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_60 m58 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_61 m60 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_62 m60 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_63 m62 : 23|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+ SG_ CELL_NTC_64 m62 : 55|16@0+ (0.01,-50) [-50|605.35] "degC" Vector__XXX
+
+
+BO_ 1297 CAN_CELL_VOLTAGE: 8 Vector__XXX
+ SG_ CELL_VOL_INDEX0 M : 7|8@0+ (1,0) [0|63] "" Vector__XXX
+ SG_ CELL_VOL_INDEX1 : 39|8@0+ (1,0) [0|63] "" Vector__XXX
+ SG_ CELL_VOL_1 m0 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_2 m0 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_3 m2 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_4 m2 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_5 m4 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_6 m4 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_7 m6 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_8 m6 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_9 m8 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_10 m8 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_11 m10 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_12 m10 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_13 m12 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_14 m12 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_15 m14 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_16 m14 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_17 m16 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_18 m16 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_19 m18 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_20 m18 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_21 m20 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_22 m20 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_23 m22 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_24 m22 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_25 m24 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_26 m24 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_27 m26 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_28 m26 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_29 m28 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_30 m28 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_31 m30 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_32 m30 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_33 m32 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_34 m32 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_35 m34 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_36 m34 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_37 m36 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_38 m36 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_39 m38 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_40 m38 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_41 m40 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_42 m40 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_43 m42 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_44 m42 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_45 m44 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_46 m44 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_47 m46 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_48 m46 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_49 m48 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_50 m48 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_51 m50 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_52 m50 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_53 m52 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_54 m52 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_55 m54 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_56 m54 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_57 m56 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_58 m56 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_59 m58 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_60 m58 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_61 m60 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_62 m60 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_63 m62 : 23|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+ SG_ CELL_VOL_64 m62 : 55|16@0+ (0.1,0) [0|6553.5] "mV" Vector__XXX
+
+
+BO_ 1300 CAN_STACK_VOL0: 8 Vector__XXX
+ SG_ CAN_STACK_VOL3 : 55|16@0+ (0.01,0) [0|655.35] "V" Vector__XXX
+ SG_ CAN_STACK_VOL2 : 39|16@0+ (0.01,0) [0|655.35] "V" Vector__XXX
+ SG_ CAN_STACK_VOL1 : 23|16@0+ (0.01,0) [0|655.35] "V" Vector__XXX
+ SG_ CAN_STACK_VOL0 : 7|16@0+ (0.01,0) [0|655.35] "V" Vector__XXX
+
+
+CM_ BO_ 1287 "Cyclic multiplexed frame: INDEX fields are zero-based cell numbers. Pairs cycle as 0/1, 2/3, ... 62/63.";
+CM_ BO_ 1297 "Cyclic multiplexed frame: INDEX fields are zero-based cell numbers. Pairs cycle as 0/1, 2/3, ... 62/63.";
+
+
+BA_DEF_  "BusType" STRING ;
+BA_DEF_ BO_  "VFrameFormat" ENUM  "StandardCAN","ExtendedCAN","reserved","reserved","reserved","reserved","reserved","reserved","reserved","reserved","reserved","reserved","reserved","reserved","StandardCAN_FD","ExtendedCAN_FD";
+BA_DEF_DEF_  "BusType" "";
+BA_DEF_DEF_  "VFrameFormat" "StandardCAN";
+BA_ "BusType" "CAN FD";
+

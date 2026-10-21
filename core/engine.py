@@ -72,6 +72,7 @@ class TestStep:
         self.standard_type = "数值"
         self.retry_count = "不复测"
         self.unit = "NULL"
+        self.decimal_places = None
         self.skip_runtime = False
         self.drop_on_ng = False
 
@@ -1067,7 +1068,8 @@ class ChannelWorker(QObject):
 
                 if "simulator" in device or "电池模拟器" in device:
                     from core.simulator_commands import execute_simulator_command
-                    return execute_simulator_command(
+                    # Keep the shared result recording and parent judgment path.
+                    success, result_value = execute_simulator_command(
                         mgr, p_str, target_ch if target_ch is not None else self.channel_id,
                         hw_logger, self.cancel_event.is_set)
 
@@ -1340,7 +1342,7 @@ class ChannelWorker(QObject):
                         success, result_value = execute_power(driver, p_str, hw_logger, self.cancel_event.is_set)
 
                 elif "easy320" in device:
-                    from core.easy320_channels import configured_channels
+                    from core.easy320_channels import configured_channels, MAX_DO_INDEX
                     channel_rows = configured_channels(mgr)
                     allowed = {row['index']: row for row in channel_rows}
                     from core.relay_combination import decode as decode_relays, execute as execute_relays
@@ -1361,7 +1363,7 @@ class ChannelWorker(QObject):
                         state = "闭合" in params.get("action", "")
                         ch_list = [ch.strip() for ch in p_str.replace('，', ',').split(',')]
                         if (not ch_list or any(not re.fullmatch(r'[0-9]+', ch) for ch in ch_list)
-                                or any(not 1 <= int(ch) <= 0xffff - 0xfc08 + 1 for ch in ch_list)):
+                                or any(not 1 <= int(ch) <= MAX_DO_INDEX + 1 for ch in ch_list)):
                             raise ValueError('EASY320通道必须为有效的正整数列表，不能为空')
                         if any(int(ch)-1 not in allowed for ch in ch_list):
                             raise ValueError('EASY320工步包含当前导入表中不存在的DO通道，请重新编辑工步')
@@ -2184,6 +2186,7 @@ class TestEngine(QObject):
             step.standard_type = item.get('standard_type', "数值")
             step.retry_count = item.get('retry_count', "不复测")
             step.unit = item.get('unit', "NULL")
+            step.decimal_places = item.get('decimal_places')
             step.drop_on_ng = bool(item.get('drop_on_ng', False))
 
             for sub in item.get('sub_steps', []):

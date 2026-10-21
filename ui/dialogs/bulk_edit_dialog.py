@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
-                               QLineEdit, QPushButton, QComboBox, QCheckBox, QGroupBox)
+                               QLineEdit, QPushButton, QComboBox, QCheckBox, QGroupBox, QSpinBox)
+from core.result_display import MAX_DECIMAL_PLACES, decimal_places
 
 
 class BulkEditDialog(QDialog):
@@ -79,6 +80,19 @@ class BulkEditDialog(QDialog):
         self.unit_edit.setEnabled(False)
         self.cb_unit.toggled.connect(self.unit_edit.setEnabled)
         layout.addWidget(self.unit_edit)
+
+        decimal_row = QHBoxLayout()
+        self.cb_decimal = QCheckBox("统一修改小数位数（直接截断）")
+        self.decimal_spin = QSpinBox()
+        self.decimal_spin.setRange(-1, MAX_DECIMAL_PLACES)
+        self.decimal_spin.setSpecialValueText("不限制")
+        self.decimal_spin.setValue(-1)
+        self.decimal_spin.setToolTip("2：2.519→2.51；0：只显示整数；不限制：恢复原始显示。仅影响数值显示。")
+        self.decimal_spin.setEnabled(False)
+        self.cb_decimal.toggled.connect(self.decimal_spin.setEnabled)
+        decimal_row.addWidget(self.cb_decimal)
+        decimal_row.addWidget(self.decimal_spin, 1)
+        layout.addLayout(decimal_row)
         
         # 3. NG复测
         self.cb_retry = QCheckBox("统一修改 NG 复测选择")
@@ -156,6 +170,8 @@ class BulkEditDialog(QDialog):
             "max": mx,
             "change_unit": self.cb_unit.isChecked(),
             "unit": self.unit_edit.text().strip(),
+            "change_decimal_places": self.cb_decimal.isChecked(),
+            "decimal_places": decimal_places(self.decimal_spin.value()),
             "change_retry": self.cb_retry.isChecked(),
             "retry_count": self.retry_combo.currentText(),
             "change_stop": self.cb_stop.isChecked(),

@@ -30,7 +30,7 @@ class SimulatorReadForm(QWidget):
 
     def update_preview(self):
         if self.manager is None:
-            self.preview.setText('运行时按调试中心已保存的启用设备及通道数量读取。结果单位 mA，变量名为“电流-全局通道号”。')
+            self.preview.setText('运行时按硬件管理中心已保存并应用的启用设备及实际通道数读取。结果单位 mA，变量名为“电流-全局通道号”。')
             return
         try:
             routes = selected_channels(self.manager, self.fields.controls['selection'].currentData())
@@ -39,7 +39,7 @@ class SimulatorReadForm(QWidget):
             return
         channels = [str(channel) for channel, _, _ in routes]
         if not channels:
-            self.preview.setText('当前没有符合选择的已启用通道，请在调试中心保存并应用模拟器配置。')
+            self.preview.setText('当前没有符合选择的已启用通道，请在硬件管理中心保存并应用模拟器配置。')
             self.preview.setToolTip('')
             return
         summary = '、'.join(channels if len(channels) <= 12 else channels[:10] + ['…', channels[-1]])
@@ -47,3 +47,7 @@ class SimulatorReadForm(QWidget):
                              f'写入变量：电流-{channels[0]} 至 电流-{channels[-1]} 中所选通道的键；单位 mA。')
         self.preview.setToolTip('\n'.join(f'CH{channel} → 设备{sim.sequence_number}/CH{local} → 电流-{channel}'
                                          for channel, sim, local in routes))
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.update_preview()

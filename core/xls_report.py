@@ -5,6 +5,7 @@ import re
 import sys
 from pathlib import Path
 import xlwt
+from core.result_display import format_result
 
 _CONTROL=re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F]')
 
@@ -78,6 +79,7 @@ def build_workbook(info,items):
         sheet.row(row).height=285;sheet.row(row).height_mismatch=False
         for col,key in enumerate(('item_name','measured_value','lower_limit','upper_limit','unit','result')):
             value=item.get(key)
+            if key=='measured_value' and value is not None:value=format_result(value,item)
             if key=='result':value={'PASS':'Pass','OK':'Pass','FAIL':'Fail','NG':'Fail'}.get(str(value).upper(),value)
             rgb=[255,255,255]
             if key=='result':rgb=layout['body_pass_fill'] if str(value).upper()=='PASS' else layout['fail_fill']

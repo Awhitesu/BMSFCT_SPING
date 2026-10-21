@@ -14,8 +14,8 @@ def test_24_off_points_use_one_write_and_one_read():
         driver.client.write_coils.return_value=reply()
         driver.client.read_coils.return_value=reply([False]*24)
         assert driver.control_selected_relays(range(24),False)
-        driver.client.write_coils.assert_called_once_with(address=0xFC08,values=[False]*24,device_id=1)
-        driver.client.read_coils.assert_called_once_with(address=0xFC08,count=24,device_id=1)
+        driver.client.write_coils.assert_called_once_with(address=0xFC00,values=[False]*24,device_id=1)
+        driver.client.read_coils.assert_called_once_with(address=0xFC00,count=24,device_id=1)
         sleep.assert_called_once_with(.05)
 
 
@@ -59,4 +59,4 @@ def test_all_off_uses_all_imported_excel_points_and_chunks_large_lists(count):
         assert sum(len(c.kwargs['values']) for c in writes)==count
         assert sum(c.kwargs['count'] for c in reads)==count
         assert all(len(c.kwargs['values'])<=125 for c in writes)
-        assert [c.kwargs['address'] for c in writes]==[0xFC08+i for i in range(0,count,125)]
+        assert [c.kwargs['address'] for c in writes]==[0xFC00+i for i in range(0,count,125)]
