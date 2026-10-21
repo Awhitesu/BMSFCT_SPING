@@ -178,7 +178,12 @@ ACTIONS['simulator']=(Action('connect','连接检测'),
         help='切换量程会短暂关闭并恢复原先开启的通道。LOW前先将限流设为不超过1 mA；原先关闭的通道保持关闭。'),
     Action('current_limit','设置指定通道限流',(integer('channel','全局通道',1),CURRENT)),
     Action('voltage','读取指定通道电压',(integer('channel','全局通道',1),VARIABLE),True),
-    Action('current','读取指定通道电流',(integer('channel','全局通道',1),VARIABLE),True))
+    Action('current','读取指定通道电流',(integer('channel','全局通道',1),VARIABLE),True),
+    Action('current_batch','回读数据',(
+        Field('selection','读取通道','ALL',choices=(('ALL_奇','ODD'),('ALL_偶','EVEN'),('ALL','ALL'))),
+        integer('count','读取最大次数（每通道）',100,1,100000),
+        choice('mode','取值',[('最大值','max'),('平均值','mean')])),
+        help='仅采集电流（mA）。每通道收齐设定次数后独立取最大值或平均值，全部成功后写入“电流-全局通道号”。'))
 
 
 def device_key(label):
@@ -273,6 +278,9 @@ def execute(manager,text,variables,logger,cancelled=lambda:False):
     _ensure_active(cancelled)
     device,spec,p=decode(text)
     action=spec.key
+    if device=='simulator' and action=='current_batch':
+        from core.simulator_current_batch import execute_current_batch
+        return True,execute_current_batch(manager,p,variables,logger,cancelled)
     if getattr(manager,'is_virtual',False) is True:
         result=_virtual_result(device,spec,p)
         if p.get('variable'):variables[p['variable']]=result

@@ -441,10 +441,15 @@ class ConfigTab(QWidget):
 
     def refresh_recipe_list(self):
         """从本地磁盘刷新配方列表"""
+        current = self.recipe_tree.currentItem()
+        selected = current.text(0) if current else self.current_recipe_name
         self.recipe_tree.clear()
         recipes = self.db_manager.list_recipes()
         for name in recipes:
-            self.recipe_tree.addTopLevelItem(QTreeWidgetItem([name]))
+            item = QTreeWidgetItem([name])
+            self.recipe_tree.addTopLevelItem(item)
+            if name == selected:
+                self.recipe_tree.setCurrentItem(item)
 
     def on_recipe_selected(self, item, column):
         """点击左侧配方时加载数据或切换折叠状态"""
@@ -478,7 +483,10 @@ class ConfigTab(QWidget):
         """将 JSON 数据还原到树状图中"""
         from core.recipe_identity import ensure_step_ids
         from core.single_channel_recipe import single_channel_items
-        data = dict(data, items=single_channel_items(data.get("items", [])))
+        from copy import deepcopy
+        from core.can_step_channels import migrate_recipe_channels
+        data = deepcopy(dict(data, items=single_channel_items(data.get("items", []))))
+        migrate_recipe_channels(data)
         ensure_step_ids(data)
         self.step_tree.clear()
         can_config = data.get("can_config") or {}
@@ -574,16 +582,18 @@ class ConfigTab(QWidget):
 
     def on_recipe_context_menu(self, pos):
         item = self.recipe_tree.itemAt(pos)
-        if not item: return
-
-        self.recipe_tree.setCurrentItem(item)
         menu = QMenu()
-        rename_act = QAction("重命名配方", self)
-        rename_act.triggered.connect(self.rename_selected_recipe)
-        menu.addAction(rename_act)
-        del_act = QAction("删除该配方", self)
-        del_act.triggered.connect(self.delete_selected_recipe)
-        menu.addAction(del_act)
+        if item:
+            self.recipe_tree.setCurrentItem(item)
+            rename_act = QAction("重命名配方", self)
+            rename_act.triggered.connect(self.rename_selected_recipe)
+            menu.addAction(rename_act)
+            del_act = QAction("删除该配方", self)
+            del_act.triggered.connect(self.delete_selected_recipe)
+            menu.addAction(del_act)
+            menu.addSeparator()
+        refresh_act = menu.addAction('刷新配方')
+        refresh_act.triggered.connect(self.refresh_recipe_list)
         menu.exec_(self.recipe_tree.viewport().mapToGlobal(pos))
 
     def on_context_menu(self, pos):
@@ -1035,7 +1045,7 @@ class ConfigTab(QWidget):
     def recipe_can_binding(self):
         if self.recipe_pcan_channel.currentData() == 'NONE':
             return dict(channel='', enabled=False)
-        return dict(channel=(f"ZLG_CAN{self._recipe_zlg_config['send_channel']}" if self._recipe_zlg_config else self.recipe_zlg_channel.currentText())
+        return dict(channel=self.recipe_zlg_channel.currentText()
                     if self.recipe_pcan_channel.currentData() == 'ZLG' else 'PCAN_USBBUS1', zlg=self._recipe_zlg_config)
 
     def recipe_dbc_asset(self):
@@ -1061,7 +1071,17 @@ class ConfigTab(QWidget):
                        channels=[dict(enabled=True, nominal=500000, data=2000000, termination=False) for _ in range(4)])
         dialog = ZlgRecipeDialog(cfg, self)
         if dialog.exec():
-            self._recipe_zlg_config = dialog.get_config()
+            updated = dialog.get_config()
+            # Freeze old followers before the legacy connection anchor can change.
+            from core.can_step_channels import explicit_step
+            default = int(self.recipe_zlg_channel.currentText()[-1])
+            for i in range(self.step_tree.topLevelItemCount()):
+                parent = self.step_tree.topLevelItem(i)
+                for j in range(parent.childCount()):
+                    node = parent.child(j)
+                    step = dict(device=node.data(0,Qt.UserRole),type=node.data(1,Qt.UserRole),params=node.text(2))
+                    node.setText(2,explicit_step(step,default)['params'])
+            self._recipe_zlg_config = updated
             self.recipe_zlg_channel.setCurrentText(f"ZLG_CAN{self._recipe_zlg_config['send_channel']}")
         elif self._recipe_zlg_config is None:
             self.recipe_pcan_channel.setCurrentIndex(0)
@@ -1090,9 +1110,7 @@ class ConfigTab(QWidget):
         if self.recipe_pcan_channel.currentData() == 'ZLG' and self._recipe_zlg_config:
             from copy import deepcopy
             config = deepcopy(self._recipe_zlg_config)
-            selected = config['channels'][config['send_channel']-1]
-            data['can_config'].update(zlg=config, channel=f"ZLG_CAN{config['send_channel']}",
-                                      nominal_bitrate=selected['nominal'], data_bitrate=selected['data'])
+            data['can_config']['zlg'] = config
         for i in range(self.step_tree.topLevelItemCount()):
             item_node = self.step_tree.topLevelItem(i)
             item_data = {
@@ -1120,10 +1138,20 @@ class ConfigTab(QWidget):
             data["items"].append(item_data)
         if self.recipe_pcan_channel.currentData() == 'NONE':
             data['can_config'] = {}
+        from core.can_step_channels import migrate_recipe_channels
+        channels_changed = migrate_recipe_channels(data)
         from core.recipe_can_requirement import validate_recipe_can
         validate_recipe_can(data)
-        from core.dbc_signals import validate_recipe_dbc
-        validate_recipe_dbc(data)
+        from core.dbc_signals import rebind_recipe_dbc
+        dbc_changed = rebind_recipe_dbc(data)
+        if channels_changed or dbc_changed:
+            for i,item_data in enumerate(data['items']):
+                for j,step in enumerate(item_data['sub_steps']):
+                    node=self.step_tree.topLevelItem(i).child(j)
+                    if node.text(2)!=step['params']:node.setText(2,step['params'])
+        if data['can_config'].get('zlg') is not None:
+            self._recipe_zlg_config = data['can_config']['zlg']
+            self.recipe_zlg_channel.setCurrentText(data['can_config']['channel'])
         return data
 
     def add_test_item(self):

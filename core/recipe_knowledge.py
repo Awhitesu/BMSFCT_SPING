@@ -58,10 +58,20 @@ STEP_GRAMMAR_DOC = """## 子工步语法规则（引擎实际解析逻辑，必�
 - UNIT 仅 IT6722 系设备支持：电压 V|mV，电流 A|mA|μA。
 - device 决定读哪台设备：simulator→电池模拟器，it6722/dut/被测物供电→DUT 电源，hv/ngi→高压源，ca550→校准仪。
 - 例："读取电流 / UNIT:mA"
+- 电池模拟器新建“回读数据”仅批量读取电流，使用 core.device_steps.encode('simulator','current_batch',values)
+  生成设备工步参数；values 为 selection=ALL|ODD|EVEN、count=每通道读取次数（1–100000）、mode=max|mean。
+  全局通道按已启用设备的设备序号排序、按配置通道数量连续累计；全部采集成功后写入“电流-N”变量，单位mA。
+  此工步 is_judgment=false；后续各测试项读取对应变量参与上下限判定。历史单通道读取工步仍可执行。
 
 ### 3. CAN 类
+- CANDBC读取固定输出DBC解码后的实际值，默认读取最新有效值；采样组 group 为可选的单行名称。
+  同一工况的连续DBC读取可设置相同 group，且 new_frame=false：首个实际执行项统一等待本组所有实际执行信号刷新，
+  后续读取该采样起点后的最新有效值；切换工况使用不同组名，设置和稳定延时放在本组读取前。
+  组间、非DBC工步和重新连接/切换配方会要求重新刷新；不要同时配置 group 与 new_frame=true。
+- CAN发送、接收、UDS、EOL及DBC工步用 PCH 指定物理通道：PCAN只有 PCH:1，ZLG可选 PCH:1～4。
+- 仅普通“发送指令”可用 PCH:1,3（多选）或 PCH:ALL（全部已启用通道）；交互应答、接收、周期报文、UDS及DBC必须指定一个通道。
 - CAN发送（type 含「CAN发送」/action 含「发送指令」）：
-  "ID:0x7E0 / DATA:10 03 / TYPE:0|1|2 / DLC:8 / CH:1"（DATA 为空格分隔 hex 字节）。
+  "ID:0x7E0 / DATA:10 03 / TYPE:0|1|2 / DLC:8 / PCH:1"（DATA 为空格分隔 hex 字节）。
 - CAN接收（含「CAN接收」/「接收指定帧ID」）：
   "ID:0x7E0 / TIMEOUT:{毫秒}"，收到即 OK。
 - CAN交互/问答（type 含「CAN交互」）：
@@ -104,7 +114,7 @@ STEP_GRAMMAR_DOC = """## 子工步语法规则（引擎实际解析逻辑，必�
 ### UI 可创建的 device + action 组合（优先使用这些原文）
 - IT6722A 被测物供电电源 (IT6722A DUT Power)：设置参数 / 回读数据
 - NGI 高压源 (HV Source)：设置参数 / 回读数据 / 清除保护
-- 电池模拟器 (NGI 83624A Simulator)：快捷批量配置 / 回读数据
+- 电池模拟器 (NGI 83624A Simulator)：快捷配置 / 回读数据
 - Easy320 继电器 (Easy320)：闭合勾选通道 / 断开勾选通道 / 全部断开
 - CA550 校准仪 (CA550)：参数设置 / 数据回读
 - 力捷丰 SG400 下载器 (OpteeQ SG400)：连接检测 / 查询状态 / 执行烧录工程

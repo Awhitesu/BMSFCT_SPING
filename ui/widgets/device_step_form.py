@@ -20,6 +20,7 @@ class DeviceStepForm(QWidget):
                 item.widget().deleteLater()
         self.controls={};self.device=device;self.spec=spec
         help_label=QLabel(spec.help or ('回读返回数值，单位随结果记录；可参与测试项上下限判定。' if spec.read else '操作成功返回 PASS；失败执行所选失败策略。'))
+        self.help_label = help_label
         help_label.setWordWrap(True)
         fields=[]
         for field in spec.fields:

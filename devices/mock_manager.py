@@ -68,6 +68,9 @@ class MockDeviceManager:
         self.dut_power = _make_mock_power()
         self.hv_source = _make_mock_power()
         self.simulators = [_make_mock_sim() for _ in range(3)]
+        self.enabled_devices = {}
+        for number, sim in enumerate(self.simulators, 1):
+            sim.sequence_number, sim.max_channels = number, 18
         self.pcan = _make_mock_can()
         self.e2_rfp = _make_mock_e2_rfp()
         self.easy320 = type('MockEasy', (), {
@@ -87,12 +90,17 @@ class MockDeviceManager:
         })()
 
     def _get_sim_and_ch(self, global_ch: int):
-        """路由到虚拟模拟器"""
-        unit_index = (global_ch - 1) // 18
-        local_ch = (global_ch - 1) % 18 + 1
-        if unit_index < len(self.simulators):
-            return self.simulators[unit_index], local_ch
+        """与真实设备使用相同的连续全局通道规则。"""
+        if isinstance(global_ch, bool):return None, None
+        for channel, sim, local in self.simulator_channels():
+            if channel == global_ch:return sim, local
         return None, None
+
+    def simulator_channels(self):
+        from .simulator_config import channel_routes
+        return channel_routes((sim.sequence_number, sim.max_channels, sim)
+                              for slot, sim in enumerate(self.simulators, 1)
+                              if self.enabled_devices.get(f'sim{slot}', True))
 
     def set_voltage(self, global_ch, voltage, logger=None):
         if logger: logger(f"[仿真] 设置通道 {global_ch} 电压为 {voltage}V")

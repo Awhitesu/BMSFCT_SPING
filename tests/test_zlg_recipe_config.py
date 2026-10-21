@@ -19,13 +19,16 @@ def config():
                 channels=[dict(enabled=True, nominal=125000+i*0, data=2000000, termination=i==2) for i in range(4)])
 
 
-def test_dialog_roundtrip_and_disabled_send_channel_rejection():
+def test_dialog_roundtrip_without_global_send_selector():
     value = config()
     dialog = ZlgRecipeDialog(value)
     try:
         assert dialog.get_config() == value
+        assert not hasattr(dialog,'send_channel')
         dialog.controls[2][0].setChecked(False)
-        with pytest.raises(ValueError, match='必须启用'): dialog.get_config()
+        assert dialog.get_config()['send_channel'] == 1
+        for controls in dialog.controls:controls[0].setChecked(False)
+        with pytest.raises(ValueError, match='至少启用'):dialog.get_config()
         assert value['channels'][2]['enabled'] is True
     finally: dialog.close()
 
@@ -70,5 +73,6 @@ def test_start_applies_all_channels_and_stops_on_failure(fail):
 
 
 def test_invalid_config_rejected_before_disconnect():
-    value = deepcopy(config()); value['channels'][2]['enabled'] = False
+    value = deepcopy(config())
+    for row in value['channels']:row['enabled'] = False
     with pytest.raises(ValueError): validate_zlg_config(value)

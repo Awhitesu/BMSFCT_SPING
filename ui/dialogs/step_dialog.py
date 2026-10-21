@@ -44,6 +44,7 @@ class StepDialog(QDialog):
         super().__init__(parent)
         self.device_manager = device_manager or getattr(parent, 'device_manager', None)
         self.is_loading = False # 状态位：标记是否处于数据加载还原中
+        self._legacy_simulator_data = None
         self._uds_load_error = ''
         self._uds_edit_item = None
         self.setWindowTitle("编辑指令 (子工步)")
@@ -188,20 +189,40 @@ class StepDialog(QDialog):
         if (self.recipe_can_binding or {}).get('enabled') is False:
             self.can_binding_label.setText('不使用 CAN（请先在配方中选择 CAN 卡）')
             self.can_physical_channel.setEnabled(False)
-        default_channel = channel.removeprefix('ZLG_CAN') if channel.startswith('ZLG_CAN') else ('1' if channel else '')
-        self.can_physical_channel.addItem('跟随配方默认通道' + (f'（CH{default_channel}）' if default_channel else ''), 0)
-        for physical in range(1, 5 if channel.startswith('ZLG_CAN') or not channel else 2):
+        self._legacy_can_channel = int(channel.removeprefix('ZLG_CAN')) if channel.startswith('ZLG_CAN') else 1
+        self._can_maximum = 4 if channel.startswith('ZLG_CAN') or not channel else 1
+        self._can_enabled = set(range(1, self._can_maximum+1))
+        zlg = (self.recipe_can_binding or {}).get('zlg')
+        if isinstance(zlg, dict) and len(zlg.get('channels', [])) == 4:
+            self._can_enabled = {i+1 for i,row in enumerate(zlg['channels']) if row['enabled']}
+        for physical in range(1, self._can_maximum+1):
             self.can_physical_channel.addItem(f'CH{physical}', physical)
-            zlg = (self.recipe_can_binding or {}).get('zlg')
-            if isinstance(zlg, dict) and len(zlg.get('channels', [])) == 4 and not zlg['channels'][physical-1]['enabled']:
-                self.can_physical_channel.setItemText(physical, f'CH{physical}（配方未启用）')
-                self.can_physical_channel.model().item(physical).setEnabled(False)
+            if physical not in self._can_enabled:
+                self.can_physical_channel.setItemText(physical-1, f'CH{physical}（配方未启用）')
+                self.can_physical_channel.model().item(physical-1).setEnabled(False)
+        self.can_physical_channel.setCurrentIndex(self.can_physical_channel.findData(min(self._can_enabled)) if self._can_enabled else -1)
         if channel == 'PCAN_USBBUS1':
             self.can_physical_channel.setToolTip('PCAN_USBBUS1只有CH1；运行时始终使用配方绑定设备。')
         self.can_binding_title = QLabel('配方CAN卡:')
         self.can_channel_title = QLabel('物理通道:')
         top_layout.addRow(self.can_binding_title, self.can_binding_label)
         top_layout.addRow(self.can_channel_title, self.can_physical_channel)
+        self.can_send_channels = QWidget()
+        send_layout = QHBoxLayout(self.can_send_channels);send_layout.setContentsMargins(0,0,0,0)
+        self.can_send_all = QCheckBox('全部已启用通道')
+        send_layout.addWidget(self.can_send_all)
+        self.can_send_checks = {}
+        for physical in range(1, self._can_maximum+1):
+            check = QCheckBox(f'CH{physical}')
+            check.setEnabled(physical in self._can_enabled)
+            if physical not in self._can_enabled:check.setToolTip('当前配方未启用此通道')
+            check.setChecked(physical == self.can_physical_channel.currentData())
+            check.toggled.connect(self._update_send_channel_checks)
+            self.can_send_checks[physical] = check;send_layout.addWidget(check)
+        send_layout.addStretch()
+        self.can_send_all.toggled.connect(self._toggle_all_can_channels)
+        self.can_send_title = QLabel('发送通道（可多选）:')
+        top_layout.addRow(self.can_send_title, self.can_send_channels)
         
         main_layout.addWidget(top_frame)
         
@@ -1231,6 +1252,12 @@ class StepDialog(QDialog):
         self.param_stack.addWidget(self.page_e2_rfp) # 15
         self.device_step_form=DeviceStepForm()
         self.param_stack.addWidget(self.device_step_form)
+        from ui.widgets.simulator_read_form import SimulatorReadForm
+        self.simulator_read_form = SimulatorReadForm(self.device_manager)
+        self.param_stack.addWidget(self.simulator_read_form)
+        self.legacy_simulator_notice = QLabel()
+        self.legacy_simulator_notice.setWordWrap(True)
+        self.param_stack.addWidget(self.legacy_simulator_notice)
         from ui.widgets.dbc_forms import DBCStepForm
         dbc_provider=getattr(self.parent(),'recipe_dbc_asset',None)
         self.dbc_form=DBCStepForm(dbc_provider() if callable(dbc_provider) else None)
@@ -1283,6 +1310,8 @@ class StepDialog(QDialog):
         self.sub_category_combo.currentIndexChanged.connect(self.on_sub_category_changed)
         self.device_combo.currentIndexChanged.connect(self.on_device_changed)
         self.action_combo.currentIndexChanged.connect(self.on_action_changed)
+        # Activating the already-selected action explicitly replaces a legacy step.
+        self.action_combo.activated.connect(lambda *_: self.on_action_changed() if self._legacy_simulator_data else None)
         self.eol_op.currentTextChanged.connect(self.on_eol_op_changed)
         self.var_name.currentTextChanged.connect(self.on_var_changed)
         
@@ -1297,6 +1326,11 @@ class StepDialog(QDialog):
         self.scroll_layout.setAlignment(Qt.AlignTop)
 
     def accept(self):
+        from core.can_step_channels import is_can_step
+        if is_can_step(dict(device=self.device_combo.currentText())):
+            try:self._selected_physical_channel(self._is_plain_can_send())
+            except ValueError as exc:
+                QMessageBox.warning(self, '通道参数错误', str(exc));return
         if self.param_stack.currentWidget() is self.variable_step_form:
             try:self.get_data()
             except (ValueError,TypeError) as exc:
@@ -1667,6 +1701,9 @@ class StepDialog(QDialog):
 
     def _load_data(self, data):
         """全量还原：分类、设备、动作、策略及参数 (终极加固版)"""
+        from core.can_step_channels import explicit_step
+        data = explicit_step(data, self._legacy_can_channel)
+        self._legacy_simulator_data = None
         self.is_loading = True
         try:
             device = data.get('device', '')
@@ -1674,6 +1711,11 @@ class StepDialog(QDialog):
             params_str = str(data.get('params', ''))
             step_type = data.get('type', '')
             device_step=decode_device_step(params_str)
+            if ((device_step and device_step[0] == 'simulator' and device_step[1].key != 'current_batch')
+                    or (not device_step and device_key(device) == 'simulator'
+                        and (step_type == '读取仪表' or action == '回读数据'))):
+                self._load_legacy_simulator(data, device_step)
+                return
             if device_step:
                 key,spec,values=device_step
                 group,label=STEP_DEVICES[key]
@@ -1681,10 +1723,13 @@ class StepDialog(QDialog):
                 self.sub_category_combo.setCurrentText(group);self.on_sub_category_changed()
                 self.device_combo.setCurrentText(label);self.on_device_changed()
                 self.action_combo.setCurrentText(spec.label);self.on_action_changed()
-                self.device_step_form.configure(key,spec,values)
+                if key == 'simulator' and spec.key == 'current_batch':
+                    self.simulator_read_form.load(values)
+                else:
+                    self.device_step_form.configure(key,spec,values)
                 from core.read_until import settings
                 self.read_until.load(settings(params_str))
-                self.cb_judgment.setChecked(data.get('is_judgment',False))
+                self.cb_judgment.setChecked(data.get('is_judgment',False) if spec.key != 'current_batch' else False)
                 self.fail_strategy_combo.setCurrentText(data.get('fail_strategy','失败停止'))
                 return
             kv = self._split_params(params_str)
@@ -1704,7 +1749,7 @@ class StepDialog(QDialog):
                 self.device_combo.setCurrentText('CAN 交互');self.on_device_changed()
                 self.action_combo.setCurrentText('启动周期报文列表' if c['operation']=='start' else '停止周期报文列表')
                 self.on_action_changed();self.can_periodic_form.load(c)
-                if 'PCH' in kv:self.can_physical_channel.setCurrentIndex(self.can_physical_channel.findData(int(kv['PCH'])))
+                if 'PCH' in kv:self._load_physical_selection(kv['PCH'])
                 self.cb_judgment.setChecked(data.get('is_judgment',False))
                 self.fail_strategy_combo.setCurrentText(data.get('fail_strategy','失败停止'))
                 return
@@ -1713,7 +1758,7 @@ class StepDialog(QDialog):
                 self.category_combo.setCurrentText('报文交互');self.on_category_changed()
                 self.device_combo.setCurrentText(DEVICE);self.on_device_changed();self.on_action_changed()
                 self.uds_field_write_form.load(decode(kv['WRITE64']))
-                if 'PCH' in kv:self.can_physical_channel.setCurrentIndex(self.can_physical_channel.findData(int(kv['PCH'])))
+                if 'PCH' in kv:self._load_physical_selection(kv['PCH'])
                 self.cb_judgment.setChecked(data.get('is_judgment',False))
                 self.fail_strategy_combo.setCurrentText(data.get('fail_strategy','失败停止'))
                 return
@@ -1721,12 +1766,8 @@ class StepDialog(QDialog):
                 from core.seedkey import decode
                 self.uds_security.load(decode(kv['SEC64']))
             if 'PCH' in kv:
-                physical = int(kv['PCH'])
-                index = self.can_physical_channel.findData(physical)
-                if index < 0:
-                    self.can_physical_channel.addItem(f'CH{physical}（不属于当前配方CAN卡，请重选）', physical)
-                    index = self.can_physical_channel.count()-1
-                self.can_physical_channel.setCurrentIndex(index)
+                from core.can_step_channels import is_plain_send
+                self._load_physical_selection(kv['PCH'], is_plain_send(data))
             
             # 1. 还原一级分类 (Category)
             category = "设备操作"
@@ -1768,6 +1809,8 @@ class StepDialog(QDialog):
 
             # 4. 还原功能动作 (Action)
             idx = self.action_combo.findText(action)
+            if device_key(device) == 'simulator' and action == '快捷批量配置':
+                idx = self.action_combo.findText('快捷配置')
             if idx >= 0: self.action_combo.setCurrentIndex(idx)
             self.on_action_changed()
             if self.param_stack.currentWidget() is self.dbc_form:
@@ -2090,6 +2133,29 @@ class StepDialog(QDialog):
     def on_var_changed(self):
         pass
 
+    def _load_legacy_simulator(self, data, decoded):
+        """Keep historical single-channel operations intact until explicitly replaced."""
+        self.category_combo.setCurrentText('设备操作'); self.on_category_changed()
+        self.sub_category_combo.setCurrentText('模拟电池'); self.on_sub_category_changed()
+        self.device_combo.setCurrentText(STEP_DEVICES['simulator'][1]); self.on_device_changed()
+        self.action_combo.setCurrentText('回读数据' if decoded is None or decoded[1].read else '快捷配置')
+        self.on_action_changed()
+        notice = '历史工步按原参数保留；重新选择“功能动作”可改用新格式。'
+        if decoded:
+            _, spec, values = decoded
+            self.device_step_form.configure('simulator', spec, values)
+            self.device_step_form.help_label.setText(f'历史工步：{spec.label}。{notice}')
+            self.param_stack.setCurrentWidget(self.device_step_form)
+        else:
+            kind = '电流' if '电流' in str(data.get('params', '')) else '电压'
+            self.legacy_simulator_notice.setText(f'历史单通道读取{kind}。{notice}')
+            self.param_stack.setCurrentWidget(self.legacy_simulator_notice)
+        self._legacy_simulator_data = dict(data)
+        self.read_until.hide()
+        self.cb_judgment.setEnabled(True)
+        self.cb_judgment.setChecked(data.get('is_judgment', False))
+        self.fail_strategy_combo.setCurrentText(data.get('fail_strategy', '失败停止'))
+
     def on_category_changed(self, index=0):
         category = self.category_combo.currentText()
         self.device_selection_form.setRowVisible(self.sub_category_combo, category == "设备操作")
@@ -2138,11 +2204,66 @@ class StepDialog(QDialog):
         if not self.is_loading:
             self.on_device_changed()
 
+    def _is_plain_can_send(self):
+        return ('CAN' in self.device_combo.currentText().upper()
+                and self.action_combo.currentText() == '发送指令')
+
+    def _update_send_channel_checks(self):
+        for physical,check in self.can_send_checks.items():
+            check.setEnabled((physical in self._can_enabled or check.isChecked()) and not self.can_send_all.isChecked())
+
+    def _toggle_all_can_channels(self, checked):
+        if checked:
+            self._can_custom_selection = {ch for ch,check in self.can_send_checks.items() if check.isChecked()}
+        selected = self._can_enabled if checked else self._can_custom_selection
+        for physical,check in self.can_send_checks.items():
+            check.blockSignals(True);check.setChecked(physical in selected);check.blockSignals(False)
+        self._update_send_channel_checks()
+
+    def _update_can_channel_controls(self):
+        can_related = any(word in self.device_combo.currentText().upper() for word in ('CAN','UDS','EOL'))
+        multiple = self._is_plain_can_send()
+        for control in (self.can_binding_title,self.can_binding_label):control.setVisible(can_related)
+        for control in (self.can_channel_title,self.can_physical_channel):control.setVisible(can_related and not multiple)
+        for control in (self.can_send_title,self.can_send_channels):control.setVisible(can_related and multiple)
+
+    def _selected_physical_channel(self, multiple=False):
+        from core.can_step_channels import resolve_channels
+        if (self.recipe_can_binding or {}).get('enabled') is False:raise ValueError('请先在配方中选择CAN卡')
+        if multiple:
+            token = 'ALL' if self.can_send_all.isChecked() else ','.join(str(ch) for ch,check in self.can_send_checks.items() if check.isChecked())
+        else:token = str(self.can_physical_channel.currentData() or '')
+        if not token:raise ValueError('请至少选择一个已启用的物理通道')
+        resolve_channels('PCH:'+token, maximum=self._can_maximum, enabled=self._can_enabled, multiple=multiple)
+        return token
+
+    def _load_physical_selection(self, token, multiple=False):
+        from core.can_step_channels import resolve_channels
+        if multiple and str(token).upper() == 'ALL':
+            self.can_send_all.setChecked(True);return
+        # Keep a disabled/out-of-card saved selection visible; saving requires the user to correct it.
+        channels = resolve_channels('PCH:'+str(token), maximum=max(4,self._can_maximum), multiple=multiple)
+        if multiple:
+            self.can_send_all.setChecked(False)
+            for physical in channels:
+                if physical not in self.can_send_checks:
+                    check = QCheckBox(f'CH{physical}（不属于当前CAN卡，请重选）')
+                    check.setEnabled(False);check.toggled.connect(self._update_send_channel_checks)
+                    self.can_send_checks[physical] = check
+                    self.can_send_channels.layout().insertWidget(self.can_send_channels.layout().count()-1,check)
+            for physical,check in self.can_send_checks.items():check.setChecked(physical in channels)
+            self._update_send_channel_checks()
+        if len(channels) == 1:
+            physical = channels[0];index = self.can_physical_channel.findData(physical)
+            if index < 0:
+                self.can_physical_channel.addItem(f'CH{physical}（不属于当前配方CAN卡，请重选）',physical)
+                index = self.can_physical_channel.count()-1
+            self.can_physical_channel.setCurrentIndex(index)
+
     def on_device_changed(self, index=0):
+        if not self.is_loading:self._legacy_simulator_data = None
         text = self.device_combo.currentText()
-        can_related = any(word in text.upper() for word in ('CAN', 'UDS', 'EOL'))
-        for control in (self.can_binding_title,self.can_binding_label,self.can_channel_title,self.can_physical_channel):
-            control.setVisible(can_related)
+        self._update_can_channel_controls()
         self.action_combo.clear()
         device_text = self.device_combo.currentText()
         if not device_text: return
@@ -2155,6 +2276,10 @@ class StepDialog(QDialog):
             if not self.is_loading:self.on_action_changed()
             return
         key=device_key(device_text)
+        if key == 'simulator':
+            self.action_combo.addItems(['快捷配置', '回读数据'])
+            if not self.is_loading:self.on_action_changed()
+            return
         if key in ('it6333b','dmm34461','dg2052','tbs2102b','insulation','resistor','relay','hv','hsd','dmm'):
             self.action_combo.addItems([a.label for a in STEP_ACTIONS[key]])
             if not self.is_loading:self.on_action_changed()
@@ -2224,6 +2349,9 @@ class StepDialog(QDialog):
             self.read_unit.setCurrentText(previous)
 
     def on_action_changed(self):
+        self._update_can_channel_controls()
+        if not self.is_loading:self._legacy_simulator_data = None
+        if hasattr(self, 'cb_judgment'):self.cb_judgment.setEnabled(True)
         if hasattr(self, 'read_until'):
             key = device_key(self.device_combo.currentText())
             spec = action_spec(key, self.action_combo.currentText())
@@ -2243,6 +2371,16 @@ class StepDialog(QDialog):
             self.param_stack.setCurrentWidget(self.uds_field_write_form)
             return
         key=device_key(device);spec=action_spec(key,action)
+        if key == 'simulator':
+            self.read_until.hide()
+            if action == '回读数据':
+                self.param_stack.setCurrentWidget(self.simulator_read_form)
+                self.simulator_read_form.update_preview()
+                self.cb_judgment.setChecked(False)
+                self.cb_judgment.setEnabled(False)
+            else:
+                self.param_stack.setCurrentIndex(6)
+            return
         if spec:
             self.device_step_form.configure(key,spec)
             self.param_stack.setCurrentWidget(self.device_step_form)
@@ -2492,9 +2630,8 @@ class StepDialog(QDialog):
             expected=binding.get('channel','')
             if expected and expected.startswith('ZLG_CAN')!=str(driver.channel).startswith('ZLG_CAN'):
                 raise ValueError('当前连接设备与配方不一致，请先应用配方配置')
-            physical=self.can_physical_channel.currentData() or 0
-            if not physical and expected.startswith('ZLG_CAN'):physical=int(expected.removeprefix('ZLG_CAN'))
-            if physical:
+            physical=int(self._selected_physical_channel())
+            if physical != 1 or str(driver.channel).startswith('ZLG_CAN'):
                 from devices.can_channel_view import CANChannelView
                 driver=CANChannelView(driver,physical)
             receive_only=self.action_combo.currentText()=='接收指定帧ID'
@@ -2549,10 +2686,8 @@ class StepDialog(QDialog):
                 expected = binding.get('channel', '')
                 if expected and (str(can_tool.channel).startswith('ZLG_CAN') != expected.startswith('ZLG_CAN')):
                     raise ValueError('当前已连接CAN卡与配方不一致，请先应用配方CAN配置')
-                physical = self.can_physical_channel.currentData() or 0
-                if not physical and expected.startswith('ZLG_CAN'):
-                    physical = int(expected.removeprefix('ZLG_CAN'))
-                if physical:
+                physical = int(self._selected_physical_channel())
+                if physical != 1 or str(can_tool.channel).startswith('ZLG_CAN'):
                     from devices.can_channel_view import CANChannelView
                     can_tool = CANChannelView(can_tool, physical)
                 req_bytes = bytes.fromhex(req_str)
@@ -3169,6 +3304,25 @@ class StepDialog(QDialog):
         from core.read_until import attach
         device = self.device_combo.currentText()
         action = self.action_combo.currentText()
+        if self._legacy_simulator_data and device_key(device) == 'simulator':
+            result = dict(self._legacy_simulator_data)
+            decoded = decode_device_step(result.get('params', ''))
+            if decoded:
+                key, spec, old_values = decoded
+                values = self.device_step_form.values()
+                if values != old_values:
+                    from core.read_until import settings
+                    result['params'] = attach(encode_device_step(key, spec.key, values), settings(result['params']))
+                    summary = '，'.join(f'{field.label}={values[field.key]}' for field in spec.fields if field.key != 'variable')
+                    result['name'] = f'{device}-{spec.label} ({summary})'
+            result.update(is_judgment=self.cb_judgment.isChecked(), fail_strategy=self.fail_strategy_combo.currentText())
+            return result
+        if device_key(device) == 'simulator' and action == '回读数据':
+            values = self.simulator_read_form.values()
+            return dict(device=device, action=action, params=encode_device_step('simulator', 'current_batch', values),
+                        type='读取仪表', is_judgment=False, fail_strategy=self.fail_strategy_combo.currentText(),
+                        name=f'电池模拟器-批量读取电流（{values["selection"]}，每通道{values["count"]}次，'
+                             f'{"最大值" if values["mode"] == "max" else "平均值"}）')
         if device in ('写入变量','读取变量'):
             return dict(device=device,action=action,params=self.variable_step_form.params(),type='读取变量',
                 is_judgment=self.cb_judgment.isChecked(),fail_strategy=self.fail_strategy_combo.currentText(),
@@ -3176,12 +3330,12 @@ class StepDialog(QDialog):
         if action in ('启动周期报文列表','停止周期报文列表'):
             c=self.can_periodic_form.config()
             return dict(device=device,action=action,
-                params=self.can_periodic_form.params()+f' / PCH:{self.can_physical_channel.currentData() or 0}',
+                params=self.can_periodic_form.params()+f' / PCH:{self._selected_physical_channel()}',
                 type='CAN交互',is_judgment=self.cb_judgment.isChecked(),fail_strategy=self.fail_strategy_combo.currentText(),
                 name=action+'：'+c['name'])
         if device == 'UDS 2E 三字段写入':
             return dict(device=device,action=action,
-                params=self.uds_field_write_form.params()+f' / PCH:{self.can_physical_channel.currentData() or 0}',
+                params=self.uds_field_write_form.params()+f' / PCH:{self._selected_physical_channel()}',
                 type='CAN交互',is_judgment=self.cb_judgment.isChecked(),
                 fail_strategy=self.fail_strategy_combo.currentText(),name='UDS 2E 三字段写入')
         if 'CANDBC' in device:
@@ -3190,7 +3344,7 @@ class StepDialog(QDialog):
             read_wait=self.read_until.config()
             if read_wait and config['output']=='choice':raise ValueError('枚举文字输出不能等待数值范围，请取消范围等待或改为物理数值')
             params=attach(encode_step(config),read_wait)
-            params+=f' / PCH:{self.can_physical_channel.currentData() or 0}'
+            params+=f' / PCH:{self._selected_physical_channel()}'
             return dict(device=device,action=action,params=params,type='CANDBC交互',
                         is_judgment=self.cb_judgment.isChecked(),fail_strategy=self.fail_strategy_combo.currentText(),
                         name=f'CANDBC {config["message"]}.{config["signal"]}')
@@ -3456,7 +3610,7 @@ class StepDialog(QDialog):
 
         if idx in (1, 7, 13):
             # CAN, EOL and UDS use one recipe-bound adapter and an explicit physical channel.
-            physical = self.can_physical_channel.currentData() or 0
+            physical = self._selected_physical_channel(self._is_plain_can_send())
             params.append(f'PCH:{physical}')
         params_str = " / ".join(params) if params else "--"
         if idx == 3:

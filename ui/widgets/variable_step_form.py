@@ -19,6 +19,14 @@ def catalog(parent):
             try:
                 c=decode(text)
                 if c and c['operation']=='write':keys.add(c['key'])
+                from core.device_steps import decode as decode_device
+                device_step = decode_device(text)
+                if device_step and device_step[0] == 'simulator' and device_step[1].key == 'current_batch':
+                    manager = getattr(node, 'device_manager', None)
+                    if manager is not None:
+                        from core.simulator_current_batch import selected_channels
+                        keys.update(f'电流-{channel}' for channel, _, _ in selected_channels(
+                            manager, device_step[2]['selection']))
                 import re
                 m=re.search(r'WRITE64:([^\s]+)',text)
                 if m:

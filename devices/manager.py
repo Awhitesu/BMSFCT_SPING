@@ -186,18 +186,16 @@ class DeviceManager:
         return bool(getattr(self, "enabled_devices", {}).get(key, True))
 
     def _get_sim_and_ch(self, global_ch: int):
-        """按照每台固定 24 通道的编号块查找实际通道。"""
+        """按启用设备序号和实际通道数量连续查找。"""
         try:
             channel = int(global_ch)
         except (TypeError, ValueError):
             return None, None
-        if channel != global_ch or not 1 <= channel <= 144:
+        if isinstance(global_ch, bool) or channel != global_ch or not 1 <= channel <= 144:
             return None, None
-        number, local = divmod(channel - 1, 24)
-        for slot, sim in enumerate(self.simulators, 1):
-            if (self.is_enabled(f"sim{slot}") and sim.sequence_number == number + 1
-                    and local < sim.max_channels):
-                return sim, local + 1
+        for number, sim, local in self.simulator_channels():
+            if channel == number:
+                return sim, local
         return None, None
 
     def set_voltage(self, global_ch: int, voltage: float, logger=None, cancelled=lambda:False):
@@ -208,10 +206,10 @@ class DeviceManager:
 
     def simulator_channels(self):
         """所有已启用模拟器组成一套设备，按全局通道编号排序。"""
-        return sorted(((sim.sequence_number - 1) * 24 + ch, sim, ch)
-                      for slot, sim in enumerate(self.simulators, 1)
-                      if self.is_enabled(f"sim{slot}")
-                      for ch in range(1, sim.max_channels + 1))
+        from .simulator_config import channel_routes
+        return channel_routes((sim.sequence_number, sim.max_channels, sim)
+                              for slot, sim in enumerate(self.simulators, 1)
+                              if self.is_enabled(f"sim{slot}"))
 
     def set_current(self, global_ch: int, current: float, logger=None, cancelled=lambda:False):
         sim, ch = self._get_sim_and_ch(global_ch)

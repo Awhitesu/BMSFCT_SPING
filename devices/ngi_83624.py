@@ -485,6 +485,23 @@ class NGI83624:
                 if now>=deadline:raise RuntimeError('Simulator snapshot did not stabilize')
                 time.sleep(min(self.OUTPUT_POLL_INTERVAL,deadline-now))
 
+    def read_current_sample(self, channel, logger=None, cancelled=lambda:False):
+        """One fresh current sample in mA; errors raise, signed current is valid."""
+        if type(channel) is not int or not 1 <= channel <= self.max_channels:
+            raise ValueError('模拟器电流读取通道无效')
+        with self._lock:
+            if cancelled():raise RuntimeError('电流采集已停止')
+            try:
+                value = float(self._query(f'MEAS{channel}:CURR?', logger))
+                if not math.isfinite(value) or abs(value) >= 9e37:
+                    raise ValueError('模拟器电流数据无效或超量程')
+                if cancelled():raise RuntimeError('电流采集已停止')
+                self.last_error = ''
+                return value
+            except Exception as exc:
+                self.last_error = str(exc)
+                raise
+
     def read_stable(self,channel,quantity,logger=None,cancelled=lambda:False):
         """Return latest stable sample, never average away an out-of-range value.
 

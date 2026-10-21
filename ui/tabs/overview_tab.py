@@ -337,6 +337,8 @@ class OverviewTab(QWidget):
         self.step_tree = TestSequenceTree(self)
         self.step_tree.setItemDelegateForColumn(6, TestStatusDelegate(self.step_tree))
         self.step_tree.setHeaderLabels(["序号", "名称", "下限", "上限", "测试值", "单位", "判定"])
+        self.step_tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.step_tree.setToolTip('Shift 连续选中多行，Ctrl 追加或取消选中；右键可批量勾选选中的测试项。')
         self.step_tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.step_tree.customContextMenuRequested.connect(self._test_context_menu)
 
@@ -928,6 +930,11 @@ class OverviewTab(QWidget):
         self._plc_config_error = ""
         self._drain_plc_recipe()
 
+    def _plc_enabled(self):
+        manager = getattr(self.engine, 'device_manager', None)
+        enabled = getattr(manager, 'is_enabled', None)
+        return bool(enabled('easy320')) if callable(enabled) else True
+
     def apply_selected_recipe_can(self, recipe):
         """选择型号后按配方使能重启上位机、同步 INI，并应用 CAN 参数。"""
         if self._closing or self._prepare_task.isRunning():
@@ -974,7 +981,13 @@ class OverviewTab(QWidget):
         return accepted
 
     def _drain_plc_recipe(self):
-        if self._closing or self._pending_plc_recipe is None:
+        if self._closing:
+            return
+        if not self._plc_enabled():
+            self._pending_plc_recipe = None
+            self._plc_config_error = ''
+            return
+        if self._pending_plc_recipe is None:
             return
         if self._plc_task.isRunning():
             QTimer.singleShot(50, self._drain_plc_recipe)
@@ -982,9 +995,6 @@ class OverviewTab(QWidget):
         number = self._pending_plc_recipe
         manager = getattr(self.engine, 'device_manager', None)
         plc = getattr(manager, 'easy320', None)
-        if manager and hasattr(manager, 'is_enabled') and not manager.is_enabled('easy320'):
-            self._pending_plc_recipe = None
-            return
         def write_recipe():
             if plc is None:
                 raise RuntimeError('PLC is not configured')
@@ -996,6 +1006,10 @@ class OverviewTab(QWidget):
                 raise RuntimeError('PLC recipe confirmation failed')
             return number
         def completed(ok, result):
+            if not self._plc_enabled():
+                self._pending_plc_recipe = None
+                self._plc_config_error = ''
+                return
             if self._pending_plc_recipe == number:
                 self._pending_plc_recipe = None
                 self._plc_config_error = '' if ok else str(result)
@@ -1162,6 +1176,11 @@ class OverviewTab(QWidget):
         action = menu.addAction(f'调试勾选测试项（{len(checked)}项）', lambda: self._debug_test_items(checked))
         action.setEnabled(bool(checked))
         menu.addSeparator()
+        selected = self._selected_debug_item_indices()
+        for text,mode in [(f'勾选选中测试项（{len(selected)}项）','selected'),('取消勾选选中测试项','selected_none')]:
+            action=menu.addAction(text,lambda checked=False,mode=mode:self._select_debug_items(mode))
+            action.setEnabled(bool(selected))
+        menu.addSeparator()
         for text, mode in [('全选', 'all'), ('全不选', 'none'), ('反选', 'invert'), ('只选失败项', 'failed')]:
             menu.addAction(text, lambda checked=False, mode=mode: self._select_debug_items(mode))
         menu.addSeparator()
@@ -1174,14 +1193,24 @@ class OverviewTab(QWidget):
         raw = data.get('raw_data', {})
         return not str(raw.get('name', node.text(1))).strip().startswith('#') and not raw.get('skip_runtime', False)
 
+    def _selected_debug_item_indices(self):
+        indices=set()
+        for node in self.step_tree.selectedItems():
+            while node.parent() is not None:node=node.parent()
+            index=self.step_tree.indexOfTopLevelItem(node)
+            if index>=0:indices.add(index)
+        return sorted(indices)
+
     def _select_debug_items(self, mode):
         if self._run_busy() or not self._can_debug_tests():
             return
-        if mode not in ('all', 'none', 'invert', 'failed'):
+        if mode not in ('all', 'none', 'invert', 'failed', 'selected', 'selected_none'):
             raise ValueError('未知调试选择操作')
-        for index in range(self.step_tree.topLevelItemCount()):
+        indices=(self._selected_debug_item_indices() if mode in ('selected','selected_none')
+                 else range(self.step_tree.topLevelItemCount()))
+        for index in indices:
             node = self.step_tree.topLevelItem(index)
-            selected = (mode == 'all' or (mode == 'invert' and node.checkState(0) != Qt.Checked)
+            selected = (mode in ('all','selected') or (mode == 'invert' and node.checkState(0) != Qt.Checked)
                         or (mode == 'failed' and node.text(6) == 'FAIL'))
             node.setCheckState(0, Qt.Checked if selected and self._debug_item_executable(node) else Qt.Unchecked)
 
@@ -1263,7 +1292,10 @@ class OverviewTab(QWidget):
             QMessageBox.warning(self, "警告", "当前测试序列为空!")
             return False
 
-        if self._pending_plc_recipe is not None or self._plc_config_error:
+        if not self._plc_enabled():
+            self._pending_plc_recipe = None
+            self._plc_config_error = ''
+        elif self._pending_plc_recipe is not None or self._plc_config_error:
             QMessageBox.warning(self, "Preparation", "PLC recipe confirmation is pending")
             return False
         if self._recipe_can_error:
@@ -1478,9 +1510,11 @@ class OverviewTab(QWidget):
             monitor.stop()
         from core.recipe_can_requirement import validate_recipe_can
         try:
+            from core.can_step_channels import migrate_recipe_channels
+            migrate_recipe_channels(recipe_dict)
             validate_recipe_can(recipe_dict)
-            from core.dbc_signals import validate_recipe_dbc
-            validate_recipe_dbc(recipe_dict)
+            from core.dbc_signals import rebind_recipe_dbc
+            rebind_recipe_dbc(recipe_dict)
         except ValueError as exc:
             return False, str(exc)
         manager = getattr(self.engine, "device_manager", None)
@@ -1512,8 +1546,6 @@ class OverviewTab(QWidget):
                 if can_config.get('zlg') is not None and str(can_config.get('channel', '')).startswith('ZLG_CAN'):
                     from core.zlg_recipe_config import validate_zlg_config
                     zlg_config = validate_zlg_config(can_config['zlg'])
-                    if can_config['channel'] != f"ZLG_CAN{zlg_config['send_channel']}":
-                        return False, 'ZLG发送通道与整机配置不一致'
                 if pcan.disconnect() is False:
                     return False, '旧CAN连接未确认释放，未应用配方参数'
                 if self._prepare_cancel.is_set():

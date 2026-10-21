@@ -15,11 +15,18 @@ class DeviceEditorTests(unittest.TestCase):
                 group,label=DEVICES[key]
                 for spec in specs:
                     with self.subTest(device=key,action=spec.key):
-                        source.category_combo.setCurrentText('设备操作')
-                        source.sub_category_combo.setCurrentText(group)
-                        source.device_combo.setCurrentText(label)
-                        source.action_combo.setCurrentText(spec.label)
-                        self.assertEqual(source.param_stack.currentWidget(),source.device_step_form)
+                        if key == 'simulator' and spec.key != 'current_batch':
+                            # Historical actions remain editable, but are no longer offered for new steps.
+                            source._load_data(dict(device=label,action=spec.label,params=encode(key,spec.key,{}),
+                                                   type='读取仪表' if spec.read else '设置仪表'))
+                        else:
+                            source.category_combo.setCurrentText('设备操作')
+                            source.sub_category_combo.setCurrentText(group)
+                            source.device_combo.setCurrentText(label)
+                            source.action_combo.setCurrentText(spec.label)
+                            source.action_combo.activated.emit(source.action_combo.currentIndex())
+                        expected = source.simulator_read_form if spec.key == 'current_batch' else source.device_step_form
+                        self.assertEqual(source.param_stack.currentWidget(),expected)
                         source.cb_judgment.setChecked(spec.read)
                         source.fail_strategy_combo.setCurrentText('重试3次')
                         data=source.get_data()
@@ -40,7 +47,7 @@ class DeviceEditorTests(unittest.TestCase):
 
     def test_existing_device_actions_are_retained(self):
         page=StepDialog()
-        for key,label in [('simulator','快捷批量配置'),('dut_power','设置参数'),
+        for key,label in [('simulator','快捷配置'),('dut_power','设置参数'),
                           ('easy320','闭合勾选通道'),('ca550','参数设置')]:
             group,device=DEVICES[key]
             page.sub_category_combo.setCurrentText(group);page.device_combo.setCurrentText(device)

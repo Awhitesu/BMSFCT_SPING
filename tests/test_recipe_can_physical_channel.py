@@ -25,7 +25,7 @@ class RecipeParent(QWidget):
         return dict(channel=self.channel)
 
 
-@pytest.mark.parametrize('channel,count',[('PCAN_USBBUS1',2),('ZLG_CAN2',5)])
+@pytest.mark.parametrize('channel,count',[('PCAN_USBBUS1',1),('ZLG_CAN2',4)])
 def test_editor_inherits_recipe_and_roundtrips_physical_channel(channel,count):
     parent=RecipeParent(channel)
     page=StepDialog(parent)
@@ -33,12 +33,12 @@ def test_editor_inherits_recipe_and_roundtrips_physical_channel(channel,count):
         assert page.can_physical_channel.count()==count
         page.category_combo.setCurrentText('报文交互')
         page.device_combo.setCurrentText('CAN 交互')
-        page.action_combo.setCurrentText('发送指令')
+        page.action_combo.setCurrentText('接收指定帧ID')
         page.can_physical_channel.setCurrentIndex(count-1)
         saved=page.get_data()
-        assert f'PCH:{count-1}' in saved['params']
+        assert f'PCH:{count}' in saved['params']
         restored=StepDialog(parent,step_data=saved)
-        try:assert restored.can_physical_channel.currentData()==count-1
+        try:assert restored.can_physical_channel.currentData()==count
         finally:restored.close()
         assert page.c_channel.isHidden()
         assert ('ZLG' if channel.startswith('ZLG') else 'PCAN_USBBUS1') in page.can_binding_label.text()

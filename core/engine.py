@@ -178,6 +178,7 @@ class ChannelWorker(QObject):
         self.variables = {}
         self.step_outputs={}
         self.last_output=None
+        self._dbc_group_context=None
         self.sn_barcode = ""
         self.app_flash_config = None
         from core.user_session import get_current_user
@@ -373,7 +374,7 @@ class ChannelWorker(QObject):
             
             # 瞬间在 0ms 内完成当前项及其所有子步骤的状态登记与跳过广播！
             trace("STEP_SKIP", self.channel_id, step_idx=self.current_step_index, step=step.name)
-            self.step_started.emit(self.channel_id, self.current_step_index, step.name)
+            # 跳过项只更新状态，不能触发运行高亮和自动滚动。
             self.step_statuses[(self.current_step_index, step.name)] = True
             self.step_finished.emit(self.channel_id, self.current_step_index, step.name, True, "跳过")
             
@@ -531,12 +532,66 @@ class ChannelWorker(QObject):
         return board
 
     def _step_can_driver(self, driver, params):
-        values = self._parse_key_values((params or {}).get('params', ''))
-        physical = int(values.get('PCH', '0'))
-        if physical == 0:
-            return driver
+        from core.can_step_channels import selection, resolve_channels
+        text = (params or {}).get('params', '')
+        if selection(text) == '0':return driver
+        maximum = 4 if str(getattr(driver,'channel','')).startswith('ZLG_CAN') else 1
+        physical = resolve_channels(text, maximum=maximum)[0]
+        if maximum == 1:return driver
         from devices.can_channel_view import CANChannelView
         return CANChannelView(driver, physical)
+
+    def _send_can_step(self, mgr, params, logger):
+        from core.can_step_channels import selection, resolve_channels
+        token = selection(params.get('params', ''))
+        multi = token.upper() == 'ALL' or ',' in token or '，' in token
+        board = self._get_can_board(mgr, None if multi else params)
+        config = self._parse_can_params(params)
+        physical = token
+        if token == '0':
+            channel = getattr(board.can,'channel','')
+            physical = channel.removeprefix('ZLG_CAN') if isinstance(channel,str) and channel.startswith('ZLG_CAN') else '1'
+        targets = [(physical, board.can)]
+        if multi:
+            from devices.can_channel_view import CANChannelView
+            driver = board.can
+            maximum = 4 if str(getattr(driver,'channel','')).startswith('ZLG_CAN') else 1
+            active = getattr(getattr(driver, 'bus', None), 'enabled_channels', None)
+            enabled = {ch+1 for ch in active} if maximum == 4 and isinstance(active,(set,list,tuple)) else None
+            channels = resolve_channels(params.get('params',''), maximum=maximum, enabled=enabled, multiple=True)
+            targets = [(str(ch), CANChannelView(driver, ch)) for ch in channels]
+        failures = []
+        for physical, driver in targets:
+            if not self.is_running or self.cancel_event.is_set():raise RuntimeError('测试已停止')
+            try:
+                if not driver.send_can_message(config['channel_id'], config['can_id'], config['can_type'], config['dlc'], config['data']):
+                    raise ConnectionError(getattr(driver,'last_error','') or '发送未确认成功')
+                logger(f'CAN TX 物理通道CH{physical} ID=0x{config["can_id"]:X} DATA={config["data"].hex(" ").upper()}')
+            except Exception as exc:
+                failures.append(f'CH{physical}: {exc}')
+        if failures:raise ConnectionError('CAN发送失败：'+'；'.join(failures))
+        return True
+
+    def _dbc_interface(self, driver, params):
+        selected=self._step_can_driver(driver,params)
+        physical=getattr(selected,'physical_channel',None)
+        return f'ZLG_CAN{physical}' if physical is not None and driver.channel.startswith('ZLG_CAN') else driver.channel
+
+    def _dbc_group_requests(self, group, driver, config, interface):
+        """Only active reads in this contiguous condition group participate, including debug subsets."""
+        from core.dbc_signals import decode_step
+        requests=[]
+        for index in range(self.current_step_index,len(self.steps)):
+            parent=self.steps[index]
+            if parent.skip_runtime or parent.name.strip().startswith('#'):continue
+            first=self.current_sub_step_index if index==self.current_step_index else 0
+            for sub in parent.sub_steps[first:]:
+                if sub.params.get('skip_runtime') or str(sub.params.get('name','')).strip().startswith('#'):continue
+                if sub.type!=SubStepType.CAN_DBC:return requests or [(config,interface)]
+                target=decode_step(sub.params.get('params',''))
+                if target.get('group','')!=group:return requests or [(config,interface)]
+                requests.append((target,self._dbc_interface(driver,sub.params)))
+        return requests or [(config,interface)]
 
     def _execute_eol_protocol(self, mgr, params, hw_logger):
         params_str = params.get("params", "")
@@ -956,6 +1011,7 @@ class ChannelWorker(QObject):
         def sg_read_progress(done, total, address):
             sg_update(f"回读校验中 · {done}/{total} 字节 · 0x{address:08X}", done / total * 100)
         try:
+            if sub_step.type!=SubStepType.CAN_DBC:self._dbc_group_context=None
             if not mgr and sub_step.type != SubStepType.WAIT: raise ValueError("设备管理器未初始化")
             def hw_logger(msg):
                 self.last_hw_log = msg
@@ -1343,23 +1399,37 @@ class ChannelWorker(QObject):
                 success, result_value = (poll(read, config, self.cancel_event.is_set, self.cancel_event.wait, hw_logger) if config else read())
 
             elif sub_step.type == SubStepType.CAN_DBC:
-                from core.dbc_signals import decode_step,execute_read
+                from core.dbc_signals import decode_step,execute_read,resolve_step,refresh_group,signal_key
                 from core.read_until import settings
                 config=decode_step(params.get('params',''))
                 driver=getattr(mgr,'pcan',None)
                 if driver is None or not driver.is_connected:raise ValueError('DBC读取需要已连接的配方CAN卡')
-                selected=self._step_can_driver(driver,params)
-                physical=getattr(selected,'physical_channel',None)
-                interface=f'ZLG_CAN{physical}' if physical is not None and driver.channel.startswith('ZLG_CAN') else driver.channel
+                monitor=mgr.dbc_monitor
+                interface=self._dbc_interface(driver,params)
+                options={}
+                if config.get('group'):
+                    config=resolve_step(config,monitor.asset)
+                    context=self._dbc_group_context
+                    position=(self.current_step_index,self.current_sub_step_index)
+                    attempt=(self.step_retry_count,self._retry_count)
+                    if (not context or context['name']!=config['group']
+                            or context['context']!=monitor.context_token()
+                            or context.get('attempts',{}).get(position,attempt)!=attempt
+                            or signal_key(config,interface) not in context['keys']):
+                        self._dbc_group_context=None
+                        requests=self._dbc_group_requests(config['group'],driver,config,interface)
+                        context=refresh_group(monitor,requests,config['group'],self.cancel_event.is_set,
+                                              self.cancel_event.wait,hw_logger)
+                        self._dbc_group_context=context
+                    context.setdefault('attempts',{})[position]=attempt
+                    options=dict(since=context['since'],context=context['context'])
+                else:self._dbc_group_context=None
                 success,result_value=execute_read(mgr.dbc_monitor,config,interface,self.cancel_event.is_set,
-                    self.cancel_event.wait,hw_logger,settings(params.get('params','')))
+                    self.cancel_event.wait,hw_logger,settings(params.get('params','')),**options)
                 if success and config.get('variable'):self.variables[config['variable']]=result_value
 
             elif sub_step.type == SubStepType.CAN_SEND:
-                board = self._get_can_board(mgr, params)
-                cfg = self._parse_can_params(params)
-                success = board.can.send_can_message(cfg["channel_id"], cfg["can_id"], cfg["can_type"], cfg["dlc"], cfg["data"])
-                hw_logger(f"CAN TX CH:{cfg['channel_id']} ID=0x{cfg['can_id']:X} DATA={cfg['data'].hex(' ').upper()}")
+                success = self._send_can_step(mgr, params, hw_logger)
 
             elif sub_step.type == SubStepType.CAN_INTERACT:
                 device = str(params.get("device", "")).lower()
@@ -1763,7 +1833,7 @@ class ChannelWorker(QObject):
         try:self.periodic_can.check()
         except RuntimeError as exc:
             success=False;result_value='FAIL: '+str(exc)
-        if not success and any(name in control_device for name in ('ca550', 'hv_source', 'hv source', 'ngi', '高压源', 'it6722', 'dut power', '被测物供电', 'main')):
+        if not success and 'simulator' not in control_device and any(name in control_device for name in ('ca550', 'hv_source', 'hv source', 'ngi', '高压源', 'it6722', 'dut power', '被测物供电', 'main')):
             key = 'ca550' if 'ca550' in control_device else ('hv_source' if any(name in control_device for name in ('hv_source','hv source','ngi','高压源')) else 'dut_power')
             driver = getattr(mgr, key, None)
             details = getattr(driver, 'last_control', None)

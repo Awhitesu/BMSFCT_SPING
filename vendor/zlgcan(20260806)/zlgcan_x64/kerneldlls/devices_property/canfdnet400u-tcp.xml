@@ -335,7 +335,7 @@
 				</meta>
 			</add_dynamic_data>
 			<apply_dynamic_data flag="0x002F">
-				<value>0</value>
+				<value>&#01;</value>
 				<meta>
 					<type>string</type>
 					<visible>false</visible>

@@ -1,6 +1,7 @@
 """按实际窗口行数翻页，不改变测试节点、数值、选择或执行索引。"""
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
+import time
 
 import pytest
 from PySide6.QtCore import Qt
@@ -8,6 +9,7 @@ from PySide6.QtWidgets import QApplication, QTreeWidgetItem
 
 from ui.tabs.overview_tab import OverviewTab
 from ui.widgets.test_sequence_tree import TestSequenceTree as SequenceTree
+from core.engine import TestEngine as Engine
 
 
 app = QApplication.instance() or QApplication([])
@@ -173,3 +175,47 @@ def test_worker_start_follows_only_its_own_channel_and_next_run_resets_scroll():
         tree.close()
         tree.setParent(page)
         page.close()
+
+
+@pytest.mark.parametrize('selected,commented', [((0,),False),((4,),False),((0,16),False),((2,48),False),((0,),True)])
+def test_skipped_items_do_not_move_scroll_after_selected_tests_finish(selected,commented):
+    with patch.object(OverviewTab,'load_default_or_first_recipe',lambda self:None):
+        page=OverviewTab(Engine())
+    page.stop_monitor()
+    tree=page.step_tree;tree.setParent(None);tree.resize(800,500)
+    items=[]
+    for index in range(60):
+        skipped=index not in selected
+        name=('#' if skipped and commented else '')+f'Test {index+1}'
+        item=dict(name=name,standard_type='不判断',min='',max='',skip_runtime=skipped and not commented,
+                  sub_steps=[dict(name='delay',device='等待',action='固定延时',type='等待',params='1ms')])
+        items.append(item)
+        row=QTreeWidgetItem(tree,[str(index+1),name,'','','','','WAIT'])
+        row.setCheckState(0,Qt.Checked if not skipped else Qt.Unchecked)
+        QTreeWidgetItem(row,[f'{index+1}.1','delay','','','','','WAIT'])
+    started=[];completed=[]
+    page.engine.step_started.connect(lambda _channel,index,_name:started.append(index))
+    page.engine.channel_test_finished.connect(lambda _channel,passed:completed.append(passed))
+    tree.show();settle()
+    try:
+        set_page_rows(tree,15)
+        assert page._launch_prepared_test(dict(name='selected-scroll',items=items,operator_name='tester',_debug_run=True),'')
+        deadline=time.monotonic()+5
+        while page.engine.workers and time.monotonic()<deadline:
+            app.processEvents();time.sleep(.002)
+        assert not page.engine.workers
+        settle()
+        assert completed==[True]
+        assert started==list(selected)
+        expected_top=selected[-1] if selected[-1]>=15 else 0
+        assert top_row(tree) is tree.topLevelItem(expected_top)
+        for index in range(60):
+            assert tree.topLevelItem(index).text(6)==('PASS' if index in selected else 'SKIP')
+            assert tree.topLevelItem(index).child(0).text(6)==('PASS' if index in selected else 'SKIP')
+            assert tree.topLevelItem(index).checkState(0)==(Qt.Checked if index in selected else Qt.Unchecked)
+    finally:
+        page.engine.stop_all()
+        deadline=time.monotonic()+5
+        while page.engine.workers and time.monotonic()<deadline:
+            app.processEvents();time.sleep(.002)
+        page.begin_shutdown();tree.close();tree.setParent(page);page.close()

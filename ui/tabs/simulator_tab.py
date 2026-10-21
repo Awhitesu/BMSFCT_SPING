@@ -220,7 +220,7 @@ class SimulatorTab(QWidget):
         from devices.simulator_config import simulator_settings
         page = QWidget()
         layout = QVBoxLayout(page)
-        tip = QLabel("最多6台，每台1–24通道；序号1对应1–24，序号2对应25–48，第6台对应121–144。勾选的设备组成一套模拟器。")
+        tip = QLabel("最多6台，每台1–24通道。已启用设备按设备序号排序，按配置的通道数量连续编号；未启用设备不占编号。保存并应用后生效。")
         tip.setWordWrap(True)
         layout.addWidget(tip)
         cfg = self.mgr.db_manager.load_sys_config() or {} if self.mgr and self.mgr.db_manager else {}
@@ -253,6 +253,7 @@ class SimulatorTab(QWidget):
             number.valueChanged.connect(self._update_ranges)
             count.valueChanged.connect(self._update_ranges)
         self._update_ranges()
+        self.settings_table.itemChanged.connect(lambda item: self._update_ranges() if item.column() == 0 else None)
         layout.addWidget(self.settings_table, 1)
         self.btn_save_settings = QPushButton("保存并应用模拟器配置")
         self.btn_save_settings.setMinimumHeight(44)
@@ -261,11 +262,26 @@ class SimulatorTab(QWidget):
         self.tabs.addTab(page, "设备设置（最多6台）")
 
     def _update_ranges(self):
-        for row, (_, _, number, count) in enumerate(self.settings_controls):
-            start = (number.value() - 1) * 24 + 1
-            item = QTableWidgetItem(f"{start}–{start+count.value()-1}")
-            item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-            self.settings_table.setItem(row, 6, item)
+        from devices.simulator_config import channel_routes
+        ranges = {}
+        error = ''
+        try:
+            routes = channel_routes((number.value(), count.value(), row)
+                                    for row, (_, _, number, count) in enumerate(self.settings_controls)
+                                    if self.settings_table.item(row, 0).checkState() == Qt.Checked)
+            for global_ch, row, _ in routes:
+                ranges.setdefault(row, []).append(global_ch)
+        except ValueError as exc:
+            error = str(exc)
+        with QSignalBlocker(self.settings_table):
+            for row in range(len(self.settings_controls)):
+                enabled = self.settings_table.item(row, 0).checkState() == Qt.Checked
+                channels = ranges.get(row, [])
+                text = '未启用' if not enabled else ('配置无效' if error else f'{channels[0]}–{channels[-1]}')
+                item = QTableWidgetItem(text)
+                item.setToolTip(error if enabled else '')
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                self.settings_table.setItem(row, 6, item)
 
     def save_simulator_settings(self):
         if self.operation.isRunning():return

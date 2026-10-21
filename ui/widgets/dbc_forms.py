@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (QWidget,QGroupBox,QVBoxLayout,QHBoxLayout,QFormLa
     QPushButton,QFileDialog,QMessageBox,QComboBox,QDoubleSpinBox,QCheckBox,QLineEdit,
     QTableWidget,QTableWidgetItem,QHeaderView,QSpinBox)
 from ui.device_task import DeviceTask
-from core.dbc_signals import import_dbc,catalog,decode_step
+from core.dbc_signals import import_dbc,catalog,decode_step,resolve_step
 
 
 class DBCImportForm(QGroupBox):
@@ -54,16 +54,19 @@ class DBCStepForm(QWidget):
         self.signal.completer().setFilterMode(Qt.MatchContains)
         self.signal.completer().setCaseSensitivity(Qt.CaseInsensitive)
         self.info=QLabel('');self.info.setWordWrap(True);self.info.setTextFormat(Qt.PlainText)
-        self.output=QComboBox();self.output.addItem('物理数值（按DBC比例、偏移换算）','value');self.output.addItem('枚举含义文本（用于字符串判定）','choice')
         self.timeout=QDoubleSpinBox();self.timeout.setRange(.01,3600);self.timeout.setValue(5);self.timeout.setSuffix(' s')
-        self.interval=QDoubleSpinBox();self.interval.setRange(.01,60);self.interval.setValue(.1);self.interval.setSuffix(' s')
+        self.interval=QDoubleSpinBox();self.interval.setRange(.01,60);self.interval.setValue(.01);self.interval.setSuffix(' s')
         self.max_age=QDoubleSpinBox();self.max_age.setRange(.01,3600);self.max_age.setValue(1);self.max_age.setSuffix(' s')
-        self.new_frame=QCheckBox('必须收到本工步开始后的新报文（推荐）');self.new_frame.setChecked(True)
+        self.new_frame=QCheckBox('仅使用本工步开始后的新报文（特殊读取）');self.new_frame.setChecked(False)
+        self.group=QLineEdit();self.group.setMaxLength(128)
+        self.group.setPlaceholderText('选填；同一工况填相同名称，首项统一等待本组信号刷新')
+        self.group.textChanged.connect(self._group_changed)
         self.variable=QLineEdit();self.variable.setPlaceholderText('选填，例如 BMS_SOC；供后续变量读取或公式计算使用')
-        tip=QLabel('先在配方中导入DBC，再输入信号名称筛选并选择。后台解码不发送报文；没有有效新值或数据过期会失败。可在下方勾选“等待回读进入范围”设置上下限并提前完成。');tip.setWordWrap(True)
+        tip=QLabel('固定读取DBC解码后的实际值。默认读取最新有效值，无数据或数据过期时才等待更新。采样组首项统一等待本组实际执行的信号刷新，后续读取同组最新有效值；切换工况请使用不同组名，并将稳定延时放在读取前。后台解码不发送报文。');tip.setWordWrap(True)
         form.addRow(tip);form.addRow('DBC信号：',self.signal);form.addRow(self.info)
-        form.addRow('输出：',self.output);form.addRow('等待有效信号超时：',self.timeout)
+        form.addRow('等待有效信号超时：',self.timeout)
         form.addRow('检查周期：',self.interval);form.addRow('数据有效期：',self.max_age);form.addRow(self.new_frame)
+        form.addRow('采样组（同一工况）：',self.group)
         form.addRow('保存到变量：',self.variable)
         self.signal.currentIndexChanged.connect(self.show_info);self.show_info()
 
@@ -84,18 +87,24 @@ class DBCStepForm(QWidget):
 
     def show_info(self):
         row=self.signal.currentData()
-        if row:self.info.setText(f'CAN ID 0x{row["frame_id"]:X} · {"扩展帧" if row["extended"] else "标准帧"} · 单位 {row["unit"] or "无"} · DBC定义范围 [{row["minimum"]}, {row["maximum"]}]（测试上下限需自行设置）')
+        if row:self.info.setText(f'CAN ID 0x{row["frame_id"]:X} · {"扩展帧" if row["extended"] else "标准帧"} · 实际值单位 {row["unit"] or "无"} · DBC定义范围 [{row["minimum"]}, {row["maximum"]}]（测试上下限按实际值填写）')
 
     def config(self):
         if not self._loaded:raise ValueError('DBC信号正在加载，请稍后再确认')
         index=self.signal.findText(self.signal.currentText(),Qt.MatchExactly)
         row=self.signal.itemData(index) if index>=0 else None
         if not row or not self.asset:raise ValueError('请从当前配方DBC中选择有效信号')
-        if self.output.currentData()=='choice' and not row.get('has_choices'):raise ValueError('该信号没有DBC枚举定义，请选择物理数值输出')
         variable=self.variable.text().strip()
         if variable and (not variable.isidentifier() or variable.startswith('__')):raise ValueError('变量名应为有效标识符，例如 BMS_SOC')
-        return dict(row,sha256=self.asset['sha256'],output=self.output.currentData(),variable=variable,
+        result=dict(row,sha256=self.asset['sha256'],output='value',variable=variable,
                     timeout=self.timeout.value(),interval=self.interval.value(),max_age=self.max_age.value(),new_frame=self.new_frame.isChecked())
+        if self.group.text().strip():result['group']=self.group.text().strip()
+        return result
+
+    def _group_changed(self):
+        grouped=bool(self.group.text().strip())
+        if grouped:self.new_frame.setChecked(False)
+        self.new_frame.setEnabled(not grouped)
 
     def load(self,text):
         c=decode_step(text)
@@ -104,12 +113,18 @@ class DBCStepForm(QWidget):
         if self._loaded:self._load_config(c)
 
     def _load_config(self,c):
-        index=next((i for i in range(self.signal.count()) if all(self.signal.itemData(i).get(k)==c[k] for k in ('message','signal','frame_id','extended'))),-1)
+        try:
+            resolved=resolve_step(dict(c,output='value'),self.asset)
+            index=self.signal.findText(resolved['label'],Qt.MatchExactly)
+            error=''
+        except ValueError as exc:index=-1;error=str(exc)
         self.signal.setCurrentIndex(index)
-        if index<0 or not self.asset or c['sha256']!=self.asset['sha256']:
+        if index<0:
             self.signal.setCurrentIndex(-1);self.signal.setEditText('原DBC信号已失效，请重新选择')
+            self.info.setText(error or '当前DBC中找不到对应信号')
         for widget,key in [(self.timeout,'timeout'),(self.interval,'interval'),(self.max_age,'max_age')]:widget.setValue(c[key])
-        self.new_frame.setChecked(bool(c.get('new_frame',True)));self.output.setCurrentIndex(max(0,self.output.findData(c.get('output','value'))))
+        self.new_frame.setChecked(bool(c.get('new_frame',True)))
+        self.group.setText(c.get('group',''))
         self.variable.setText(c.get('variable',''))
 
 

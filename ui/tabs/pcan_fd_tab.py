@@ -40,6 +40,7 @@ class PCANFDTab(QWidget):
         from ui.layout_safety import protect_form_layout
         protect_form_layout(self)
         self.timer = QTimer(self)
+        self.timer.timeout.connect(self._update_transmit_channels)
         self.timer.timeout.connect(self.update_monitor)
         self.timer.start(50)
 
@@ -58,6 +59,7 @@ class PCANFDTab(QWidget):
         row = QHBoxLayout(connection)
         self.device_type = QComboBox()
         self.device_type.addItems(['PCAN USB', 'ZLG CANFDNET-400U'])
+        self.device_type.setCurrentIndex(1 if self.driver.channel.startswith('ZLG_CAN') else 0)
         row.addWidget(QLabel('设备')); row.addWidget(self.device_type)
         self.channel = QComboBox()
         self.channel.setEditable(False)
@@ -68,10 +70,11 @@ class PCANFDTab(QWidget):
         self.data_rate = QComboBox()
         self.data_rate.addItems(["500000", "1000000", "2000000", "4000000", "5000000", "8000000"])
         self.data_rate.setCurrentText(str(getattr(self.driver, "data_bitrate", 2000000)))
-        row.addWidget(QLabel("发送 / UDS通道")); row.addWidget(self.channel)
-        refresh_usb = QPushButton("刷新USB")
-        refresh_usb.clicked.connect(lambda: self.refresh_pcan_channels())
-        row.addWidget(refresh_usb)
+        self.pcan_channel_label = QLabel('PCAN通道')
+        row.addWidget(self.pcan_channel_label); row.addWidget(self.channel)
+        self.refresh_usb = QPushButton("刷新USB")
+        self.refresh_usb.clicked.connect(lambda: self.refresh_pcan_channels())
+        row.addWidget(self.refresh_usb)
         row.addWidget(QLabel("仲裁波特率")); row.addWidget(self.nominal)
         row.addWidget(QLabel("数据波特率")); row.addWidget(self.data_rate)
         self.btn_connect = QPushButton("连接")
@@ -139,9 +142,7 @@ class PCANFDTab(QWidget):
         self.can_connection_tip.setWordWrap(True)
         layout.addWidget(self.can_connection_tip)
         self.channel.currentIndexChanged.connect(self._update_connection_controls)
-        self.channel.editTextChanged.connect(self._update_connection_controls)
-        self.device_type.currentIndexChanged.connect(lambda index: self.channel.setCurrentText('ZLG_CAN1' if index else 'PCAN_USBBUS1'))
-        self._update_connection_controls()
+        self.device_type.currentIndexChanged.connect(self._update_connection_controls)
 
         layout = outer
         common = QHBoxLayout()
@@ -198,6 +199,8 @@ class PCANFDTab(QWidget):
         send_layout = QVBoxLayout(tab_send)
         send_group = QGroupBox("CAN / CAN-FD 报文发送")
         form = QFormLayout(send_group)
+        self.send_channel = QComboBox()
+        self.send_channel.setToolTip('ZLG手动发送与UDS共用此物理通道；切换无需重连，不修改配方工步。PCAN使用连接区所选USB通道。')
         self.can_id = QLineEdit("0x7F0")
         self.frame_type = QComboBox()
         self.frame_type.addItems(["经典 CAN", "CAN-FD", "CAN-FD + BRS"])
@@ -205,6 +208,7 @@ class PCANFDTab(QWidget):
         self.data = QLineEdit("00 00 00 00 00 00 00 00")
         send_btn = QPushButton("发送报文")
         send_btn.clicked.connect(self.send_message)
+        form.addRow('发送物理通道', self.send_channel)
         form.addRow("CAN ID", self.can_id)
         form.addRow("帧类型", self.frame_type)
         form.addRow("DLC", self.dlc)
@@ -243,6 +247,8 @@ class PCANFDTab(QWidget):
         self.uds_send_btn = QPushButton("发送 UDS 请求")
         self.uds_send_btn.clicked.connect(self.send_uds_request)
         self.uds_result = QPlainTextEdit(); self.uds_result.setReadOnly(True); self.uds_result.setMaximumBlockCount(1000)
+        self.uds_channel = QComboBox()
+        self.uds_channel.setToolTip(self.send_channel.toolTip())
         uds_layout.addWidget(QLabel("请求ID"), 0, 0); uds_layout.addWidget(self.uds_tx_id, 0, 1)
         uds_layout.addWidget(QLabel("响应ID"), 0, 2); uds_layout.addWidget(self.uds_rx_id, 0, 3)
         uds_layout.addWidget(QLabel("帧类型"), 0, 4); uds_layout.addWidget(self.uds_frame_type, 0, 5)
@@ -252,6 +258,8 @@ class PCANFDTab(QWidget):
         uds_layout.addWidget(QLabel("服务参数(hex)"), 2, 0); uds_layout.addWidget(self.uds_params, 2, 1, 1, 5)
         uds_layout.addWidget(self.uds_send_btn, 2, 6)
         uds_layout.addWidget(QLabel("响应日志"), 3, 0)
+        uds_layout.addWidget(QLabel('UDS物理通道'), 3, 2)
+        uds_layout.addWidget(self.uds_channel, 3, 3, 1, 2)
         uds_layout.addWidget(self.uds_result, 4, 0, 1, 7)
         uds_layout.setRowStretch(4, 1)
         self.uds_detail_tabs = QTabWidget()
@@ -269,13 +277,18 @@ class PCANFDTab(QWidget):
         self.uds_detail_tabs.addTab(security_page, '安全访问 DLL')
         self.sub_tabs.addTab(tab_uds, "🩺 UDS 诊断")
 
+        self.send_channel.currentTextChanged.connect(self.uds_channel.setCurrentText)
+        self.uds_channel.currentTextChanged.connect(self.send_channel.setCurrentText)
+        self._transmit_signature = None
+        self._update_connection_controls()
+
         layout.addWidget(self.sub_tabs, 1)
 
     def refresh_pcan_channels(self, selected=None):
         if selected is None:
             selected = self.channel.currentData() or self.channel.currentText().strip()
         from core.can_choices import CAN_CHANNELS
-        channels = CAN_CHANNELS
+        channels = [channel for channel in CAN_CHANNELS if channel.startswith('PCAN_')]
         self.channel.blockSignals(True)
         self.channel.clear()
         for value in channels:
@@ -294,10 +307,13 @@ class PCANFDTab(QWidget):
         self.operation.run(action,callback)
 
     def connect_device(self):
-        channel=self.channel.currentText().strip()
+        driver=self.driver
+        if self.device_type.currentIndex()==1:
+            channel=driver.channel if driver.channel.startswith('ZLG_CAN') else 'ZLG_CAN1'
+        else:
+            channel=self.channel.currentText().strip()
         try:nominal,data=int(self.nominal.currentText()),int(self.data_rate.currentText())
         except ValueError:return
-        driver=self.driver
         ip,port,sdk=self.zlg_ip.text().strip(),self.zlg_port.value(),self.zlg_sdk.text().strip()
         def action():
             if channel.startswith('ZLG_CAN'):
@@ -311,6 +327,7 @@ class PCANFDTab(QWidget):
     def operation_result(self,ok,value):
         if not ok or value is False:
             QMessageBox.warning(self,"CAN",str(value))
+        self._update_transmit_channels()
         self.update_monitor()
 
     def shutdown(self):
@@ -321,25 +338,57 @@ class PCANFDTab(QWidget):
             self.uds_worker.wait()
 
     def _update_connection_controls(self, *_args):
-        zlg = self.channel.currentText().startswith('ZLG_CAN')
+        zlg = self.device_type.currentIndex()==1
         self.zlg_connection.setVisible(zlg)
-        self.device_type.blockSignals(True)
-        self.device_type.setCurrentIndex(1 if zlg else 0)
-        self.device_type.blockSignals(False)
+        self.pcan_channel_label.setVisible(not zlg)
+        self.channel.setVisible(not zlg)
+        self.refresh_usb.setVisible(not zlg)
         self.nominal.setEnabled(not zlg)
         self.data_rate.setEnabled(not zlg)
         self.can_connection_tip.setText(
-            'ZLG四通道独立配置；上方通道仅用于发送与UDS。表格为待设置值，点击“应用四通道配置”才生效。设备TCP转发需包含四通道。'
+            'ZLG连接整台设备，CH1–CH4独立配置；发送通道在“报文发送”或“UDS诊断”页选择。表格为待设置值，点击“应用四通道配置”才生效。设备TCP转发需包含四通道。'
             if zlg else 'PCAN使用所选USB通道和波特率。连接参数与自动化测试共享，测试执行期间请勿切换连接。')
+        self._update_transmit_channels()
+
+    def _update_transmit_channels(self):
+        driver=self.driver
+        connected=bool(driver.is_connected)
+        zlg=driver.channel.startswith('ZLG_CAN') if connected else self.device_type.currentIndex()==1
+        signature=(zlg,driver.channel if connected else (None if zlg else self.channel.currentText()))
+        if signature==self._transmit_signature:return
+        previous=self.send_channel.currentText()
+        if zlg:
+            channels=[f'ZLG_CAN{i}' for i in range(1,5)]
+            # 配方切换或重新连接到另一默认通道时，采用新连接的初始值。
+            changed_connection=(self._transmit_signature is not None and self._transmit_signature[1] is not None
+                                and self._transmit_signature[1]!=signature[1])
+            selected=driver.channel if changed_connection and driver.channel in channels else previous
+            if selected not in channels:selected=driver.channel if driver.channel in channels else channels[0]
+        else:
+            selected=driver.channel if connected else self.channel.currentText()
+            channels=[selected]
+        for combo in (self.send_channel,self.uds_channel):
+            combo.blockSignals(True)
+            combo.clear();combo.addItems(channels);combo.setCurrentText(selected)
+            combo.setEnabled(zlg)
+            combo.blockSignals(False)
+        self._transmit_signature=signature
+
+    def _selected_debug_driver(self):
+        self._update_transmit_channels()
+        driver=self.driver
+        if driver.channel.startswith('ZLG_CAN'):
+            from devices.can_channel_view import CANChannelView
+            channel=self.send_channel.currentText()
+            if not channel.startswith('ZLG_CAN'):raise ValueError('请先连接ZLG设备并选择发送物理通道')
+            return CANChannelView(driver,int(channel.removeprefix('ZLG_CAN')))
+        return driver
 
     def apply_zlg_parameters(self):
         if self.operation.isRunning():
             return
-        if not self.driver.is_connected or not self.driver.channel.startswith('ZLG_CAN'):
+        if self.device_type.currentIndex()!=1 or not self.driver.is_connected or not self.driver.channel.startswith('ZLG_CAN'):
             QMessageBox.warning(self, '未连接', '请先连接ZLG设备。')
-            return
-        if self.channel.currentText() != self.driver.channel:
-            QMessageBox.warning(self, '通道未切换', '选择的通道与当前连接不同，请先重新连接。')
             return
         if getattr(self, 'uds_worker', None) and not self.uds_worker.wait(0):
             QMessageBox.warning(self, '正在执行', '请等待UDS请求结束后再设置。')
@@ -387,6 +436,7 @@ class PCANFDTab(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
+        self._update_transmit_channels()
         QTimer.singleShot(0, self._fit_zlg_channel_table)
 
     def resizeEvent(self, event):
@@ -399,10 +449,11 @@ class PCANFDTab(QWidget):
         try:
             can_id = int(self.can_id.text().strip(), 0)
             payload = bytes.fromhex(self.data.text().replace(",", " "))
+            driver=self._selected_debug_driver()
         except ValueError as exc:
-            QMessageBox.warning(self, "参数错误", f"CAN ID 或数据格式错误：{exc}")
+            QMessageBox.warning(self, "参数错误", f"CAN ID、数据或发送通道配置错误：{exc}")
             return
-        driver,frame,dlc=self.driver,self.frame_type.currentIndex(),self.dlc.value()
+        frame,dlc=self.frame_type.currentIndex(),self.dlc.value()
         self.run_device(lambda:driver.send_can_message(0,can_id,frame,dlc,payload),self.operation_result)
 
     def _update_uds_sid(self, text):
@@ -412,22 +463,21 @@ class PCANFDTab(QWidget):
     def send_uds_request(self):
         if self.operation.isRunning() or (getattr(self,'uds_worker',None) and not self.uds_worker.wait(0)):return
         if not self.driver.is_connected:
-            QMessageBox.warning(self, "UDS诊断", "请先连接 USB PCAN-FD")
+            QMessageBox.warning(self, "UDS诊断", "请先连接CAN设备")
             return
         try:
             tx_id = int(self.uds_tx_id.text().strip(), 0)
             rx_id = int(self.uds_rx_id.text().strip(), 0)
             sid = int(self.uds_sid.text().strip(), 0)
             params = bytes.fromhex(self.uds_params.text().replace(",", " ")) if self.uds_params.text().strip() else b""
+            frame_index = self.uds_frame_type.currentIndex()
+            timeout = float(self.uds_timeout.value())
+            client = self._selected_debug_driver().create_uds_client(
+                tx_id=tx_id, rx_id=rx_id, can_fd=frame_index>0,
+                brs=frame_index==2, timeout=timeout, p2_star_timeout=max(5.0, timeout))
         except ValueError as exc:
             QMessageBox.warning(self, "UDS参数错误", str(exc))
             return
-        frame_index = self.uds_frame_type.currentIndex()
-        timeout = float(self.uds_timeout.value())
-        client = self.driver.create_uds_client(
-            tx_id=tx_id, rx_id=rx_id, can_fd=frame_index > 0,
-            brs=frame_index == 2, timeout=timeout, p2_star_timeout=max(5.0, timeout),
-        )
         self.uds_result.appendPlainText(
             f"[{time.strftime('%H:%M:%S')}] TX UDS 0x{sid:02X}: {params.hex(' ').upper()}"
         )
@@ -449,7 +499,7 @@ class PCANFDTab(QWidget):
                 raise ValueError('请勾选并配置安全访问DLL')
             tx_id=int(self.uds_tx_id.text().strip(),0);rx_id=int(self.uds_rx_id.text().strip(),0)
             frame=self.uds_frame_type.currentIndex();timeout=float(self.uds_timeout.value())
-            client=self.driver.create_uds_client(tx_id=tx_id,rx_id=rx_id,can_fd=frame>0,brs=frame==2,
+            client=self._selected_debug_driver().create_uds_client(tx_id=tx_id,rx_id=rx_id,can_fd=frame>0,brs=frame==2,
                 timeout=timeout,p2_star_timeout=max(5.0,timeout))
         except (ValueError, OSError, RuntimeError) as exc:
             QMessageBox.warning(self, '安全访问配置错误', str(exc))
@@ -518,7 +568,7 @@ class PCANFDTab(QWidget):
     def update_monitor(self):
         if not self.isVisible(): return
         connected = bool(self.driver.is_connected)
-        self.status.setText((f"● CH1–CH4监听 / 发送{self.driver.channel}" if self.driver.channel.startswith('ZLG_CAN') else "● 已连接") if connected else "● 未连接")
+        self.status.setText(("● ZLG已连接 · CH1–CH4监听" if self.driver.channel.startswith('ZLG_CAN') else "● 已连接") if connected else "● 未连接")
         color = "#22C55E" if connected else "#FF4D5A"
         self.status.setStyleSheet(f"color:{color}; border:1px solid {color}; border-radius:6px; padding:7px 14px; font-weight:bold;")
         # Drain a bounded snapshot and render the latest matching frames.

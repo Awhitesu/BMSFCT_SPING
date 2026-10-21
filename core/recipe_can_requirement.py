@@ -2,6 +2,8 @@
 
 
 def validate_recipe_can(recipe):
+    from core.can_step_channels import validate_step_channels
+    validate_step_channels(recipe)
     from core.can_periodic import validate_plan
     validate_plan(recipe,debug=bool(recipe.get('_debug_run')),
                   active_names=recipe.get('_active_debug_periodic',()))
