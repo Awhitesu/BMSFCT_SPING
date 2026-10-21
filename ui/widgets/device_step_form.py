@@ -25,7 +25,12 @@ class DeviceStepForm(QWidget):
         fields=[]
         for field in spec.fields:
             value=(values or {}).get(field.key,field.default)
-            if field.choices:
+            if device=='resistor' and field.key=='channels':
+                control=QComboBox();control.setEditable(True)
+                control.addItems(['所有','所有奇数','所有偶数'])
+                control.setCurrentText(str(value))
+                control.setToolTip('指定通道：7；多个：1,7,13；范围：7-12；或选择所有/奇数/偶数')
+            elif field.choices:
                 control=QComboBox()
                 for label,data in field.choices:control.addItem(label,data)
                 control.setCurrentIndex(control.findData(value))
@@ -58,7 +63,7 @@ class DeviceStepForm(QWidget):
     def values(self):
         result={}
         for key,control in self.controls.items():
-            if isinstance(control,QComboBox):value=control.currentData()
+            if isinstance(control,QComboBox):value=control.currentText().strip() if self.device=='resistor' and key=='channels' else control.currentData()
             elif isinstance(control,(QSpinBox,QDoubleSpinBox)):value=control.value()
             else:value=control.text().strip()
             result[key]=value

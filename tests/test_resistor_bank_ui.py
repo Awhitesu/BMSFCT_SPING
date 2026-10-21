@@ -54,5 +54,16 @@ class ResistorBankUiTests(unittest.TestCase):
             self.page.save();warning.assert_called_once()
         self.db.save_sys_config.assert_not_called()
 
+    def test_configuration_previews_contiguous_enabled_ranges(self):
+        self.assertEqual(self.page.config.item(0,7).text(),'7–12')
+        self.assertEqual(self.page.config.item(1,7).text(),'1–6')
+        self.assertTrue(self.page.config.isColumnHidden(4))
+        self.page.config.item(1,0).setCheckState(__import__('PySide6.QtCore',fromlist=['Qt']).Qt.Unchecked)
+        self.assertEqual(self.page.config.item(0,7).text(),'1–6')
+        self.assertEqual(self.page.config.item(1,7).text(),'未启用')
+        self.page.save();self.wait_idle()
+        self.assertEqual(list(self.page.routes),list(range(1,7)))
+        self.assertEqual(self.page.routes[1][0].setting['number'],2)
+
 
 if __name__=='__main__':unittest.main()

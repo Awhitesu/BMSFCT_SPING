@@ -1334,11 +1334,14 @@ class ChannelWorker(QObject):
                     if relay_targets is not None:
                         success = execute_relays(relay_targets, mgr.easy320, allowed, self.cancel_event.is_set, hw_logger)
                     elif "全部" in params.get("action", ""):
-                        success = True
-                        for index in allowed:
-                            if not mgr.easy320.write_relay(index, False):
-                                success = False
-                                break
+                        if callable(getattr(type(mgr.easy320),'control_selected_relays',None)):
+                            success=mgr.easy320.control_selected_relays(list(allowed),False)
+                        else:
+                            success = True
+                            for index in allowed:
+                                if not mgr.easy320.write_relay(index, False):
+                                    success = False
+                                    break
                         hw_logger(f"-> Easy320动作: 发:全部断开 回:{'全部断开' if success else '异常'}")
                     else:
                         state = "闭合" in params.get("action", "")

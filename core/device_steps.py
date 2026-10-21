@@ -162,6 +162,11 @@ for kind,label,count,channels in BOARD_SPECS:
     if kind == 'resistor':
         global_channel = integer('global_channel','全局通道（0使用原板号）',0,0,36)
         actions = [Action(a.key,a.label,a.fields+(global_channel,) if a.key in ('resistance','read_resistance') else a.fields,a.read,a.help) for a in actions]
+        selection=Field('channels','全局通道（编号/范围/所有/奇数/偶数）','所有')
+        help_text='已启用电阻卡按设备序号排序，每张固定6通道连续编号，未启用卡不占号，最多CH36。可填7、1,7,13、7-12、所有、所有奇数、所有偶数；实际范围以设备设置页为准。'
+        actions=[Action('resistance_batch','设置阻值（全局通道）',(selection,resistance),help=help_text),
+                 Action('read_resistance_batch','读取设定阻值（全局通道）',(selection,VARIABLE),True,
+                        help_text+' 单通道输出数值；多通道输出CH编号与阻值。回读为设定值，非实测值。')]+actions
     ACTIONS[kind]=tuple(actions)
 
 for device in ('dut_power','hv_source'):
@@ -228,6 +233,9 @@ def validate(device,action,values):
         step=10 if device=='resistor' else 1000
         if result['resistance']%step:raise ValueError(f'阻值必须为{step}Ω整数倍')
         if action=='on' and result['resistance']==0:raise ValueError('绝缘输出开启阻值必须大于0Ω')
+    if device=='resistor' and 'channels' in result:
+        from devices.resistor_bank import select_channels
+        select_channels(result['channels'])
     return spec,result
 
 
@@ -285,6 +293,13 @@ def execute(manager,text,variables,logger,cancelled=lambda:False):
         result=_virtual_result(device,spec,p)
         if p.get('variable'):variables[p['variable']]=result
         logger(f'[仿真，无硬件通信] {DEVICES[device][1]} / {spec.label} => {result}')
+        return True,result
+    if device=='resistor' and action in ('resistance_batch','read_resistance_batch'):
+        from devices.resistor_bank import execute_selection
+        rows=execute_selection(manager,p['channels'],p.get('resistance',0),spec.read,cancelled,logger)
+        result=('PASS' if not spec.read else measurement(next(iter(rows.values())),'Ω') if len(rows)==1
+                else ' | '.join(f'CH{ch}={value:g} Ω' for ch,value in rows.items()))
+        if p.get('variable'):variables[p['variable']]=result
         return True,result
     # The manager owns drivers and their RLocks, shared across sequence workers.
     if device=='simulator':

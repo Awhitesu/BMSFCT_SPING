@@ -59,5 +59,14 @@ class ResistorBankTests(unittest.TestCase):
         self.assertEqual(list(channel_routes({'b':second})),[])
         with self.assertRaises(ValueError):channel_routes({'a':board(1),'b':board(1)})
 
+    def test_enabled_boards_are_contiguous_even_with_missing_sequence(self):
+        first,last=board(2),board(6)
+        routes=channel_routes({'last':last,'first':first})
+        self.assertEqual(list(routes),list(range(1,13)))
+        self.assertEqual(routes[1],(first,1))
+        self.assertEqual(routes[12],(last,6))
+        first.setting['enabled']=False
+        self.assertEqual(channel_routes({'first':first,'last':last})[1],(last,1))
+
 
 if __name__=='__main__':unittest.main()

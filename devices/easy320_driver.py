@@ -229,6 +229,41 @@ class Easy320Controller:
         if not indices:return False
         if len(set(indices))!=len(indices) or any(not isinstance(i,int) or not 0<=i<=0xffff-self.start_address for i in indices):
             raise ValueError('DO通道地址无效或重复')
+        # FC15 writes only contiguous configured ranges: never fill address gaps.
+        ordered=sorted(indices);groups=[]
+        for index in ordered:
+            if groups and index==groups[-1][-1]+1 and len(groups[-1])<125:groups[-1].append(index)
+            else:groups.append([index])
+        if not self.is_connected and not self.connect():return False
+        unsupported=False
+        started=time.perf_counter()
+        with self.lock:
+            try:
+                for group in groups:
+                    reply=self.client.write_coils(address=self.start_address+group[0],
+                        values=[bool(state)]*len(group),device_id=self.slave_id)
+                    if not reply or reply.isError():
+                        # Only an explicit illegal-function response proves the
+                        # old controller needs the single-point protocol.
+                        if reply is not None and getattr(reply,'exception_code',None)==1:
+                            unsupported=True;break
+                        logger.error('Easy320批量写入失败，未确认成功')
+                        return False
+                if not unsupported:
+                    time.sleep(.05)
+                    for group in groups:
+                        reply=self.client.read_coils(address=self.start_address+group[0],count=len(group),device_id=self.slave_id)
+                        bits=getattr(reply,'bits',[])
+                        if not reply or reply.isError() or len(bits)<len(group) or any(bool(v)!=bool(state) for v in bits[:len(group)]):
+                            logger.error('Easy320批量回读不一致：DO%s～DO%s',format(group[0],'o'),format(group[-1],'o'))
+                            return False
+                    logger.info('Easy320批量%s %d点，耗时%.3fs', 'ON' if state else 'OFF',len(indices),time.perf_counter()-started)
+                    return True
+            except Exception as exc:
+                logger.error('Easy320批量操作异常：%s',exc)
+                self.client.close();self.is_connected=False
+                return False
+        logger.warning('Easy320不支持FC15，回退到逐点写入与回读')
         for index in indices:
             if not self.write_relay(index,state):return False
         states=self.read_selected_relays(indices)

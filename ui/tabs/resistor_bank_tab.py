@@ -3,7 +3,7 @@ import ipaddress
 from copy import deepcopy
 from PySide6.QtCore import Qt,QEvent
 from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QGridLayout,QGroupBox,
-    QLabel,QPushButton,QSpinBox,QCheckBox,QScrollArea,QSizePolicy,QMessageBox)
+    QLabel,QPushButton,QSpinBox,QCheckBox,QScrollArea,QSizePolicy,QMessageBox,QComboBox,QTableWidgetItem,QHeaderView)
 from ui.tabs.board_debug_tab import BoardDebugTab
 from devices.rn_board import board_settings
 from devices.resistor_bank import channel_routes,operate_channels
@@ -13,12 +13,31 @@ class ResistorBankTab(BoardDebugTab):
     def __init__(self,manager):
         self.bank_ready=False
         super().__init__(manager,'resistor')
-        self.config.horizontalHeaderItem(1).setText('排序序号（1–6）')
+        self.config.setColumnCount(9)
+        self.config.setHorizontalHeaderLabels(['启用','设备序号','IP地址','端口','Unit ID','通道数量','协议/量程','有效全局通道','配置'])
+        self.tabs.setTabText(0,'设备设置（最多6张）')
+        self.save_button.setText('保存并应用电阻卡配置')
+        self.tabs.widget(0).layout().itemAt(0).widget().setText('最多6张，每张固定6通道。已启用卡按设备序号排序，连续编号；未启用卡不占号。修改后保存并应用生效。')
         for row,setting in enumerate(self.settings):
             sequence=QSpinBox();sequence.setRange(1,6);sequence.setValue(setting['number'])
             sequence.setMinimumHeight(40)
             sequence.setToolTip(f"{setting['key']}：序号决定全局通道，每块固定占6通道")
             self.config.setCellWidget(row,1,sequence)
+            self.config.setItem(row,7,QTableWidgetItem())
+            self.config.setItem(row,8,QTableWidgetItem(str(row+1)))
+            for column in (7,8):self.config.item(row,column).setFlags(Qt.ItemIsEnabled|Qt.ItemIsSelectable)
+            sequence.valueChanged.connect(self.refresh_channel_ranges)
+        self.config.itemChanged.connect(lambda item:self.refresh_channel_ranges() if item.column()==0 else None)
+        header=self.config.horizontalHeader()
+        for position,logical in enumerate((0,8,2,3,1,5,7,4,6)):
+            header.moveSection(header.visualIndex(logical),position)
+        header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2,QHeaderView.Stretch)
+        self.config.setColumnHidden(4,True);self.config.setColumnHidden(6,True)
+        advanced=QPushButton('高级参数（Unit ID / 协议）');advanced.setCheckable(True)
+        advanced.toggled.connect(lambda show:[self.config.setColumnHidden(c,not show) for c in (4,6)])
+        self.tabs.widget(0).layout().insertWidget(1,advanced)
+        self.refresh_channel_ranges()
         old=self.tabs.widget(1);self.tabs.removeTab(1);old.deleteLater()
         page=QWidget();body=QVBoxLayout(page)
         self.bank_buttons=[];self.bank_widgets={};self.bank_columns=0
@@ -27,6 +46,13 @@ class ResistorBankTab(BoardDebugTab):
         self.add_button(row,'连接并回读整套设备',lambda:self.run_bank('read',self.active_channels()))
         self.add_button(row,'断开整套设备',lambda:self.run_bank('disconnect',self.active_channels()))
         body.addLayout(row)
+        selector_row=QHBoxLayout();selector_row.addWidget(QLabel('全局通道：'))
+        self.bank_selection=QComboBox();self.bank_selection.setEditable(True)
+        self.bank_selection.addItems(['所有','所有奇数','所有偶数'])
+        self.bank_selection.setToolTip('填写7、1,7,13、7-12，或选择所有/奇数/偶数；按硬件排序序号映射CH1～36')
+        selector_row.addWidget(self.bank_selection,1)
+        self.add_button(selector_row,'按编号勾选',self.select_by_number)
+        body.addLayout(selector_row)
         row=QHBoxLayout()
         row.addWidget(QLabel('批量阻值：'))
         self.bank_resistance=QSpinBox();self.bank_resistance.setRange(0,1500000)
@@ -40,7 +66,7 @@ class ResistorBankTab(BoardDebugTab):
         self.add_button(row,'回读勾选通道',lambda:self.run_bank('read',self.selected_channels()))
         self.add_button(row,'回读全部通道',lambda:self.run_bank('read',self.active_channels()))
         body.addLayout(row)
-        tip=QLabel('序号1→CH1–6，序号2→CH7–12，依次到CH36。0–1.5MΩ、10Ω步进；回读为设定值，不是实测阻值。')
+        tip=QLabel('按已启用卡的设备序号连续编号，未启用卡不占号；范围见设备设置。0–1.5MΩ、10Ω步进；回读为设定值，不是实测阻值。')
         tip.setWordWrap(True);body.addWidget(tip)
         self.bank_scroll=QScrollArea();self.bank_scroll.setWidgetResizable(True)
         self.bank_scroll.viewport().installEventFilter(self)
@@ -48,6 +74,17 @@ class ResistorBankTab(BoardDebugTab):
         self.bank_grid.setAlignment(Qt.AlignTop);self.bank_scroll.setWidget(panel);body.addWidget(self.bank_scroll,1)
         self.tabs.addTab(page,'整套电阻控制（CH1–36）')
         self.bank_ready=True;self.rebuild();self.tabs.setCurrentIndex(1)
+
+    def refresh_channel_ranges(self,*_):
+        rows=[row for row in range(len(self.settings)) if self.config.item(row,0).checkState()==Qt.Checked]
+        numbers=[self.config.cellWidget(row,1).value() for row in rows]
+        for row in range(len(self.settings)):
+            self.config.item(row,7).setText('未启用')
+        if len(numbers)!=len(set(numbers)):
+            for row in rows:self.config.item(row,7).setText('序号重复')
+            return
+        for offset,row in enumerate(sorted(rows,key=lambda r:self.config.cellWidget(r,1).value())):
+            self.config.item(row,7).setText(f'{offset*6+1}–{offset*6+6}')
 
     def add_button(self,row,text,callback):
         button=QPushButton(text);button.setMinimumHeight(40);button.clicked.connect(callback)
@@ -64,8 +101,8 @@ class ResistorBankTab(BoardDebugTab):
             if item.widget():item.widget().deleteLater()
         self.bank_widgets={}
         for channel in range(1,37):
-            number,local=divmod(channel-1,6)
-            group=QGroupBox(f'CH{channel} · {number+1}号板 CH{local+1}')
+            route=self.routes.get(channel)
+            group=QGroupBox(f'CH{channel} · 序号{route[0].setting["number"]} CH{route[1]}' if route else f'CH{channel} · 未启用')
             group.setMinimumWidth(220);group.setFixedHeight(190)
             group.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Fixed)
             grid=QGridLayout(group);check=QCheckBox('勾选批量控制');check.setEnabled(channel in self.routes)
@@ -131,6 +168,13 @@ class ResistorBankTab(BoardDebugTab):
     def selected_channels(self):return [ch for ch,widgets in self.bank_widgets.items() if widgets[1].isChecked() and ch in self.routes]
     def select_channels(self,state):
         for channel,widgets in self.bank_widgets.items():widgets[1].setChecked(state and channel in self.routes)
+
+    def select_by_number(self):
+        from devices.resistor_bank import select_channels
+        try:channels=set(select_channels(self.bank_selection.currentText(),self.routes))
+        except ValueError as exc:self.bank_status.setText(str(exc));return
+        for channel,widgets in self.bank_widgets.items():widgets[1].setChecked(channel in channels)
+        self.bank_status.setText('已勾选全局通道：'+', '.join(map(str,sorted(channels))))
 
     def set_bank_busy(self,busy):
         self.save_button.setEnabled(not busy);self.config.setEnabled(not busy)

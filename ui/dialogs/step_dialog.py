@@ -161,7 +161,7 @@ class StepDialog(QDialog):
         self.device_selection_frame = top_frame
         top_layout = QFormLayout(top_frame)
         self.device_selection_form = top_layout
-        top_layout.setLabelAlignment(Qt.AlignRight)
+        top_layout.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         top_layout.setSpacing(6)
         
         # 一级分类
@@ -222,7 +222,14 @@ class StepDialog(QDialog):
         send_layout.addStretch()
         self.can_send_all.toggled.connect(self._toggle_all_can_channels)
         self.can_send_title = QLabel('发送通道（可多选）:')
-        top_layout.addRow(self.can_send_title, self.can_send_channels)
+        # A long multi-channel heading must not widen every form label.
+        self.can_send_row = QWidget()
+        channel_row_layout = QHBoxLayout(self.can_send_row)
+        channel_row_layout.setContentsMargins(0,0,0,0)
+        channel_row_layout.setSpacing(6)
+        channel_row_layout.addWidget(self.can_send_title)
+        channel_row_layout.addWidget(self.can_send_channels,1)
+        top_layout.addRow(self.can_send_row)
         
         main_layout.addWidget(top_frame)
         
@@ -345,6 +352,14 @@ class StepDialog(QDialog):
         self.rb_volt = QRadioButton("读取电压")
         self.rb_volt.setChecked(True)
         self.rb_curr = QRadioButton("读取电流")
+        read_radio_style = _resolve_resource_stylesheet('''
+            QRadioButton { spacing:8px; background:transparent; }
+            QRadioButton::indicator { width:20px; height:20px; border:0; background:transparent; }
+            QRadioButton::indicator:unchecked { border:0; image:url(resources/radio_read_unchecked.svg); }
+            QRadioButton::indicator:checked { border:0; image:url(resources/radio_read_checked.svg); }
+        ''')
+        self.rb_volt.setStyleSheet(read_radio_style)
+        self.rb_curr.setStyleSheet(read_radio_style)
         
         self.read_group.addButton(self.rb_volt)
         self.read_group.addButton(self.rb_curr)
@@ -2223,8 +2238,9 @@ class StepDialog(QDialog):
     def _update_can_channel_controls(self):
         can_related = any(word in self.device_combo.currentText().upper() for word in ('CAN','UDS','EOL'))
         multiple = self._is_plain_can_send()
-        for control in (self.can_binding_title,self.can_binding_label):control.setVisible(can_related)
-        for control in (self.can_channel_title,self.can_physical_channel):control.setVisible(can_related and not multiple)
+        self.device_selection_form.setRowVisible(self.can_binding_label,can_related)
+        self.device_selection_form.setRowVisible(self.can_physical_channel,can_related and not multiple)
+        self.device_selection_form.setRowVisible(self.can_send_row,can_related and multiple)
         for control in (self.can_send_title,self.can_send_channels):control.setVisible(can_related and multiple)
 
     def _selected_physical_channel(self, multiple=False):

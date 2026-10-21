@@ -42,9 +42,13 @@ class ChannelImportTests(unittest.TestCase):
     def test_batch_controls_only_imported_addresses(self):
         with patch('devices.easy320_driver.ModbusTcpClient'):
             driver=Easy320Controller('unused');driver.write_relay=Mock(return_value=True)
+            driver.is_connected=True
+            driver.client.write_coils.return_value=Mock(isError=Mock(return_value=False))
+            driver.client.read_coils.return_value=Mock(isError=Mock(return_value=False),bits=[True])
             driver.read_selected_relays=Mock(return_value=[True,True])
             self.assertTrue(driver.control_selected_relays([0,8],True))
-            self.assertEqual([c.args for c in driver.write_relay.call_args_list],[(0,True),(8,True)])
+            driver.write_relay.assert_not_called()
+            self.assertEqual([c.kwargs['address'] for c in driver.client.write_coils.call_args_list],[0xFC08,0xFC10])
 
     def test_reading_large_config_chunks_modbus_requests(self):
         with patch('devices.easy320_driver.ModbusTcpClient'):
