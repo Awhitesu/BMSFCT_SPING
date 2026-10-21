@@ -179,6 +179,7 @@ class ChannelWorker(QObject):
         self.step_outputs={}
         self.last_output=None
         self._dbc_group_context=None
+        self._dbc_group_plan=None
         self.sn_barcode = ""
         self.app_flash_config = None
         from core.user_session import get_current_user
@@ -272,6 +273,7 @@ class ChannelWorker(QObject):
         if not getattr(self,'_debug_variable_session',False):
             self.variables.clear();self.step_outputs.clear();self.last_output=None
         self.current_step_index = 0
+        self._dbc_group_context=None
         self.progress_updated.emit(self.channel_id, 0.0, {})
         self.log_message.emit(self.channel_id, f"[*] 测试开始，数据库ID: {self.test_id}")
         
@@ -293,6 +295,7 @@ class ChannelWorker(QObject):
     def _perform_stop(self, final_status):
         trace("CHANNEL_STOP_REQUEST", self.channel_id, test_id=self.test_id, step_idx=self.current_step_index, sub_idx=self.current_sub_step_index, final_status=final_status)
         self.is_running = False
+        self._dbc_group_context=None
         errors=self.periodic_can.close()
         if errors:
             self.cleanup_error='; '.join(errors)
@@ -577,21 +580,29 @@ class ChannelWorker(QObject):
         physical=getattr(selected,'physical_channel',None)
         return f'ZLG_CAN{physical}' if physical is not None and driver.channel.startswith('ZLG_CAN') else driver.channel
 
-    def _dbc_group_requests(self, group, driver, config, interface):
-        """Only active reads in this contiguous condition group participate, including debug subsets."""
-        from core.dbc_signals import decode_step
-        requests=[]
-        for index in range(self.current_step_index,len(self.steps)):
-            parent=self.steps[index]
-            if parent.skip_runtime or parent.name.strip().startswith('#'):continue
-            first=self.current_sub_step_index if index==self.current_step_index else 0
-            for sub in parent.sub_steps[first:]:
-                if sub.params.get('skip_runtime') or str(sub.params.get('name','')).strip().startswith('#'):continue
-                if sub.type!=SubStepType.CAN_DBC:return requests or [(config,interface)]
-                target=decode_step(sub.params.get('params',''))
-                if target.get('group','')!=group:return requests or [(config,interface)]
-                requests.append((target,self._dbc_interface(driver,sub.params)))
-        return requests or [(config,interface)]
+    def _dbc_sampling_group(self, position):
+        if self._dbc_group_plan is None:
+            from core.dbc_groups import plan_groups
+            items=[]
+            for parent in self.steps:
+                subs=[]
+                for sub in parent.sub_steps:
+                    params=dict(sub.params)
+                    if sub.type==SubStepType.CAN_DBC:params['type']='CANDBC交互'
+                    subs.append(params)
+                items.append(dict(name=parent.name,skip_runtime=parent.skip_runtime,sub_steps=subs))
+            self._dbc_group_plan=plan_groups(items)
+        return self._dbc_group_plan.get(position)
+
+    def _dbc_group_requests(self, group, driver, asset):
+        from core.dbc_signals import signal_key,resolve_step
+        requests=[];positions={}
+        for position,config,params in group['members']:
+            config=resolve_step(config,asset)
+            interface=self._dbc_interface(driver,params)
+            requests.append((config,interface))
+            positions[position]=signal_key(config,interface)
+        return requests,positions
 
     def _execute_eol_protocol(self, mgr, params, hw_logger):
         params_str = params.get("params", "")
@@ -1011,7 +1022,10 @@ class ChannelWorker(QObject):
         def sg_read_progress(done, total, address):
             sg_update(f"回读校验中 · {done}/{total} 字节 · 0x{address:08X}", done / total * 100)
         try:
-            if sub_step.type!=SubStepType.CAN_DBC:self._dbc_group_context=None
+            position=(self.current_step_index,self.current_sub_step_index)
+            context=self._dbc_group_context
+            if context and not context['span'][0]<=position<=context['span'][1]:
+                self._dbc_group_context=None
             if not mgr and sub_step.type != SubStepType.WAIT: raise ValueError("设备管理器未初始化")
             def hw_logger(msg):
                 self.last_hw_log = msg
@@ -1402,33 +1416,39 @@ class ChannelWorker(QObject):
                 success, result_value = (poll(read, config, self.cancel_event.is_set, self.cancel_event.wait, hw_logger) if config else read())
 
             elif sub_step.type == SubStepType.CAN_DBC:
-                from core.dbc_signals import decode_step,execute_read,resolve_step,refresh_group,signal_key
+                from core.dbc_signals import decode_step,execute_read,refresh_group,execute_snapshot
                 from core.read_until import settings
                 config=decode_step(params.get('params',''))
                 driver=getattr(mgr,'pcan',None)
-                if driver is None or not driver.is_connected:raise ValueError('DBC读取需要已连接的配方CAN卡')
                 monitor=mgr.dbc_monitor
-                interface=self._dbc_interface(driver,params)
-                options={}
-                if config.get('group'):
-                    config=resolve_step(config,monitor.asset)
+                group=self._dbc_sampling_group(position)
+                if group:
                     context=self._dbc_group_context
-                    position=(self.current_step_index,self.current_sub_step_index)
                     attempt=(self.step_retry_count,self._retry_count)
-                    if (not context or context['name']!=config['group']
-                            or context['context']!=monitor.context_token()
-                            or context.get('attempts',{}).get(position,attempt)!=attempt
-                            or signal_key(config,interface) not in context['keys']):
-                        self._dbc_group_context=None
-                        requests=self._dbc_group_requests(config['group'],driver,config,interface)
-                        context=refresh_group(monitor,requests,config['group'],self.cancel_event.is_set,
-                                              self.cancel_event.wait,hw_logger)
-                        self._dbc_group_context=context
-                    context.setdefault('attempts',{})[position]=attempt
-                    options=dict(since=context['since'],context=context['context'])
-                else:self._dbc_group_context=None
-                success,result_value=execute_read(mgr.dbc_monitor,config,interface,self.cancel_event.is_set,
-                    self.cancel_event.wait,hw_logger,settings(params.get('params','')),**options)
+                    if context and context['id']==group['id'] and context.get('error'):
+                        if position==context['entry'] and attempt!=context['attempt']:
+                            context=None
+                        else:raise RuntimeError(context['error'])
+                    if not context or context['id']!=group['id']:
+                        if driver is None or not driver.is_connected:raise ValueError('DBC采样需要已连接的配方CAN卡')
+                        requests,positions=self._dbc_group_requests(group,driver,monitor.asset)
+                        state=dict(id=group['id'],span=(group['start'],group['end']),entry=position,attempt=attempt)
+                        try:
+                            state.update(refresh_group(monitor,requests,group['name'],self.cancel_event.is_set,
+                                                       self.cancel_event.wait,hw_logger))
+                            state['positions']=positions
+                        except Exception as exc:
+                            state['error']=str(exc)
+                            self._dbc_group_context=state
+                            raise
+                        self._dbc_group_context=context=state
+                    success,result_value=execute_snapshot(context,config,context['positions'][position],
+                                                        self.cancel_event.is_set,hw_logger)
+                else:
+                    if driver is None or not driver.is_connected:raise ValueError('DBC读取需要已连接的配方CAN卡')
+                    interface=self._dbc_interface(driver,params)
+                    success,result_value=execute_read(monitor,config,interface,self.cancel_event.is_set,
+                        self.cancel_event.wait,hw_logger,settings(params.get('params','')))
                 if success and config.get('variable'):self.variables[config['variable']]=result_value
 
             elif sub_step.type == SubStepType.CAN_SEND:
@@ -2139,6 +2159,8 @@ class TestEngine(QObject):
             if self.workers:
                 return False
         recipe_data = single_channel_items(ensure_step_ids(recipe_data))
+        from core.dbc_groups import plan_groups
+        plan_groups(recipe_data)
         from core.can_periodic import validate_plan
         if debug_run:
             self.debug_periodic_can.discard_inactive()

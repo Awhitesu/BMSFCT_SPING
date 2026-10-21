@@ -2,7 +2,7 @@ from copy import deepcopy
 from PySide6.QtCore import Qt,QTimer,QAbstractListModel,QModelIndex
 from PySide6.QtWidgets import (QWidget,QGroupBox,QVBoxLayout,QHBoxLayout,QFormLayout,QLabel,
     QPushButton,QFileDialog,QMessageBox,QComboBox,QDoubleSpinBox,QCheckBox,QLineEdit,
-    QTableWidget,QTableWidgetItem,QHeaderView,QSpinBox)
+    QTableWidget,QTableWidgetItem,QHeaderView,QSpinBox,QStyledItemDelegate,QStyleOptionViewItem,QToolTip)
 from ui.device_task import DeviceTask
 from core.dbc_signals import import_dbc,catalog,decode_step,resolve_step
 
@@ -57,16 +57,25 @@ class DBCStepForm(QWidget):
         self.timeout=QDoubleSpinBox();self.timeout.setRange(.01,3600);self.timeout.setValue(5);self.timeout.setSuffix(' s')
         self.interval=QDoubleSpinBox();self.interval.setRange(.01,60);self.interval.setValue(.01);self.interval.setSuffix(' s')
         self.max_age=QDoubleSpinBox();self.max_age.setRange(.01,3600);self.max_age.setValue(1);self.max_age.setSuffix(' s')
+        self.max_age.setToolTip('采样组只在保存整组快照时检查有效期；保存后不再因时间流逝而失效。')
+        self.timeout.setToolTip('采样组等待上限取本组参与信号中最短的超时。')
         self.new_frame=QCheckBox('仅使用本工步开始后的新报文（特殊读取）');self.new_frame.setChecked(False)
+        self.new_frame.setToolTip('组外特殊读取使用；起终点范围内统一使用整组快照。')
         self.group=QLineEdit();self.group.setMaxLength(128)
-        self.group.setPlaceholderText('选填；同一工况填相同名称，首项统一等待本组信号刷新')
+        self.group.setPlaceholderText('仅首尾填写相同组名；中间DBC工步自动归组')
+        self.group_role=QComboBox()
+        for label,value in [('不标记（组内自动归组）',''),('起点','start'),('终点','end'),('起点兼终点','single')]:
+            self.group_role.addItem(label,value)
         self.group.textChanged.connect(self._group_changed)
+        self.group_role.currentIndexChanged.connect(self._group_role_changed)
+        self.group.setEnabled(False)
         self.variable=QLineEdit();self.variable.setPlaceholderText('选填，例如 BMS_SOC；供后续变量读取或公式计算使用')
-        tip=QLabel('固定读取DBC解码后的实际值。默认读取最新有效值，无数据或数据过期时才等待更新。采样组首项统一等待本组实际执行的信号刷新，后续读取同组最新有效值；切换工况请使用不同组名，并将稳定延时放在读取前。后台解码不发送报文。');tip.setWordWrap(True)
+        tip=QLabel('普通读取使用后台最新有效值。采样组只在首尾设置同名起点、终点，中间DBC工步自动归组；起点等待全组新数据且全部未过期后保存固定快照，再逐项读取判定。组内延时、设置及后台更新均不改变快照；有效期仅在保存时检查。后台解码不发送报文。');tip.setWordWrap(True)
         form.addRow(tip);form.addRow('DBC信号：',self.signal);form.addRow(self.info)
         form.addRow('等待有效信号超时：',self.timeout)
         form.addRow('检查周期：',self.interval);form.addRow('数据有效期：',self.max_age);form.addRow(self.new_frame)
-        form.addRow('采样组（同一工况）：',self.group)
+        form.addRow('采样组位置：',self.group_role)
+        form.addRow('采样组名称：',self.group)
         form.addRow('保存到变量：',self.variable)
         self.signal.currentIndexChanged.connect(self.show_info);self.show_info()
 
@@ -99,12 +108,22 @@ class DBCStepForm(QWidget):
         result=dict(row,sha256=self.asset['sha256'],output='value',variable=variable,
                     timeout=self.timeout.value(),interval=self.interval.value(),max_age=self.max_age.value(),new_frame=self.new_frame.isChecked())
         if self.group.text().strip():result['group']=self.group.text().strip()
+        role=self.group_role.currentData()
+        if role and role!='legacy':
+            if not self.group.text().strip():raise ValueError('采样组起点/终点必须填写组名')
+            result['group_role']=role
         return result
 
     def _group_changed(self):
-        grouped=bool(self.group.text().strip())
+        grouped=bool(self.group.text().strip() or self.group_role.currentData())
         if grouped:self.new_frame.setChecked(False)
         self.new_frame.setEnabled(not grouped)
+
+    def _group_role_changed(self):
+        marked=bool(self.group_role.currentData())
+        self.group.setEnabled(marked)
+        if not marked:self.group.clear()
+        self._group_changed()
 
     def load(self,text):
         c=decode_step(text)
@@ -124,8 +143,35 @@ class DBCStepForm(QWidget):
             self.info.setText(error or '当前DBC中找不到对应信号')
         for widget,key in [(self.timeout,'timeout'),(self.interval,'interval'),(self.max_age,'max_age')]:widget.setValue(c[key])
         self.new_frame.setChecked(bool(c.get('new_frame',True)))
+        role=c.get('group_role','')
+        if c.get('group') and not role:
+            role='legacy'
+            if self.group_role.findData(role)<0:self.group_role.addItem('旧版同名分组（保存配方时转换）',role)
+        self.group_role.setCurrentIndex(self.group_role.findData(role))
         self.group.setText(c.get('group',''))
         self.variable.setText(c.get('variable',''))
+
+
+class DBCStepDelegate(QStyledItemDelegate):
+    """Show readable sampling boundaries while retaining the exact editable parameter text."""
+    def initStyleOption(self,option,index):
+        super().initStyleOption(option,index)
+        text=index.data(Qt.DisplayRole)
+        if not isinstance(text,str) or not text.startswith('DBC64:'):return
+        try:config=decode_step(text)
+        except (ValueError,TypeError,KeyError):return
+        role={'start':'起点','end':'终点','single':'起点兼终点'}.get(config.get('group_role'))
+        prefix=f'【{role}】{config["group"]} · ' if role else ''
+        option.text=prefix+f'{config["message"]}.{config["signal"]}'
+
+    def helpEvent(self,event,view,option,index):
+        text=index.data(Qt.DisplayRole)
+        if isinstance(text,str) and text.startswith('DBC64:'):
+            readable=QStyleOptionViewItem(option)
+            self.initStyleOption(readable,index)
+            QToolTip.showText(event.globalPos(),readable.text,view)
+            return True
+        return super().helpEvent(event,view,option,index)
 
 
 class DBCMonitorTab(QWidget):

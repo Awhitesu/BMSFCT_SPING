@@ -3358,6 +3358,8 @@ class StepDialog(QDialog):
             from core.dbc_signals import encode_step
             config=self.dbc_form.config()
             read_wait=self.read_until.config()
+            if read_wait and config.get('group'):
+                raise ValueError('采样组使用固定快照，请使用测试项上下限判定，不支持范围等待')
             if read_wait and config['output']=='choice':raise ValueError('枚举文字输出不能等待数值范围，请取消范围等待或改为物理数值')
             params=attach(encode_step(config),read_wait)
             params+=f' / PCH:{self._selected_physical_channel()}'

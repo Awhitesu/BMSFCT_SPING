@@ -42,6 +42,7 @@ config/sys_config.json
 *.p12
 *.pem
 *.key
+recipes/
 
 config/sys_config.json.bak
 tools/native_debug/
