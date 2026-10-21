@@ -110,6 +110,9 @@ def decode_step(text):
     if not isinstance(group,str) or len(group)>128 or any(ord(char)<32 for char in group):
         raise ValueError('DBC采样组名称应为不超过128字符的单行文字')
     if 'group' in c:c['group']=group.strip()
+    role=c.get('group_role','')
+    if role not in ('','start','end','single'):raise ValueError('DBC采样组位置应为起点、终点或起点兼终点')
+    if role and not group.strip():raise ValueError('DBC采样组起点/终点必须填写组名')
     if group.strip():
         if c.get('new_frame',True):raise ValueError('按组刷新不能同时启用逐工步等待新报文')
     variable=c.get('variable','')
@@ -129,25 +132,35 @@ def rebind_recipe_dbc(recipe):
 
 
 def _recipe_step_updates(recipe):
+    from copy import deepcopy
+    from core.dbc_groups import normalize_legacy_groups,plan_groups
     asset=recipe.get('dbc')
     if asset:database(asset)
     index=_binding_index(asset['text']) if asset else None
     if asset and (not recipe.get('can_config') or recipe['can_config'].get('enabled') is False):
         raise ValueError('已导入DBC，请选择配方CAN卡；不使用DBC时可移除DBC')
+    items=deepcopy(recipe.get('items',[]))
+    normalize_legacy_groups(items)
+    plan_groups(items,normalize=False)
     updates=[]
-    for item in recipe.get('items',[]):
-        if item.get('skip_runtime') or str(item.get('name','')).strip().startswith('#'):continue
-        for step in item.get('sub_steps',[]):
-            if step.get('skip_runtime') or str(step.get('name','')).strip().startswith('#') or 'CANDBC' not in str(step.get('type',''))+str(step.get('device','')):continue
+    for i,item in enumerate(items):
+        for j,step in enumerate(item.get('sub_steps',[])):
+            original=recipe['items'][i]['sub_steps'][j]
+            disabled=(item.get('skip_runtime') or str(item.get('name','')).strip().startswith('#')
+                      or step.get('skip_runtime') or str(step.get('name','')).strip().startswith('#'))
+            if disabled:
+                if step.get('params')!=original.get('params'):updates.append((original,step['params']))
+                continue
+            if 'CANDBC' not in str(step.get('type',''))+str(step.get('device','')):continue
             c=decode_step(step.get('params',''))
             try:resolved=resolve_step(c,asset,index)
             except ValueError as exc:
                 raise ValueError(f'测试项【{item.get("name","")}】的DBC信号已失效，请重新选择：{exc}') from exc
             from core.read_until import settings
             if settings(step.get('params','')) and c.get('output')=='choice':raise ValueError('枚举文字输出不能配置数值范围等待')
-            if resolved!=c:
+            if resolved!=c or step.get('params')!=original.get('params'):
                 _,separator,suffix=step['params'].partition(' / ')
-                updates.append((step,encode_step(resolved)+separator+suffix))
+                updates.append((original,encode_step(resolved)+separator+suffix))
     return updates
 
 
@@ -318,7 +331,7 @@ def signal_key(c,interface):
 
 
 def refresh_group(monitor,requests,name,cancelled,wait,logger):
-    """Wait once for all requested signals to be valid and received after a common epoch."""
+    """Capture one complete fresh snapshot. Age limits apply only at capture time."""
     asset=monitor.asset
     if not asset:raise ValueError('当前配方未启用DBC监控')
     database(asset)
@@ -335,30 +348,42 @@ def refresh_group(monitor,requests,name,cancelled,wait,logger):
     if not targets:raise ValueError('DBC采样组没有待刷新信号')
     context=monitor.context_token();start=time.perf_counter()
     if context[1]!=asset['sha256']:raise RuntimeError('DBC采样期间连接或配方已变化，请重新采样')
-    logger(f'DBC采样组【{name}】开始刷新，共{len(targets)}个信号；采样起点为当前工步开始后')
-    observed=set()
+    deadline=start+min(c['timeout'] for c,_ in targets.values())
+    logger(f'DBC采样组【{name}】开始刷新，共{len(targets)}个信号；等待起点后的全组有效数据，超时{deadline-start:g}s')
     while not cancelled():
         if monitor.context_token()!=context:raise RuntimeError('DBC采样期间连接或配方已变化，请重新采样')
-        missing=[]
+        missing=[];values={}
         # The decoder cannot replace part of this view while the group is being checked.
         with monitor._condition:
             for key,(c,interface) in targets.items():
                 try:
                     value=monitor.read(c,interface,start,context=context)
-                    if key not in observed and value['received']>start+c['timeout']:
-                        raise RuntimeError(f'DBC采样组【{name}】刷新超时：{interface} {c["message"]}.{c["signal"]}')
-                    observed.add(key)
+                    values[key]=dict(value)
                 except ValueError as exc:
-                    if time.perf_counter()-start>=c['timeout']:
-                        raise RuntimeError(f'DBC采样组【{name}】刷新超时：{exc}') from exc
-                    missing.append(c)
+                    missing.append(f'{interface} {c["message"]}.{c["signal"]}：{exc}')
+            captured=time.perf_counter()
+            for key,value in values.items():
+                c,interface=targets[key]
+                value['age']=max(0,captured-value['received'])
+                if value['age']>c['max_age']:
+                    missing.append(f'{interface} {c["message"]}.{c["signal"]}：数据过期')
+        if captured>=deadline:
+            detail='；'.join(missing) or '未在等待超时内形成全组有效数据'
+            raise RuntimeError(f'DBC采样组【{name}】刷新超时：{detail}')
         if not missing:
             if cancelled():break
-            logger(f'DBC采样组【{name}】刷新完成，共{len(targets)}个信号，耗时{time.perf_counter()-start:.3f}s')
-            return dict(name=name,since=start,context=context,keys=frozenset(targets))
-        remaining=min(start+c['timeout']-time.perf_counter() for c in missing)
-        if wait(max(0,min(min(c['interval'] for c in missing),remaining))):break
+            logger(f'DBC采样组【{name}】快照已保存，共{len(targets)}个信号，耗时{captured-start:.3f}s；后续固定使用本次数据')
+            return dict(name=name,since=start,captured=captured,context=context,keys=frozenset(targets),values=values)
+        if wait(max(0,min(min(c['interval'] for c,_ in targets.values()),deadline-captured))):break
     raise RuntimeError('DBC采样组刷新已取消')
+
+
+def execute_snapshot(snapshot,c,key,cancelled,logger):
+    if cancelled():raise RuntimeError('DBC快照读取已取消')
+    value=snapshot['values'][key]
+    result=value['choice'] if c.get('output')=='choice' else value['value']
+    logger(f'DBC快照输出【{snapshot["name"]}】{key[0]} {c["message"]}.{c["signal"]}={result} {value["unit"]} 采集时数据年龄={value["age"]:.3f}s')
+    return True,result
 
 
 def execute_read(monitor,c,interface,cancelled,wait,logger,range_config=None,since=0,context=None):

@@ -6,6 +6,8 @@
 
 | 源码版本 | 日期 | 本次更新 | 查看／回滚代码 |
 |---|---|---|---|
+| S2026.10.21.8 | 2026-10-21 | 新增DBC采样组起点/终点配置与分组规划，补充界面支持与回归测试 | [904b1f6](https://github.com/pingsong1419-boop/BMSFCT/commit/904b1f691aef2707c0f8f1bd6f2550826927a82d) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/904b1f691aef2707c0f8f1bd6f2550826927a82d.zip) |
+| S2026.10.21.7 | 2026-10-21 | 建立统一版本历史与回滚索引，打包后自动登记版本变更 | [306934c](https://github.com/pingsong1419-boop/BMSFCT/commit/306934cc1b4f538e5b4bd6be4b3d375af88c8ff6) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/306934cc1b4f538e5b4bd6be4b3d375af88c8ff6.zip) |
 | S2026.10.21.6 | 2026-10-21 | 明确全部继电器按导入Excel点位执行、不限24点；增加100点和300点引擎完整路径回归，相关19项通过；运行代码未改动 | [ec468c9](https://github.com/pingsong1419-boop/BMSFCT/commit/ec468c95ad0b0511f33a96370f19260e17b702de) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/ec468c95ad0b0511f33a96370f19260e17b702de.zip) |
 | S2026.10.21.5 | 2026-10-21 | 电阻卡按启用卡序号连续编号，支持指定/范围/所有/奇偶通道；设置页展示有效范围；工步顶部对齐与电流单选框修复；Easy320批量断开及回读校验。99项测试和81个子测试通过，相关硬件待验收 | [b16b768](https://github.com/pingsong1419-boop/BMSFCT/commit/b16b7682940b338ca86278ae04982d6985a26ffe) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/b16b7682940b338ca86278ae04982d6985a26ffe.zip) |
 | S2026.10.21.4 | 2026-10-21 | CAN发送支持选择多个物理通道；DBC采样组与最新有效值读取；电池模拟器批量限流；工步布局与ZLG参数校验更新；详细变更见提交差异 | [9979652](https://github.com/pingsong1419-boop/BMSFCT/commit/997965257376c5860bb74541e7a0cb0738e5a8cb) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/997965257376c5860bb74541e7a0cb0738e5a8cb.zip) |

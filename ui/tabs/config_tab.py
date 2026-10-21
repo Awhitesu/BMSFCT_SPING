@@ -341,6 +341,8 @@ class ConfigTab(QWidget):
         self.edit_layout.addLayout(tree_header_layout)
 
         self.step_tree = ProportionalTreeWidget()
+        from ui.widgets.dbc_forms import DBCStepDelegate
+        self.step_tree.setItemDelegateForColumn(2,DBCStepDelegate(self.step_tree))
         self.step_tree.setHeaderLabels(["名称/工步", "模式/范围", "目标值/下限", "截止时间/上限"])
         self.step_tree.header().setMinimumSectionSize(90)
 
@@ -486,6 +488,8 @@ class ConfigTab(QWidget):
         from copy import deepcopy
         from core.can_step_channels import migrate_recipe_channels
         data = deepcopy(dict(data, items=single_channel_items(data.get("items", []))))
+        from core.dbc_groups import normalize_legacy_groups
+        normalize_legacy_groups(data['items'])
         migrate_recipe_channels(data)
         ensure_step_ids(data)
         self.step_tree.clear()
@@ -1143,7 +1147,17 @@ class ConfigTab(QWidget):
         from core.recipe_can_requirement import validate_recipe_can
         validate_recipe_can(data)
         from core.dbc_signals import rebind_recipe_dbc
-        dbc_changed = rebind_recipe_dbc(data)
+        from core.dbc_groups import DBCGroupError
+        try:
+            dbc_changed = rebind_recipe_dbc(data)
+        except DBCGroupError as exc:
+            i,j=exc.position
+            parent=self.step_tree.topLevelItem(i)
+            node=parent.child(j)
+            parent.setExpanded(True)
+            self.step_tree.setCurrentItem(node)
+            self.step_tree.scrollToItem(node)
+            raise
         if channels_changed or dbc_changed:
             for i,item_data in enumerate(data['items']):
                 for j,step in enumerate(item_data['sub_steps']):
