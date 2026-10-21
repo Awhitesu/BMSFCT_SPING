@@ -6,6 +6,7 @@
 
 | 源码版本 | 日期 | 本次更新 | 查看／回滚代码 |
 |---|---|---|---|
+| S2026.10.21.12 | 2026-10-21 | Merge main into PR #4: resolve DBC conflicts and retain CH2 recipe | [25d7bb7](https://github.com/pingsong1419-boop/BMSFCT/commit/25d7bb709689412932e067ce22e60d047337f042) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/25d7bb709689412932e067ce22e60d047337f042.zip) |
 | S2026.10.21.11 | 2026-10-21 | 新增模拟器通道配置快照与输出校验中断支持，统一结果小数位显示，修复DBC组名与EASY320通道寻址，补充回归测试 | [214af5c](https://github.com/pingsong1419-boop/BMSFCT/commit/214af5cd053f6c071586100aa9b04920629180d9) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/214af5cd053f6c071586100aa9b04920629180d9.zip) |
 | S2026.10.21.10 | 2026-10-21 | 新增DBC采样组起点/终点配置与分组规划，补充界面支持与回归测试 | [edca246](https://github.com/pingsong1419-boop/BMSFCT/commit/edca2464bd1945f4d1c0fe87c6f477fdfecab393) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/edca2464bd1945f4d1c0fe87c6f477fdfecab393.zip) |
 | S2026.10.21.9 | 2026-10-21 | 新增DBC采样组起点/终点配置与分组规划，补充界面支持与回归测试 | [350f088](https://github.com/pingsong1419-boop/BMSFCT/commit/350f088b672803a275db4352147e62b601070eab) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/350f088b672803a275db4352147e62b601070eab.zip) |
