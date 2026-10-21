@@ -6,6 +6,7 @@
 
 | 源码版本 | 日期 | 本次更新 | 查看／回滚代码 |
 |---|---|---|---|
+| S2026.10.21.16 | 2026-10-21 | docs: record temperature and humidity integration in version history | [3f0726e](https://github.com/pingsong1419-boop/BMSFCT/commit/3f0726e1a49532c9ae3daef60e13d5df82d43bfe) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/3f0726e1a49532c9ae3daef60e13d5df82d43bfe.zip) |
 | S2026.10.21.15 | 2026-10-21 | 硬件管理增加可选 RS-WS-ETH-6 温湿度传感器，支持厂家 P2 主动上传与 Modbus TCP 问询模式。; 主动上传后台处理登录、心跳和实时数据确认，校验帧长、校验和、节点与来源 IP；断线重连、数据过期和停止接收时使旧值失效。; 独立调试增加温湿度数值、采集时间、接收状态与日志。; 新增读取温度（℃）、读取湿度（%RH）子工步，支持数值上下限判定、范围等待与变量保存；失败清除指定变量旧值。; 变量选择列表自动收集设备工步配置的键名；修正电阻卡旧回归用例的过期编号期望。; 109 项测试及 259 个子用例通过。192.168.1.100:2404 实测接收 9 条实时数据，约每 4.96 秒一帧；经实际测试引擎验证两个读取子工步及变量输出。; 本次更新为源码，未生成新 EXE；实机通信验证不替代传感器精度校准。 | [8fded85](https://github.com/pingsong1419-boop/BMSFCT/commit/8fded85dd0edab6d5feed24708ba03ab91137653) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/8fded85dd0edab6d5feed24708ba03ab91137653.zip) |
 | S2026.10.21.14 | 2026-10-21 | Merge PR #4: DBC sampling groups and simulator improvements | [8bd5607](https://github.com/pingsong1419-boop/BMSFCT/commit/8bd560734e6f41d8d902173d3f4bf428b4661e4b) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/8bd560734e6f41d8d902173d3f4bf428b4661e4b.zip) |
 | S2026.10.21.13 | 2026-10-21 | docs: record PR #4 conflict resolution in version history | [727aa0e](https://github.com/pingsong1419-boop/BMSFCT/commit/727aa0e086e58cc045534ea0957f97a62d32fa3d) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/727aa0e086e58cc045534ea0957f97a62d32fa3d.zip) |
@@ -31,6 +32,7 @@
 
 | EXE版本 | 构建时间 | 更新内容 | 验证／限制 | 源码及回滚位置 | EXE SHA256（前12位） |
 |---|---|---|---|---|---|
+| V2026.10.21.1 | 2026-10-21T17:35:21.651939+08:00 | 新增仁科温湿度传感器主动上传接收及独立调试，支持Modbus TCP模式；新增读取温度、读取湿度子工步，支持数值判定、范围等待、变量保存及变量列表自动识别；109项测试及259个子用例通过；实机上传与测试引擎读取均已验证；包含配方、设备配置、人员数据库和SeedKey辅助程序；构建包含未提交源码；具体代码以本次构建快照为准 | 打包及资源检查通过；不代表硬件验收 | [3f0726e](https://github.com/pingsong1419-boop/BMSFCT/commit/3f0726e1a49532c9ae3daef60e13d5df82d43bfe)；含未提交改动，不能仅按此提交精确还原EXE；使用已归档的同版本完整安装目录；若无安装包归档，只能按源码重新构建 | `a00f6edfe8c7…` |
 | V2026.10.20.6 | 2026-10-20T16:40:49.665919+08:00 | 仓库version.json登记的版本号；缺少逐版构建与更新清单，无法确认具体打包内容 | 待补全；不能仅凭版本号认定包含哪次Git提交 | 未记录对应提交；未找到原安装包和SHA256，需补充归档；不要据此直接回滚 | `未保留` |
 | V2026.10.19.12 | 2026-10-19T21:03:56.636402+08:00 | UDS子页12px字号、精简工具按钮并排成单行；三字段写入成功输出6E，匹配DID后将动态ASCII保存至主板序列号；测试页变量判定目标显示实际键值；VF-Limo7第11/13项按写入6E与读回变量值判定 | 相关回归68项通过，打包源码及辅助文件核验通过；未记录精确源码提交 | 未记录对应提交；本地dist/BMSFCT_V2026.10.19.12完整目录；未上传GitHub安装包 | `c12b7bcd5fbb…` |
 | V2026.10.19.11 | 2026-10-19（会话发布记录） | 周期报文跨勾选调试保留，普通NG不关闭前面启动的列表；监控50ms刷新、批量绘制、拥堵时优先显示最新帧及跳过数量 | 相关周期回归25项、监控相关40项通过；端到端监控延迟未实机量测；原构建清单待补 | 未记录对应提交；历史目录名BMSFCT_V2026.10.19.11；本次未找到原安装包，需补充归档 | `未保留` |
