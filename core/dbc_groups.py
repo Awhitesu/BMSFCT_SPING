@@ -8,7 +8,36 @@ class DBCGroupError(ValueError):
         self.position = position
 
 
-def _entries(items):
+def test_item_prefix(name):
+    """The underscore separates the prefix from the title; # only marks a skipped item."""
+    prefix, separator, _ = str(name).strip().lstrip('#').strip().partition('_')
+    return prefix.strip() if separator else ''
+
+
+def sync_group_name(text, item_name):
+    """Sync prefixed markers; unprefixed items retain their manually entered names."""
+    from core.dbc_signals import decode_step, encode_step
+    config = decode_step(text, allow_empty_group=True)
+    if not config.get('group_role'):
+        return text
+    name = test_item_prefix(item_name)
+    if not name or config.get('group', '') == name:
+        return text
+    config['group'] = name
+    _, separator, suffix = text.partition(' / ')
+    return encode_step(config) + separator + suffix
+
+
+def validate_group_names(items):
+    """Save-time check includes skipped markers, so incomplete groups cannot be saved."""
+    for (i, j), _, config, _ in _entries(items, allow_empty_group=True):
+        if config and config.get('group_role') and not config.get('group', '').strip():
+            raise DBCGroupError(
+                f'测试项【{items[i].get("name", "")}】/ 工步{j+1}：采样组名称为空，请填写采样组名称；起点与终点应填写相同组名。',
+                (i, j))
+
+
+def _entries(items, *, allow_empty_group=False):
     from core.dbc_signals import decode_step
     for i, item in enumerate(items):
         parent_active = not item.get('skip_runtime') and not str(item.get('name', '')).strip().startswith('#')
@@ -17,7 +46,7 @@ def _entries(items):
             config = None
             if 'CANDBC' in str(step.get('type', '')) + str(step.get('device', '')):
                 try:
-                    config = decode_step(step.get('params', ''))
+                    config = decode_step(step.get('params', ''), allow_empty_group=allow_empty_group)
                 except (ValueError, TypeError, KeyError):
                     if active:
                         raise
@@ -48,7 +77,8 @@ def normalize_legacy_groups(items):
             changed += 1
         pending.clear()
 
-    for _, step, config, _ in _entries(items):
+    # Loading editor drafts must retain explicit markers whose prefix is still missing.
+    for _, step, config, _ in _entries(items, allow_empty_group=True):
         role = config.get('group_role', '') if config else ''
         if role:
             flush()

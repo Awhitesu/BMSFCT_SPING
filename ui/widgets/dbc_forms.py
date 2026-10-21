@@ -44,8 +44,11 @@ class _SignalModel(QAbstractListModel):
 
 
 class DBCStepForm(QWidget):
-    def __init__(self,asset,parent=None):
+    def __init__(self,asset,parent=None,*,test_item_name=None):
         super().__init__(parent);self.asset=deepcopy(asset)
+        self._test_item_name=test_item_name
+        from core.dbc_groups import test_item_prefix
+        self._group_prefix=test_item_prefix(test_item_name or '')
         self.task=DeviceTask(self);self._loaded=False;self._pending=None
         form=QFormLayout(self);self.signal=QComboBox();self.signal.setEditable(True)
         self.signal.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
@@ -62,7 +65,9 @@ class DBCStepForm(QWidget):
         self.new_frame=QCheckBox('仅使用本工步开始后的新报文（特殊读取）');self.new_frame.setChecked(False)
         self.new_frame.setToolTip('组外特殊读取使用；起终点范围内统一使用整组快照。')
         self.group=QLineEdit();self.group.setMaxLength(128)
-        self.group.setPlaceholderText('仅首尾填写相同组名；中间DBC工步自动归组')
+        self.group.setReadOnly(bool(self._group_prefix))
+        self.group.setPlaceholderText('自动取测试项前缀' if self._group_prefix else '请输入采样组名称（必填）；起点、终点保持同名')
+        self.group.setToolTip('有测试项前缀时自动同步；没有前缀时可手动填写组名。起点、终点必须同名，起点兼终点也必须填写组名。')
         self.group_role=QComboBox()
         for label,value in [('不标记（组内自动归组）',''),('起点','start'),('终点','end'),('起点兼终点','single')]:
             self.group_role.addItem(label,value)
@@ -110,7 +115,9 @@ class DBCStepForm(QWidget):
         if self.group.text().strip():result['group']=self.group.text().strip()
         role=self.group_role.currentData()
         if role and role!='legacy':
-            if not self.group.text().strip():raise ValueError('采样组起点/终点必须填写组名')
+            if not self.group.text().strip() and self._test_item_name is None:raise ValueError('采样组起点/终点必须填写组名')
+            # The editor may hold an incomplete marker; recipe save and runtime remain strict.
+            result['group']=self.group.text().strip()
             result['group_role']=role
         return result
 
@@ -123,10 +130,12 @@ class DBCStepForm(QWidget):
         marked=bool(self.group_role.currentData())
         self.group.setEnabled(marked)
         if not marked:self.group.clear()
+        elif self._group_prefix:
+            self.group.setText(self._group_prefix)
         self._group_changed()
 
     def load(self,text):
-        c=decode_step(text)
+        c=decode_step(text,allow_empty_group=True)
         self._pending=c
         self.ensure_loaded()
         if self._loaded:self._load_config(c)
@@ -149,6 +158,7 @@ class DBCStepForm(QWidget):
             if self.group_role.findData(role)<0:self.group_role.addItem('旧版同名分组（保存配方时转换）',role)
         self.group_role.setCurrentIndex(self.group_role.findData(role))
         self.group.setText(c.get('group',''))
+        if self._test_item_name is not None:self._group_role_changed()
         self.variable.setText(c.get('variable',''))
 
 
@@ -158,10 +168,10 @@ class DBCStepDelegate(QStyledItemDelegate):
         super().initStyleOption(option,index)
         text=index.data(Qt.DisplayRole)
         if not isinstance(text,str) or not text.startswith('DBC64:'):return
-        try:config=decode_step(text)
+        try:config=decode_step(text,allow_empty_group=True)
         except (ValueError,TypeError,KeyError):return
         role={'start':'起点','end':'终点','single':'起点兼终点'}.get(config.get('group_role'))
-        prefix=f'【{role}】{config["group"]} · ' if role else ''
+        prefix=f'【{role}】{config.get("group") or "（名称为空）"} · ' if role else ''
         option.text=prefix+f'{config["message"]}.{config["signal"]}'
 
     def helpEvent(self,event,view,option,index):

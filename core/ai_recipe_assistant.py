@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Tuple
 import requests
 
 from core.recipe_knowledge import STEP_GRAMMAR_DOC
+from core.result_display import decimal_places
 
 DEFAULT_BASE_URL = "https://api.moonshot.cn/v1"
 DEFAULT_MODEL = "kimi-k3"
@@ -46,6 +47,7 @@ SYSTEM_PROMPT = """你是一名 BMS 测试配方编辑助手。用户会给你�
   - retry_count: "不复测" | "复测1次" | "复测3次"
   - strategy: "任何NG停止"（界面“失败停止”，默认） | "NG继续"（界面“失败继续”）；先执行复测，最终仍NG才执行停止策略；失败继续仍保留FAIL结果
   - unit: 单位字符串（如 "mA"、"V"），无单位用 "NULL"
+  - decimal_places: null（不限制，默认）或0~15整数；只控制数值显示，向零截断，不四舍五入
   - sub_steps: 子工步数组，每个子工步：
     - name: 显示名称，格式通常为 "设备-动作 (参数)"
     - action: 动作名称（如 "设置参数"、"回读数据"、"闭合勾选通道"、"固定延时"、"查找刷写文件"、"启动刷写"）
@@ -171,6 +173,8 @@ def validate_recipe(data: Any, original_name: str = "") -> List[str]:
             errors.append(f"{prefix} retry_count 非法: {item.get('retry_count')}")
         if item.get("strategy", "任何NG停止") not in STOP_STRATEGIES:
             errors.append(f"{prefix} strategy 非法: {item.get('strategy')}")
+        if item.get('decimal_places') is not None and decimal_places(item['decimal_places']) is None:
+            errors.append(f"{prefix} decimal_places 必须为 null 或0~15整数")
         for key in ("min", "max", "unit"):
             if not isinstance(item.get(key, ""), str):
                 errors.append(f"{prefix} {key} 必须是字符串")
@@ -225,7 +229,7 @@ def summarize_changes(old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
         details = []
         for key, label in (("min", "下限"), ("max", "上限"), ("unit", "单位"),
                            ("standard_type", "标准类型"), ("retry_count", "复测"),
-                           ("strategy", "停止策略")):
+                           ("strategy", "停止策略"), ("decimal_places", "小数位数")):
             if o.get(key) != n.get(key):
                 details.append(f"{label}: {o.get(key)} → {n.get(key)}")
         o_subs = [s.get("name", "") for s in o.get("sub_steps", [])]

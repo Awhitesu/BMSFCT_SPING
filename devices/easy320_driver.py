@@ -1,5 +1,6 @@
 from pymodbus.client import ModbusTcpClient
 from pymodbus.framer import FramerType
+from core.easy320_channels import DO_BASE_ADDRESS
 import time
 import logging
 
@@ -26,7 +27,7 @@ class Easy320Controller:
         )
         self.lock = threading.Lock()
         self.is_connected = False
-        self.start_address = 0xFC08 
+        self.start_address = DO_BASE_ADDRESS
 
     def connect(self) -> bool:
         """建立连接并执行握手验证"""

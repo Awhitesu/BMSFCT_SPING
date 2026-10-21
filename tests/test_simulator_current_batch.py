@@ -249,7 +249,7 @@ def test_legacy_text_read_is_not_silently_converted_to_all_channels():
     finally: dialog.close()
 
 
-def test_debug_configuration_ranges_recalculate_for_enable_count_and_number():
+def test_debug_configuration_follows_hardware_parameters_without_local_settings():
     db = Mock()
     db.load_sys_config.return_value = dict(sim1_channels=24, sim2_enabled=True, sim2_channels=18,
                                           sim3_enabled=True, sim3_channels=14)
@@ -257,13 +257,24 @@ def test_debug_configuration_ranges_recalculate_for_enable_count_and_number():
     page = SimulatorTab(mgr)
     try:
         assert [page.settings_table.item(row, 6).text() for row in range(3)] == ['1–24', '25–42', '43–56']
-        page.settings_table.item(1, 0).setCheckState(Qt.Unchecked)
+        assert not hasattr(page, 'settings_controls') and not hasattr(page, 'save_simulator_settings')
+        cfg = db.load_sys_config.return_value
+        cfg['sim2_enabled'] = False
+        mgr.update_config()
+        page.refresh_configuration()
         assert page.settings_table.item(1, 6).text() == '未启用'
         assert page.settings_table.item(2, 6).text() == '25–38'
-        page.settings_controls[0][3].setValue(18)
+        cfg['sim1_channels'] = 18
+        mgr.update_config()
+        page.refresh_configuration()
         assert page.settings_table.item(2, 6).text() == '19–32'
-        page.settings_controls[2][2].setValue(1)
-        assert page.settings_table.item(0, 6).text() == '配置无效'
+        cfg.update(sim1_number=3, sim3_number=1)
+        mgr.update_config()
+        page.refresh_configuration()
+        assert page.settings_table.item(2, 6).text() == '1–14'
+        assert page.settings_table.item(0, 6).text() == '15–32'
+        assert page.spin_ch.count() == 32 and page.spin_param_ch.count() == 32
+        db.save_sys_config.assert_not_called()
     finally:
         page.status_timer.stop()
         page.close()

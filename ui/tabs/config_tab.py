@@ -357,6 +357,8 @@ class ConfigTab(QWidget):
         self.step_tree.customContextMenuRequested.connect(self.on_context_menu)
         # 绑定双击编辑
         self.step_tree.itemDoubleClicked.connect(lambda: self.edit_node())
+        self.step_tree.itemChanged.connect(self._sync_dbc_group_item)
+        self.step_tree.model().rowsInserted.connect(self._sync_dbc_group_rows)
 
         self.edit_layout.addWidget(self.step_tree, 1)
 
@@ -528,6 +530,7 @@ class ConfigTab(QWidget):
             parent.setData(1, Qt.UserRole, item_data.get("retry_count", "不复测"))
             parent.setData(3, Qt.UserRole, item_data.get("strategy", "任何NG停止"))
             parent.setData(2, Qt.UserRole, item_data.get("unit", "NULL"))
+            parent.setData(0, Qt.UserRole + 21, item_data.get("decimal_places"))
 
             if item_data['name'].strip().startswith("#"):
                 parent.setForeground(0, QColor("#808080"))
@@ -561,6 +564,30 @@ class ConfigTab(QWidget):
 
                 parent.addChild(child)
         self.step_tree.expandAll()
+
+    def _sync_dbc_group_item(self, item, column=0):
+        if column not in (0, 2):return
+        parent = item.parent()
+        if parent is None:
+            if column != 0:return
+            parent = item
+        from core.dbc_groups import sync_group_name
+        for j in range(parent.childCount()):
+            node = parent.child(j)
+            text = node.text(2)
+            if not text.startswith('DBC64:'):continue
+            try:updated = sync_group_name(text, parent.text(0))
+            except (ValueError, TypeError, KeyError):continue
+            if text != updated:node.setText(2, updated)
+
+    def _sync_dbc_group_rows(self, parent_index, first, last):
+        for row in range(first, last+1):
+            index = self.step_tree.model().index(row, 0, parent_index)
+            self._sync_dbc_group_item(self.step_tree.itemFromIndex(index))
+
+    def _sync_dbc_group_names(self):
+        for i in range(self.step_tree.topLevelItemCount()):
+            self._sync_dbc_group_item(self.step_tree.topLevelItem(i))
 
     def open_ai_recipe_dialog(self):
         """打开 AI 配方助手对话框，应用成功后重新加载当前配方"""
@@ -747,6 +774,7 @@ class ConfigTab(QWidget):
                 "retry_count": item.data(1, Qt.UserRole) or "不复测",
                 "strategy": item.data(3, Qt.UserRole) or "任何NG停止",
                 "unit": item.data(2, Qt.UserRole) or "NULL",
+                "decimal_places": item.data(0, Qt.UserRole + 21),
                 "sub_steps": []
             }
             for i in range(item.childCount()):
@@ -819,6 +847,7 @@ class ConfigTab(QWidget):
                 new_item.setData(1, Qt.UserRole, data.get('retry_count', '不复测'))
                 new_item.setData(3, Qt.UserRole, data.get('strategy', '任何NG停止'))
                 new_item.setData(2, Qt.UserRole, data.get('unit', 'NULL'))
+                new_item.setData(0, Qt.UserRole + 21, data.get('decimal_places'))
 
                 # 保留屏蔽或正常的高保真色彩
                 if data['name'].strip().startswith("#"):
@@ -942,6 +971,9 @@ class ConfigTab(QWidget):
 
                 if cfg.get("change_stop", False):
                     item.setData(3, Qt.UserRole, cfg['strategy'])
+
+                if cfg.get("change_decimal_places", False):
+                    item.setData(0, Qt.UserRole + 21, cfg['decimal_places'])
 
 
     def validate_recipe(self) -> List[str]:
@@ -1092,6 +1124,7 @@ class ConfigTab(QWidget):
 
     def _collect_recipe_data(self, recipe_name):
         if self.dbc_import.task.isRunning():raise ValueError('DBC正在导入，请等待完成后再保存配方')
+        self._sync_dbc_group_names()
         data = {
             "name": recipe_name,
             "recipe_number": self.recipe_number.value(),
@@ -1125,6 +1158,7 @@ class ConfigTab(QWidget):
                 "retry_count": item_node.data(1, Qt.UserRole) or "不复测",
                 "strategy": item_node.data(3, Qt.UserRole) or "任何NG停止",
                 "unit": item_node.data(2, Qt.UserRole) or "NULL",
+                "decimal_places": item_node.data(0, Qt.UserRole + 21),
                 "sub_steps": []
             }
             for j in range(item_node.childCount()):
@@ -1147,8 +1181,9 @@ class ConfigTab(QWidget):
         from core.recipe_can_requirement import validate_recipe_can
         validate_recipe_can(data)
         from core.dbc_signals import rebind_recipe_dbc
-        from core.dbc_groups import DBCGroupError
+        from core.dbc_groups import DBCGroupError, validate_group_names
         try:
+            validate_group_names(data['items'])
             dbc_changed = rebind_recipe_dbc(data)
         except DBCGroupError as exc:
             i,j=exc.position
@@ -1189,6 +1224,7 @@ class ConfigTab(QWidget):
             item.setData(1, Qt.UserRole, data['retry_count'])
             item.setData(3, Qt.UserRole, data.get('strategy', '任何NG停止'))
             item.setData(2, Qt.UserRole, data.get('unit', 'NULL'))
+            item.setData(0, Qt.UserRole + 21, data.get('decimal_places'))
 
             item.setForeground(0, QColor("#00E5FF"))
             font = item.font(0)
@@ -1219,7 +1255,7 @@ class ConfigTab(QWidget):
             parent = parent.parent()
 
         from ui.dialogs.step_dialog import StepDialog
-        dialog = StepDialog(self, device_manager=self.device_manager)
+        dialog = StepDialog(self, device_manager=self.device_manager, test_item_name=parent.text(0))
         if dialog.exec():
             data = dialog.get_data()
             item = QTreeWidgetItem([
@@ -1262,7 +1298,8 @@ class ConfigTab(QWidget):
                 'standard_type': item.data(0, Qt.UserRole) or '数值',
                 'retry_count': item.data(1, Qt.UserRole) or '不复测',
                 'strategy': item.data(3, Qt.UserRole) or '任何NG停止',
-                'unit': item.data(2, Qt.UserRole) or 'NULL'
+                'unit': item.data(2, Qt.UserRole) or 'NULL',
+                'decimal_places': item.data(0, Qt.UserRole + 21)
             }
             dialog = TestItemDialog(self, data=data)
             if dialog.exec():
@@ -1277,6 +1314,7 @@ class ConfigTab(QWidget):
                 item.setData(1, Qt.UserRole, new_data['retry_count'])
                 item.setData(3, Qt.UserRole, new_data.get('strategy', '任何NG停止'))
                 item.setData(2, Qt.UserRole, new_data.get('unit', 'NULL'))
+                item.setData(0, Qt.UserRole + 21, new_data.get('decimal_places'))
         else:
             # 这是一个『子工步』(Child)
             from ui.dialogs.step_dialog import StepDialog
@@ -1290,7 +1328,7 @@ class ConfigTab(QWidget):
                 'is_judgment': item.data(2, Qt.UserRole) or False,
                 'fail_strategy': item.data(5, Qt.UserRole) or '失败停止'
             }
-            dialog = StepDialog(self, step_data=data, device_manager=self.device_manager)
+            dialog = StepDialog(self, step_data=data, device_manager=self.device_manager, test_item_name=parent.text(0))
             if dialog.exec():
                 new_data = dialog.get_data()
                 item.setText(0, f"  └─ {new_data['name']}")

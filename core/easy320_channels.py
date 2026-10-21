@@ -2,6 +2,9 @@
 import re
 from pathlib import Path
 
+DO_BASE_ADDRESS = 0xFC00
+MAX_DO_INDEX = 0xFFFF - DO_BASE_ADDRESS
+
 
 def normalize_channels(rows):
     result=[];seen=set()
@@ -12,7 +15,7 @@ def normalize_channels(rows):
         if not re.fullmatch(r'DO[0-7]+',label):
             raise ValueError(f'第{row_number}行序号 {label!r} 无效；请填写八进制编号，例如DO0、DO7、DO10')
         index=int(label[2:],8)
-        if index>0xffff-0xfc08:raise ValueError(f'第{row_number}行编号超出设备地址范围')
+        if index>MAX_DO_INDEX:raise ValueError(f'第{row_number}行编号超出设备地址范围')
         if index in seen:raise ValueError(f'第{row_number}行序号重复：DO{index:o}')
         seen.add(index)
         result.append({'do':f'DO{index:o}','name':name,'index':index})

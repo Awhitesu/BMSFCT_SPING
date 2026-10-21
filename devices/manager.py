@@ -243,6 +243,34 @@ class DeviceManager:
                 if not row['ok']: logger(str(row))
         return result['ok']
 
+    def configure_simulators(self, configuration, channels=None, logger=None, cancelled=lambda:False):
+        from core.simulator_control import configure_simulator, simulator_configuration
+        from devices.simulator_batch import run_simulator_batch
+        configuration = simulator_configuration(configuration)
+        routes = self.simulator_channels()
+        if channels is not None:
+            channels = list(channels)
+            if (not channels or len(channels) != len(set(channels)) or
+                    any(type(ch) is not int or ch <= 0 for ch in channels)):
+                raise ValueError('模拟器通道无效或重复')
+            selected = set(channels)
+            routes = [route for route in routes if route[0] in selected]
+            if {route[0] for route in routes} != selected:
+                raise ValueError('模拟器通道未配置')
+        result = run_simulator_batch(routes, lambda sim, chs: configure_simulator(
+            sim, chs, configuration, logger=logger, cancelled=cancelled))
+        if not result['ok']:
+            if logger:
+                for row in result['results']:
+                    if not row['ok']:logger(str(row))
+            # A peer may have completed ON before another device failed.
+            cleanup = run_simulator_batch(routes, lambda sim, chs: control_simulator(
+                sim, 'output', chs, False, logger=logger, batch=True))
+            if logger:
+                for row in cleanup['results']:
+                    if not row['ok']:logger('快捷配置失败后关闭输出未确认：' + str(row))
+        return result['ok']
+
     def broadcast_current(self, current: float, logger=None, cancelled=lambda:False) -> bool:
         return self._broadcast_simulator_parameter('current',current,logger,cancelled)
 

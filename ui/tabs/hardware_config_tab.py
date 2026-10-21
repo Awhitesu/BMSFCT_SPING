@@ -6,7 +6,7 @@ import ipaddress
 from copy import deepcopy
 from ui.tabs.multimeter_tab import MeterTask
 
-from PySide6.QtCore import Qt, QTimer, QSignalBlocker
+from PySide6.QtCore import Qt, QTimer, QSignalBlocker, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QCheckBox,
@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
 
 class HardwareConfigTab(QWidget):
     """设备使能、通讯参数与实时连接状态的统一配置页。"""
+
+    configuration_changed = Signal()
 
     DEVICE_SPECS = [
         ("pcan", "USB PCAN-FD", "USB CAN-FD", "pcan_channel", "PCAN_USBBUS1", "pcan_nominal_bitrate", "500000", "pcan_data_bitrate", "2000000"),
@@ -371,7 +373,11 @@ class HardwareConfigTab(QWidget):
                     cfg[port_key] = int(self.table.item(row, 4).text().strip())
                 if baud_key:
                     cfg[baud_key] = int(self.table.item(row, 5).text().strip())
-            simulator_settings(cfg)
+            for setting in simulator_settings(cfg):
+                if setting['enabled']:
+                    ipaddress.IPv4Address(setting['ip'])
+                    if not 1 <= setting['port'] <= 65535:
+                        raise ValueError(f'模拟器配置{setting["slot"]}：TCP端口应为1–65535')
             cfg['rn_boards'] = saved_boards
             addresses, numbers = set(), set()
             for setting in board_settings(cfg):
@@ -419,6 +425,7 @@ class HardwareConfigTab(QWidget):
             return
         self._apply_row_visibility()
         self.refresh_hardware_status()
+        self.configuration_changed.emit()
         QMessageBox.information(self, "保存成功", "配置已保存。下次启动只检测已启用设备。")
 
     def refresh_hardware_status(self):
@@ -503,6 +510,7 @@ class HardwareConfigTab(QWidget):
             self.table.setEnabled(True)
             for button in (self.btn_save,self.btn_init,self.btn_disconnect):button.setEnabled(True)
             self._apply_row_visibility();self.refresh_hardware_status()
+            self.configuration_changed.emit()
         self.operation.result.connect(result);self.operation.finished.connect(finished);self.operation.start()
 
     def shutdown(self):

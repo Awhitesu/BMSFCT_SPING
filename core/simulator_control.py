@@ -4,6 +4,60 @@ from core.numeric_validation import finite_reading
 import time
 
 
+def simulator_configuration(value):
+    """Validate one recipe configuration before sending any hardware command."""
+    if (not isinstance(value, dict) or not value or
+            set(value) - {'voltage', 'current', 'range', 'output'} or
+            type(value.get('output')) is not bool):
+        raise ValueError('模拟器快捷配置必须包含明确的输出状态')
+    result = dict(value)
+    for key in ('voltage', 'current'):
+        if key in result:
+            result[key] = finite_reading(result[key])
+            if result[key] < 0:
+                raise ValueError('模拟器电压和限流不能为负数')
+    if 'range' in result and result['range'] not in ('HIGH', 'LOW', 'AUTO'):
+        raise ValueError('模拟器量程无效')
+    if result.get('range') == 'LOW' and result.get('current', 0) > .001000001:
+        raise ValueError('LOW range current limit must not exceed 1 mA')
+    return result
+
+
+def configure_simulator(driver, channels, configuration, *, logger=None, cancelled=lambda: False):
+    """Apply recipe settings together; verify live voltage only after final ON."""
+    channels = list(channels)
+    if (not channels or len(channels) != len(set(channels)) or
+            any(type(ch) is not int or not 1 <= ch <= 24 for ch in channels)):
+        raise ValueError('模拟器通道无效或重复')
+    configuration = simulator_configuration(configuration)
+    handler = getattr(type(driver), 'configure_confirmed', None)
+    if callable(handler):
+        started = time.monotonic()
+        if logger:logger(f'Simulator control BEGIN action=configure, channels={channels}, value={configuration}, batch=True')
+        try:
+            result = driver.configure_confirmed(channels, configuration, logger=logger, cancelled=cancelled)
+            confirm_result(result, driver)
+        except Exception as exc:
+            if logger:logger(f'Simulator control FAILED action=configure, elapsed={time.monotonic()-started:.3f}s, reason={exc}')
+            raise
+        if logger:logger(f'Simulator control CONFIRMED action=configure, elapsed={time.monotonic()-started:.3f}s')
+        return True
+    # Retain the existing path for drivers without the combined operation.
+    order = ('current', 'range', 'voltage') if configuration.get('range') == 'LOW' else ('range', 'current', 'voltage')
+    try:
+        for key in order:
+            if key in configuration:
+                control_simulator(driver, key, channels, configuration[key], logger=logger,
+                                  cancelled=cancelled, batch=True)
+        if configuration['output']:
+            return control_simulator(driver, 'output', channels, True, logger=logger,
+                                     cancelled=cancelled, batch=True)
+        return True
+    finally:
+        if configuration['output'] is False:
+            control_simulator(driver, 'output', channels, False, logger=logger, batch=True)
+
+
 def control_simulator(driver, action, channels, value=None, *, logger=None,
                       cancelled=lambda: False, batch=False):
     channels = list(channels)

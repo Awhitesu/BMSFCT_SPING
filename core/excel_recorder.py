@@ -90,6 +90,17 @@ def export_test_record(db_path:str,test_id:int,base_dir:Optional[str]=None,setti
                 if item.get(key+'_raw') is not None:item[key]=item[key+'_raw']
     finally:conn.close()
     evidence=json.loads(main.get('context_json') or '{}');recipe=evidence.get('recipe',{})
+    recipe_items=recipe.get('items', [])
+    by_id={item['step_id']:item for item in recipe_items if item.get('step_id')}
+    by_name={}
+    for item in recipe_items:
+        by_name.setdefault(item.get('name'), []).append(item)
+    for item in items:
+        source=by_id.get(item.get('step_id'), {})
+        if not item.get('step_id') and len(by_name.get(item.get('item_name'), []))==1:
+            source=by_name[item['item_name']][0]
+        item['decimal_places']=source.get('decimal_places')
+        item['standard_type']=source.get('standard_type', '数值')
     config=validate_settings(evidence.get('report_settings') or settings or {})
     recipe_name=str(main.get('recipe_name') or '');project=str(recipe.get('project_no') or extract_project_no(recipe_name))
     start=_parse_time(main.get('start_time'))

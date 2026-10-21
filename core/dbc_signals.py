@@ -96,7 +96,7 @@ def encode_step(config):
     return 'DBC64:'+base64.urlsafe_b64encode(json.dumps(config,ensure_ascii=False,allow_nan=False).encode()).decode()
 
 
-def decode_step(text):
+def decode_step(text, *, allow_empty_group=False):
     token=str(text).split(' / ',1)[0]
     if not token.startswith('DBC64:'):raise ValueError('DBC工步参数格式无效')
     c=json.loads(base64.urlsafe_b64decode(token[6:]))
@@ -112,7 +112,7 @@ def decode_step(text):
     if 'group' in c:c['group']=group.strip()
     role=c.get('group_role','')
     if role not in ('','start','end','single'):raise ValueError('DBC采样组位置应为起点、终点或起点兼终点')
-    if role and not group.strip():raise ValueError('DBC采样组起点/终点必须填写组名')
+    if role and not group.strip() and not allow_empty_group:raise ValueError('DBC采样组起点/终点必须填写组名')
     if group.strip():
         if c.get('new_frame',True):raise ValueError('按组刷新不能同时启用逐工步等待新报文')
     variable=c.get('variable','')

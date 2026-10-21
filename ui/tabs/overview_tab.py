@@ -3,6 +3,7 @@ import copy
 import threading
 from ui.device_task import DeviceTask
 from core.single_channel_recipe import single_channel_items
+from core.result_display import format_result
 
 import json
 
@@ -1702,7 +1703,8 @@ class OverviewTab(QWidget):
             item_node = self.step_tree.topLevelItem(step_idx)
             if sub_idx < item_node.childCount():
                 sub_node = item_node.child(sub_idx)
-                result_text = str(result) if result is not None else "Done"
+                item_data = (item_node.data(0, Qt.UserRole) or {}).get('raw_data', {})
+                result_text = format_result(result, item_data) if result is not None else "Done"
                 sub_node.setText(4, result_text)
                 sub_node.setToolTip(4, result_text)
                 if getattr(result, "unit", ""):
@@ -1722,7 +1724,8 @@ class OverviewTab(QWidget):
             item_node = self.step_tree.topLevelItem(step_idx)
             skipped = isinstance(val, str) and val == '跳过'
             res_text = 'SKIP' if skipped else ("PASS" if is_pass else "FAIL")
-            item_node.setText(4, str(val) if val is not None else "Done")
+            item_data = (item_node.data(0, Qt.UserRole) or {}).get('raw_data', {})
+            item_node.setText(4, format_result(val, item_data) if val is not None else "Done")
             if getattr(val, "unit", ""):
                 item_node.setText(5, val.unit)
             item_node.setText(6, res_text)

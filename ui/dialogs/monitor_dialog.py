@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar, QTreeWidget, QTreeWidgetItem, QTextEdit, QPushButton
 from PySide6.QtCore import Qt, Slot, QTimer
 from PySide6.QtGui import QColor
+from core.result_display import format_result
 
 class MonitorDialog(QDialog):
     """
@@ -293,7 +294,7 @@ class MonitorDialog(QDialog):
                     # 还原历史测量值到界面上！
                     measured_val = getattr(worker, "step_measured_values", {}).get((orig_idx, step_name))
                     if measured_val is not None and measured_val != "PASS":
-                        item.setText(3, str(measured_val))
+                        item.setText(3, format_result(measured_val, item.data(0, Qt.UserRole)))
                         item.setForeground(3, QColor("#00E5FF"))
                     else:
                         item.setText(3, "--")
@@ -308,7 +309,7 @@ class MonitorDialog(QDialog):
                         sub_item.setText(4, status)
                         sub_item.setForeground(4, QColor("#4ECCA3") if status == "PASS" else QColor("#FF4C29"))
                         if result is not None and result != "PASS":
-                            sub_item.setText(3, str(result))
+                            sub_item.setText(3, format_result(result, item.data(0, Qt.UserRole)))
                             sub_item.setForeground(3, QColor("#00E5FF"))
                         else:
                             sub_item.setText(3, "--")
@@ -351,6 +352,8 @@ class MonitorDialog(QDialog):
                 "min": step.min_limit if step.min_limit else "--",
                 "max": step.max_limit if step.max_limit else "--",
                 "strategy": step.ng_strategy.value,
+                "standard_type": getattr(step, 'standard_type', '数值'),
+                "decimal_places": getattr(step, 'decimal_places', None),
                 "sub_steps": sub_data_list,
                 "skip_runtime": getattr(step, 'skip_runtime', False)
             }
@@ -480,7 +483,7 @@ class MonitorDialog(QDialog):
                 item.setText(4, "PASS" if is_pass else "NG")
                 item.setForeground(4, QColor("#4ECCA3") if is_pass else QColor("#FF4C29"))
                 if measured_val is not None and measured_val != "PASS":
-                    item.setText(3, str(measured_val))
+                    item.setText(3, format_result(measured_val, item.data(0, Qt.UserRole)))
                     item.setForeground(3, QColor("#00E5FF"))
                 else:
                     item.setText(3, "--")
@@ -498,7 +501,7 @@ class MonitorDialog(QDialog):
                 item.setForeground(3, QColor("#888888"))
             else:
                 if result is not None and result != "PASS":
-                    item.setText(3, str(result))
+                    item.setText(3, format_result(result, item.parent().data(0, Qt.UserRole)))
                     item.setForeground(3, QColor("#00E5FF"))
                 else:
                     item.setText(3, "--")

@@ -84,6 +84,13 @@ def _execute_simulator_command(manager, text, channel, logger, cancelled=lambda:
             raise RuntimeError('测试已停止')
     try:
         active()
+        combined = getattr(type(manager), 'configure_simulators', None)
+        if (callable(combined) and 'output' in values and
+                any(key in values for key in ('range', 'current', 'voltage'))):
+            configuration = {key: value for key, value in values.items() if key != 'channels'}
+            confirmed(manager.configure_simulators(configuration, channels, logger=logger,
+                                                   cancelled=cancelled), '快捷配置')
+            return True, None
         order=('current','range','voltage') if values.get('range')=='LOW' else ('range','current','voltage')
         for key in order:
             if key not in values:

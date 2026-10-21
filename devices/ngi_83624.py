@@ -196,7 +196,7 @@ class NGI83624:
             except Exception as exc:
                 self.last_error=f'批量设压/校验失败：{exc}'; return False
 
-    def output_controls(self,state,channels=None,logger=None):
+    def output_controls(self,state,channels=None,logger=None,*,cancelled=None):
         channels=list(range(1,self.max_channels+1)) if channels is None else list(channels)
         if (state not in (True, False) or not channels or len(set(channels)) != len(channels)
                 or any(type(ch) is not int or not 1<=ch<=self.max_channels for ch in channels)):
@@ -208,7 +208,9 @@ class NGI83624:
                 replies=self._query_channels('OUTP{ch}:ONOFF?',channels,logger,prefix=f'OUTP:ONOFF {int(state)}(@{selection})\n')
                 if not self._verify_output_transition(channels,state,logger,initial=replies):
                     return False
-                return self._verify_output_voltage(channels,logger) if state else True
+                if not state:return True
+                options = {'cancelled': cancelled} if cancelled is not None else {}
+                return self._verify_output_voltage(channels,logger,**options)
             except Exception as exc:
                 self.last_error=f'批量输出/校验失败：{exc}'; return False
 
@@ -381,6 +383,99 @@ class NGI83624:
                 if logger:logger(f'[IP: {self.ip}] {self.last_error}')
                 return False
             time.sleep(min(self.OUTPUT_POLL_INTERVAL,remaining))
+
+    def _configuration_snapshot(self, channels, logger=None):
+        states = self._query_channels('OUTP{ch}:ONOFF?', channels, logger)
+        ranges = self._query_channels('SOUR{ch}:RANG?', channels, logger)
+        currents = self._query_channels('SOUR{ch}:OUTCURR?', channels, logger)
+        voltages = self._query_channels('SOUR{ch}:VOLT?', channels, logger)
+        if any(len(values) != len(channels) for values in (states, ranges, currents, voltages)):
+            raise ValueError('Incomplete simulator configuration replies')
+        result = {}
+        for ch, state, mode, current, voltage in zip(channels, states, ranges, currents, voltages):
+            state = state.strip().upper()
+            mode, current, voltage = int(mode), float(current) / 1000, float(voltage)
+            if (state not in ('1', 'ON', 'TRUE', '0', 'OFF', 'FALSE') or mode not in (0, 2, 3) or
+                    not math.isfinite(current) or current < 0 or not math.isfinite(voltage) or voltage < 0):
+                raise ValueError(f'Invalid simulator configuration reply: CH{ch}')
+            result[ch] = dict(output=state in ('1', 'ON', 'TRUE'),
+                              range={0: 'HIGH', 2: 'LOW', 3: 'AUTO'}[mode], current=current, voltage=voltage)
+        return result
+
+    def configure_confirmed(self, channels, configuration, *, logger=None, cancelled=lambda:False):
+        """Configure once; only final ON validates measured output voltage."""
+        from core.simulator_control import simulator_configuration
+        configuration = simulator_configuration(configuration)
+        channels = list(channels)
+        if (not channels or len(channels) != len(set(channels)) or
+                any(type(ch) is not int or not 1 <= ch <= self.max_channels for ch in channels)):
+            raise ValueError('Invalid simulator configuration channels')
+        with self._lock:
+            started = time.monotonic()
+            self.last_configuration = dict(ok=False, channels=channels, requested=dict(configuration))
+            def active():
+                if cancelled():raise RuntimeError('Simulator control cancelled')
+            def checked(value):
+                if value is not True:raise RuntimeError(self.last_error or 'Simulator configuration not confirmed')
+            must_cleanup = configuration['output'] is False
+            try:
+                # An explicit OFF remains executable even after cancellation.
+                if configuration['output'] is False:
+                    checked(self.output_controls(False, channels, logger))
+                active()
+                snapshot = self._configuration_snapshot(channels, logger)
+                active()
+                currents = {ch: configuration.get('current', snapshot[ch]['current']) for ch in channels}
+                ranges = {ch: configuration.get('range', snapshot[ch]['range']) for ch in channels}
+                if any(ranges[ch] == 'LOW' and currents[ch] > .001000001 for ch in channels):
+                    raise ValueError('LOW range current limit must not exceed 1 mA')
+                changed_ranges = [ch for ch in channels if ranges[ch] != snapshot[ch]['range']]
+                changed_currents = [ch for ch in channels if abs(currents[ch] - snapshot[ch]['current']) > 1e-8]
+                changed_voltages = [ch for ch in channels if 'voltage' in configuration and
+                                    abs(configuration['voltage'] - snapshot[ch]['voltage']) > .001]
+                self.last_configuration.update(changed_ranges=changed_ranges, changed_currents=changed_currents,
+                                               changed_voltages=changed_voltages, initial=snapshot)
+                if logger:logger(f'[IP: {self.ip}] Configuration changes: range={changed_ranges}, '
+                                 f'current={changed_currents}, voltage={changed_voltages}')
+                range_on = [ch for ch in changed_ranges if snapshot[ch]['output']]
+                if range_on:
+                    active(); must_cleanup = True
+                    checked(self.output_controls(False, range_on, logger))
+                for ch in changed_ranges:
+                    active(); must_cleanup = True
+                    # Lower the limit before entering LOW; range changes may reset it.
+                    if ranges[ch] == 'LOW' and snapshot[ch]['current'] > .001000001:
+                        checked(self.set_current_limit(ch, currents[ch], logger))
+                    active()
+                    checked(self.set_range(ch, ranges[ch], logger))
+                    active()
+                    checked(self.set_current_limit(ch, currents[ch], logger))
+                for ch in changed_currents:
+                    if ch not in changed_ranges:
+                        active(); must_cleanup = True
+                        checked(self.set_current_limit(ch, currents[ch], logger))
+                if changed_voltages:
+                    active(); must_cleanup = True
+                    checked(self.set_voltages(configuration['voltage'], changed_voltages, logger))
+                active()
+                if configuration['output']:
+                    must_cleanup = True
+                    checked(self.output_controls(True, channels, logger, cancelled=cancelled))
+                    active()
+                self.last_error = ''
+                self.last_configuration.update(ok=True, duration_s=time.monotonic()-started)
+                return True
+            except Exception as exc:
+                reason = str(exc)
+                if must_cleanup:
+                    try:
+                        if self.output_controls(False, channels, logger) is not True:
+                            reason += '; OFF cleanup failed: ' + self.last_error
+                    except Exception as cleanup_error:
+                        reason += '; OFF cleanup raised: ' + str(cleanup_error)
+                self.last_error = reason
+                self.last_configuration.update(error=reason, duration_s=time.monotonic()-started)
+                raise RuntimeError(reason) from exc
 
     def apply_confirmed(self,action,channels,value,*,logger=None,cancelled=lambda:False,batch=False):
         """Application transaction: preserve OFF channels; verify live outputs."""

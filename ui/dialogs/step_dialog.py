@@ -40,7 +40,7 @@ class SmartProjectComboBox(QComboBox):
         super().showPopup()
 
 class StepDialog(QDialog):
-    def __init__(self, parent=None, step_data=None, device_manager=None):
+    def __init__(self, parent=None, step_data=None, device_manager=None, test_item_name=None):
         super().__init__(parent)
         self.device_manager = device_manager or getattr(parent, 'device_manager', None)
         self.is_loading = False # 状态位：标记是否处于数据加载还原中
@@ -1275,7 +1275,7 @@ class StepDialog(QDialog):
         self.param_stack.addWidget(self.legacy_simulator_notice)
         from ui.widgets.dbc_forms import DBCStepForm
         dbc_provider=getattr(self.parent(),'recipe_dbc_asset',None)
-        self.dbc_form=DBCStepForm(dbc_provider() if callable(dbc_provider) else None)
+        self.dbc_form=DBCStepForm(dbc_provider() if callable(dbc_provider) else None,test_item_name=test_item_name)
         self.param_stack.addWidget(self.dbc_form)
 
 
@@ -3358,7 +3358,7 @@ class StepDialog(QDialog):
             from core.dbc_signals import encode_step
             config=self.dbc_form.config()
             read_wait=self.read_until.config()
-            if read_wait and config.get('group'):
+            if read_wait and (config.get('group') or config.get('group_role')):
                 raise ValueError('采样组使用固定快照，请使用测试项上下限判定，不支持范围等待')
             if read_wait and config['output']=='choice':raise ValueError('枚举文字输出不能等待数值范围，请取消范围等待或改为物理数值')
             params=attach(encode_step(config),read_wait)

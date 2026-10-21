@@ -330,11 +330,29 @@ def _items(configs):
     (['end'],['A'],'没有匹配'),
     (['start','end'],['A','B'],'没有匹配'),
     (['start','start','end'],['A','B','B'],'不能嵌套'),
+    (['start','start','end','end'],['A','A','A','A'],'不能嵌套'),
 ])
 def test_invalid_boundaries_are_rejected_before_execution(asset,roles,names,match):
     from core.dbc_groups import plan_groups
     items=_items([grouped(asset,name=n,group_role=r) for r,n in zip(roles,names)])
     with pytest.raises(ValueError,match=match):plan_groups(items)
+
+
+def test_same_named_start_end_ranges_take_independent_snapshots(asset, session):
+    driver, monitor, later, make = session
+    worker = make([grouped(asset, group_role='start'), grouped(asset, 'B', group_role='end'),
+                   grouped(asset, group_role='start'), grouped(asset, 'B', group_role='end')])
+    later(.01, lambda:emit(driver, 0, 10))
+    later(.02, lambda:emit(driver, 1, 20))
+    assert run(worker, 0) == (True, 10)
+    first = worker._dbc_group_context
+    assert run(worker, 1) == (True, 20)
+    later(.01, lambda:emit(driver, 0, 30))
+    later(.02, lambda:emit(driver, 1, 40))
+    assert run(worker, 2) == (True, 30)
+    second = worker._dbc_group_context
+    assert first['id'] != second['id'] and second['since'] > first['since']
+    assert run(worker, 3) == (True, 40)
 
 
 def test_legacy_conversion_is_idempotent_and_preserves_non_group_fields(asset):
@@ -374,6 +392,7 @@ def test_editor_shows_boundaries_and_preserves_exact_saved_parameters(asset):
     from ui.tabs.config_tab import ConfigTab
     data=dict(name='test',dbc=asset,can_config=dict(channel='PCAN_USBBUS1'),
               items=_items([grouped(asset),grouped(asset,'B'),grouped(asset)]))
+    for item in data['items']:item['name']='voltage_'+item['name']
     db=Mock();db.load_sys_config.return_value={};db.list_recipes.return_value=[]
     page=ConfigTab(db)
     try:
@@ -396,6 +415,7 @@ def test_boundary_error_selects_the_matching_editor_row(asset):
     from ui.tabs.config_tab import ConfigTab
     data=dict(name='test',dbc=asset,can_config=dict(channel='PCAN_USBBUS1'),
               items=_items([config(asset,'A','Multiplex'),grouped(asset,group_role='start')]))
+    data['items'][1]['name']='voltage_item 1'
     db=Mock();db.load_sys_config.return_value={};db.list_recipes.return_value=[]
     page=ConfigTab(db)
     try:

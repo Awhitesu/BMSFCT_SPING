@@ -75,6 +75,8 @@ class ResponsivenessTests(unittest.TestCase):
                 device = getattr(manager, attribute)
                 if isinstance(device, list): device = device[0]
                 device.is_connected = True
+                if cls is SimulatorTab:
+                    device.read_output_state = Mock(return_value=False)
                 worker_ids = []
                 def blocked(*args, **kwargs):
                     worker_ids.append(threading.get_ident())

@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-                                QLineEdit, QPushButton, QComboBox)
+                                QLineEdit, QPushButton, QComboBox, QSpinBox)
+from core.result_display import MAX_DECIMAL_PLACES, decimal_places
 
 
 class TestItemDialog(QDialog):
@@ -9,11 +10,11 @@ class TestItemDialog(QDialog):
     def __init__(self, parent=None, data=None):
         super().__init__(parent)
         self.setWindowTitle("编辑测试项 (判定条件)")
-        self.setFixedSize(450, 600)
+        self.setFixedSize(450, 660)
         self.setStyleSheet("""
             QDialog { background-color: #1F1F35; color: white; }
             QLabel { font-size: 13px; color: #B0B0B0; margin-top: 5px; }
-            QComboBox, QLineEdit { 
+            QComboBox, QLineEdit, QSpinBox {
                 background-color: #16213E; 
                 border: 1px solid #0F3460; 
                 border-radius: 4px; 
@@ -83,6 +84,14 @@ class TestItemDialog(QDialog):
         self.unit_edit.setPlaceholderText("默认为 NULL (例如: V, A, Ah, ℃...)")
         layout.addWidget(self.unit_edit)
 
+        layout.addWidget(QLabel("小数位数（直接截断，不四舍五入）:"))
+        self.decimal_spin = QSpinBox()
+        self.decimal_spin.setRange(-1, MAX_DECIMAL_PLACES)
+        self.decimal_spin.setSpecialValueText("不限制")
+        self.decimal_spin.setValue(-1)
+        self.decimal_spin.setToolTip("仅控制数值显示，判定和原始记录不变。2：2.519→2.51；0：只显示整数；不足位数补0。")
+        layout.addWidget(self.decimal_spin)
+
         # 4. 增加NG复测选择
         layout.addWidget(QLabel("NG 复测选择:"))
         self.retry_combo = QComboBox()
@@ -107,6 +116,8 @@ class TestItemDialog(QDialog):
             self.max_edit.setText(str(data.get('max', '') if data.get('max') is not None and data.get('max') != "--" else ''))
             self.unit_edit.setText(data.get('unit', '') if data.get('unit') is not None and data.get('unit') != "NULL" else '')
             self.retry_combo.setCurrentText(data.get('retry_count', '不复测'))
+            places = decimal_places(data.get('decimal_places'))
+            self.decimal_spin.setValue(places if places is not None else -1)
             strategy = data.get('strategy', '任何NG停止')
             if strategy == '关键NG停止':
                 # Keep the legacy token and its existing engine behavior.
@@ -170,5 +181,6 @@ class TestItemDialog(QDialog):
             'standard_type': self.type_combo.currentText(),
             'retry_count': self.retry_combo.currentText(),
             'strategy': self.stop_combo.currentData(),
-            'unit': unit_val if unit_val else "NULL"
+            'unit': unit_val if unit_val else "NULL",
+            'decimal_places': decimal_places(self.decimal_spin.value())
         }
