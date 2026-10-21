@@ -87,6 +87,10 @@ def test_build_uses_staging_and_preserves_production_database(tmp_path, monkeypa
     assert (output/'版本信息.txt').exists()
     assert (output/'upgrade_app.ps1').read_bytes()==(source_root/'tools/upgrade_app.ps1').read_bytes()
     assert (output/'upgrade_app.cmd').exists()
+    assert (output/'VERSION_HISTORY.md').exists()
+    tracked_history=json.loads((tmp_path/'releases/history.json').read_text(encoding='utf-8'))
+    assert tracked_history[-1]['app_version']==version
+    assert tracked_history[-1]['sha256']==json.loads((output/'build-info.json').read_text(encoding='utf-8'))['sha256']
     assert (output/'使用说明'/'统计追溯与现场安全升级_20261019.md').exists()
 
 

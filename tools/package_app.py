@@ -15,6 +15,8 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0,str(ROOT))
 APP_NAME = 'BMS软件注入&APP刷写系统.exe'
 
 
@@ -144,6 +146,7 @@ def main(argv=None):
     parser.add_argument('--check', action='store_true', help='只检查打包环境，不构建')
     parser.add_argument('--open', action='store_true', help='完成后打开输出目录')
     parser.add_argument('--versioned', action='store_true', help='目录版输出到独立版本目录，避免覆盖运行中的程序')
+    parser.add_argument('--release-note', action='append', default=[], help='本版本更新说明，可重复填写；打包成功后写入统一版本历史表')
     args = parser.parse_args(argv)
     os.chdir(ROOT)
     from build_seedkey_hosts import build
@@ -157,6 +160,8 @@ def main(argv=None):
 
 
 def build_release(args, versions):
+    from tools.version_history import source_info, record_build
+    source_snapshot = source_info(ROOT)
     mode = 'onefile' if args.onefile else 'onedir'
     dist = ROOT / 'dist' / ('BMSFCT-onefile' if args.onefile else '')
     output = dist if args.onefile else dist / 'BMSFCT'
@@ -215,6 +220,7 @@ def build_release(args, versions):
     metadata = dict(app_version=manifest['app_version'], built_at=manifest['built_at'], mode=mode, versions=versions,
                     elapsed_seconds=round(time.monotonic()-started, 1), executable=APP_NAME,
                     sha256=checksum)
+    metadata.update(source_snapshot)
     (output / 'build-info.json').write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding='utf-8')
     (output / '版本信息.txt').write_text(f'BMSFCT V{manifest["app_version"]}\n构建时间：{manifest["built_at"]}\nSHA256：{checksum}\n', encoding='utf-8-sig')
     temporary_version = ROOT / 'version.json.tmp'
@@ -222,6 +228,8 @@ def build_release(args, versions):
     temporary_version.replace(ROOT / 'version.json')
     with (logs / 'releases.jsonl').open('a', encoding='utf-8') as history:
         history.write(json.dumps(metadata, ensure_ascii=False) + '\n')
+    record_build(ROOT,metadata,getattr(args,'release_note',None))
+    shutil.copy2(ROOT/'VERSION_HISTORY.md',output/'VERSION_HISTORY.md')
     print('发布版本：V' + manifest['app_version'], flush=True)
     print(f'\n打包完成，耗时 {metadata["elapsed_seconds"]} 秒。\n应用：{executable}\n目录版请复制整个 BMSFCT 文件夹。', flush=True)
     print('现有工位升级：退出软件后，在新版目录运行 upgrade_app.cmd，选择原现场目录；不要覆盖现场数据库、config 或 recipes。',flush=True)
