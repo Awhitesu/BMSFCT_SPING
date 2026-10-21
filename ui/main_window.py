@@ -12,6 +12,7 @@ from ui.tabs.debug_tab import DebugTab
 from ui.tabs.mes_tab import MesTab
 from ui.tabs.simulator_tab import SimulatorTab
 from ui.tabs.multimeter_tab import MultimeterTab
+from ui.tabs.environment_tab import EnvironmentTab
 from ui.tabs.it6333b_tab import IT6333BTab
 from ui.tabs.dg2052_tab import DG2052Tab
 from ui.tabs.tbs2102b_tab import TBS2102BTab
@@ -241,6 +242,8 @@ class MainWindow(QMainWindow):
         self.tab_dg2052 = DG2052Tab(self.device_manager)
         self.tab_debug_center.add_debug_tab(self.tab_dg2052, "DG2052 信号发生器")
         self.tab_debug_center.add_debug_tab(self.tab_multimeter, "34461A万用表调试")
+        self.tab_environment = EnvironmentTab(self.device_manager)
+        self.tab_debug_center.add_debug_tab(self.tab_environment, "RS-WS-ETH-6 温湿度传感器", "测量与信号")
         layout.addWidget(self.tabs)
 
         # 状态栏

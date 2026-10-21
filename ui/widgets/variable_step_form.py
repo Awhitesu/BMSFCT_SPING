@@ -21,6 +21,8 @@ def catalog(parent):
                 if c and c['operation']=='write':keys.add(c['key'])
                 from core.device_steps import decode as decode_device
                 device_step = decode_device(text)
+                if device_step and device_step[2].get('variable'):
+                    keys.add(device_step[2]['variable'])
                 if device_step and device_step[0] == 'simulator' and device_step[1].key == 'current_batch':
                     manager = getattr(node, 'device_manager', None)
                     if manager is not None:

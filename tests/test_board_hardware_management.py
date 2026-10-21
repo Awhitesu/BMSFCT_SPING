@@ -112,11 +112,12 @@ def test_resistor_sequence_reload_and_stale_save_protection(pages):
     page, manager, cfg = pages
     bank = ResistorBankTab(manager)
     try:
-        assert bank.active_channels() == list(range(19,25))
+        # Only enabled cards occupy global channel numbers; one card starts at 1.
+        assert bank.active_channels() == list(range(1,7))
         cfg['rn_boards']['resistor1']['number'] = 2
         bank.reload_saved_config()
         assert bank.config.cellWidget(0,1).value() == 2
-        assert bank.active_channels() == list(range(7,13))
+        assert bank.active_channels() == list(range(1,7))
         cfg['rn_boards']['resistor1']['enabled'] = False
         with patch.object(QMessageBox,'warning') as warning:
             bank.save()

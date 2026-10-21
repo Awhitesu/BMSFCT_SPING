@@ -56,6 +56,7 @@ STEP_GRAMMAR_DOC = """## 子工步语法规则（引擎实际解析逻辑，必�
   "FILE:{路径.rpj} / DEVICE_FAMILY:RA|RX|RL78|RH850|RE / TIMEOUT:{秒} / VERIFY_DIFF:1"
 
 ### 2. 读取仪表 READ_INSTRUMENT（type 含「读取」）
+- RS-WS-ETH-6 温湿度传感器：在“设备操作 → 测量仪器”中选择“读取温度”或“读取湿度”。温度参数示例 core.device_steps.encode('rs_ws_eth6','temperature',{'variable':'环境温度'})；湿度动作 ID 为 humidity，变量键名可留空。输出纯数值并携带 ℃／%RH 单位，可作为父测试项的数值上下限判定依据。主动上传模式读取后台最新有效数据，断线、缺失、过期或无效值会失败，不输出旧值；可附加 RW 范围等待。
 - 语法："读取电压|读取电流 [/ CH:{n}] [/ UNIT:{单位}]"。
 - UNIT 仅 IT6722 系设备支持：电压 V|mV，电流 A|mA|μA。
 - device 决定读哪台设备：simulator→电池模拟器，it6722/dut/被测物供电→DUT 电源，hv/ngi→高压源，ca550→校准仪。

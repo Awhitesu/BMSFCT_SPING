@@ -28,6 +28,7 @@ class HardwareConfigTab(QWidget):
         ("it6333b", "IT6333B 三通道电源", "RS232", "it6333b_com", "", None, "", "it6333b_baudrate", "9600"),
         ("dg2052", "DG2052 双通道信号发生器", "TCP", "dg2052_ip", "", "dg2052_port", "5555", None, ""),
         ("dmm34461", "34461A 万用表", "TCP / SCPI", "dmm34461_ip", "", "dmm34461_port", "5025", None, ""),
+        ("rs_ws_eth6", "RS-WS-ETH-6 温湿度传感器", "Modbus TCP", "rs_ws_eth6_ip", "", "rs_ws_eth6_port", "502", "rs_ws_eth6_unit", "1"),
         ("tbs2102b", "泰克 TBS2102B 双通道示波器", "LAN VXI-11", "tbs2102b_ip", "", None, "", None, ""),
         *[(f"sim{i}", f"电池模拟器配置 {i}", "TCP", f"sim{i}_ip", f"192.168.1.{209+i}", f"sim{i}_port", "7000", None, "") for i in range(1, 7)],
         ("easy320", "Easy320 PLC", "Modbus TCP", "easy320_ip", "192.168.1.88", "easy320_port", "502", None, ""),
@@ -159,12 +160,21 @@ class HardwareConfigTab(QWidget):
                     continue
                 enabled = bool(cfg.get(f"{key}_enabled", False if key in ("scanner", "opteeq", "e2_rfp", "it6333b", "dg2052", "tbs2102b", "sim2", "sim3", "sim4", "sim5", "sim6") else True))
                 if key=='dmm34461':enabled=bool(cfg.get('dmm34461_enabled',bool(cfg.get('dmm34461_ip',''))))
+                if key=='rs_ws_eth6':enabled=bool(cfg.get('rs_ws_eth6_enabled',False))
                 enabled_item = QTableWidgetItem()
                 enabled_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
                 enabled_item.setCheckState(Qt.Checked if enabled else Qt.Unchecked)
                 self.table.setItem(row, 0, enabled_item)
                 self.table.setItem(row, 1, self._readonly_item(name))
                 self.table.setItem(row, 2, self._readonly_item(protocol))
+                if key == 'rs_ws_eth6':
+                    mode = QComboBox()
+                    mode.addItem('主动上传（本机监听）', 'upload')
+                    mode.addItem('Modbus TCP（主动问询）', 'modbus')
+                    mode.setCurrentIndex(mode.findData(cfg.get('rs_ws_eth6_mode', 'modbus')))
+                    mode.setToolTip('主动上传时，端口填写本机监听端口；IP填写传感器IP用于识别来源。站号列为上传节点号。')
+                    mode.currentIndexChanged.connect(self._configuration_edited)
+                    self.table.setCellWidget(row, 2, mode)
 
                 cur_addr = str(cfg.get(address_key, address_default))
 
@@ -206,6 +216,9 @@ class HardwareConfigTab(QWidget):
 
                 self.table.setItem(row, 4, QTableWidgetItem(str(cfg.get(port_key, port_default))) if port_key else self._readonly_item("—"))
                 self.table.setItem(row, 5, QTableWidgetItem(str(cfg.get(baud_key, baud_default))) if baud_key else self._readonly_item("—"))
+                if key == 'rs_ws_eth6':
+                    self.table.item(row, 4).setToolTip('主动上传：本机监听端口；Modbus 问询：设备端口。')
+                    self.table.item(row, 5).setToolTip('主动上传：温湿度节点号（通常为 1）；Modbus 问询：设备站号。')
                 self.table.setItem(row, 6, self._readonly_item("未初始化" if enabled else "未启用"))
                 for col, suffix, maximum, default in ((7, 'number', 6, int(key[-1]) if key.startswith('sim') else 1), (8, 'channels', 24, 1 if key == 'sim1' else 24)):
                     if key.startswith('sim'):
@@ -328,6 +341,8 @@ class HardwareConfigTab(QWidget):
         if spec[0].startswith('sim'):
             result['number']=self.table.cellWidget(row,7).value()
             result['channels']=self.table.cellWidget(row,8).value()
+        if spec[0] == 'rs_ws_eth6':
+            result['mode'] = self.table.cellWidget(row,2).currentData()
         if spec[2] == 'Modbus TCP 板卡' and spec[0].startswith('resistor'):
             result['number'] = self.table.cellWidget(row,7).value()
         return result
@@ -373,6 +388,13 @@ class HardwareConfigTab(QWidget):
                     cfg[port_key] = int(self.table.item(row, 4).text().strip())
                 if baud_key:
                     cfg[baud_key] = int(self.table.item(row, 5).text().strip())
+                if key == 'rs_ws_eth6':
+                    from devices.rs_ws_eth6 import RSWSETH6
+                    cfg['rs_ws_eth6_mode'] = self.table.cellWidget(row,2).currentData()
+                    if not 1 <= cfg[port_key] <= 65535 or not 1 <= cfg[baud_key] <= 255:
+                        raise ValueError('温湿度传感器：端口应为 1–65535，站号应为 1–255')
+                    if cfg[f'{key}_enabled']:
+                        RSWSETH6.validate_configuration(cfg[address_key], cfg[port_key], cfg[baud_key])
             for setting in simulator_settings(cfg):
                 if setting['enabled']:
                     ipaddress.IPv4Address(setting['ip'])

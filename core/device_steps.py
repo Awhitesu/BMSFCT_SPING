@@ -59,6 +59,7 @@ VARIABLE=Field('variable','保存到变量（可留空）','')
 DEVICES={
     'it6333b':('直流源','IT6333B 三通道电源'),
     'dmm34461':('测量仪器','34461A 万用表'),
+    'rs_ws_eth6':('测量仪器','RS-WS-ETH-6 温湿度传感器'),
     'dg2052':('信号发生器','DG2052 双通道信号发生器'),
     'tbs2102b':('示波器','TBS2102B 示波器'),
     'insulation':('板卡','绝缘板（单通道）'),
@@ -79,6 +80,11 @@ from devices.rigol_dg2052 import DG2052
 from devices.rn_board import BOARD_SPECS
 
 ACTIONS={
+    'rs_ws_eth6':(
+        Action('temperature','读取温度',(VARIABLE,),True,
+               '输出温度数值，单位 ℃，可参与测试项上下限判定。使用硬件管理中心配置；主动上传模式读取后台最新有效值，数据超时或断线时报错。'),
+        Action('humidity','读取湿度',(VARIABLE,),True,
+               '输出相对湿度数值，单位 %RH，可参与测试项上下限判定。使用硬件管理中心配置；主动上传模式读取后台最新有效值，数据超时或断线时报错。')),
     'it6333b':(CONNECT,
         Action('configure','设置通道参数',(CH3,number('voltage','电压 (V)',0,0,60),number('current','限流 (A)',.1,0,3),OUTPUT),help='CH1/CH2最高60V，CH3最高5V；设置后回读校验。'),
         Action('on','开启通道输出',(CH3,)),Action('off','关闭通道输出',(CH3,)),
@@ -286,6 +292,8 @@ def execute(manager,text,variables,logger,cancelled=lambda:False):
     _ensure_active(cancelled)
     device,spec,p=decode(text)
     action=spec.key
+    if device=='rs_ws_eth6' and p.get('variable'):
+        variables.pop(p['variable'],None)
     if device=='simulator' and action=='current_batch':
         from core.simulator_current_batch import execute_current_batch
         return True,execute_current_batch(manager,p,variables,logger,cancelled)
@@ -355,6 +363,13 @@ def execute(manager,text,variables,logger,cancelled=lambda:False):
             elif device=='dmm34461':
                 value,unit=driver.measure(p['function'],p['range'] or 'AUTO')
                 result=measurement(value,unit)
+            elif device=='rs_ws_eth6':
+                reading=driver.read_environment()
+                _ensure_active(cancelled)
+                value=reading.temperature if action=='temperature' else reading.humidity
+                result=measurement(value,'℃' if action=='temperature' else '%RH')
+                logger(f'[温湿度采集] {reading.captured_at:%Y-%m-%d %H:%M:%S} · {reading.protocol}'
+                       + (f' · 终端 {reading.terminal_id} / 节点 {reading.node}' if reading.terminal_id else ''))
             elif device=='dg2052':result=_generator(driver,action,p,logger,cancelled)
             elif device=='tbs2102b':result=_scope(driver,action,p,logger,variables,cancelled)
             elif device in ('dut_power','hv_source'):
@@ -532,6 +547,7 @@ def _virtual_result(device,spec,p):
         return measurement(0,Keysight34461A.FUNCTIONS[p['function']][1])
     if device=='simulator' and spec.key=='current':return measurement(0,'mA')
     units={'voltage':'V','current':'A','read_resistance':'Ω','frequency':'Hz',
+           'temperature':'℃','humidity':'%RH',
            'amplitude':'Vpp','offset':'V','level':'V','state':''}
     if device=='tbs2102b' and spec.key=='measure':
         unit={'FREQUENCY':'Hz','PERIOD':'s','RISE':'s','FALL':'s'}.get(p['measurement'],'V')

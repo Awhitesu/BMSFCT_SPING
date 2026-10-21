@@ -14,6 +14,7 @@ def configuration_snapshot(manager):
         'easy320': ('easy320', 'ip', 'port', None),
         'dg2052': ('dg2052', 'ip', 'port', None),
         'dmm34461': ('dmm34461', 'ip', 'port', None),
+        'rs_ws_eth6': ('rs_ws_eth6', 'ip', 'port', 'unit'),
         'tbs2102b': ('tbs2102b', 'ip', None, None),
         'opteeq': ('opteeq', 'ip', 'port', None),
         'e2_rfp': ('e2_rfp', 'rfp_cli_path', None, None),
@@ -28,6 +29,8 @@ def configuration_snapshot(manager):
             if name:
                 row[field] = getattr(driver, name, '')
         rows[key] = row
+        if key == 'rs_ws_eth6':
+            row['mode'] = driver.mode
     for slot, driver in enumerate(getattr(manager, 'simulators', ()), 1):
         key = f'sim{slot}'
         rows[key] = dict(address=driver.ip, port=driver.port,

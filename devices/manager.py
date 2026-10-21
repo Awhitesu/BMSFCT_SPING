@@ -34,6 +34,8 @@ from .easy320_driver import Easy320Controller
 from .opteeq_sg400 import OpteeQSG400
 from .renesas_e2_rfp import RenesasE2Rfp
 from .pcan_fd_driver import PCANFDDriver
+from .rs_ws_eth6 import RSWSETH6
+from .renke_upload import RenkeUploadSensor
 
 class DeviceManager:
     """
@@ -102,6 +104,14 @@ class DeviceManager:
         self.dg2052.connect_mode=cfg.get('dg2052_connect_mode','AUTO')
         self.dmm34461=Keysight34461A(cfg.get('dmm34461_ip',''),cfg.get('dmm34461_port',5025))
         self.enabled_devices['dmm34461']=bool(cfg.get('dmm34461_enabled',bool(cfg.get('dmm34461_ip',''))))
+        sensor_class = RenkeUploadSensor if cfg.get('rs_ws_eth6_mode', 'modbus') == 'upload' else RSWSETH6
+        old_sensor = getattr(self, 'rs_ws_eth6', None)
+        if old_sensor is not None:
+            old_sensor.disconnect()
+        self.rs_ws_eth6 = sensor_class(cfg.get('rs_ws_eth6_ip', ''),
+                                      cfg.get('rs_ws_eth6_port', 2404 if sensor_class is RenkeUploadSensor else 502),
+                                      cfg.get('rs_ws_eth6_unit', 1))
+        self.enabled_devices['rs_ws_eth6'] = bool(cfg.get('rs_ws_eth6_enabled', False))
         self.enabled_devices['dg2052'] = bool(cfg.get('dg2052_enabled', False))
         self.tbs2102b = TBS2102B(cfg.get('tbs2102b_ip', ''))
         self.enabled_devices['tbs2102b'] = bool(cfg.get('tbs2102b_enabled', False))
@@ -303,7 +313,8 @@ class DeviceManager:
         devices = [('pcan', self.pcan), ('opteeq', self.opteeq), ('e2_rfp',self.e2_rfp),
                    ('easy320',self.easy320), ('ca550',self.ca550), ('scanner',getattr(self,'scanner',None)), ('hv',self.hv_source),
                    ('dut_pwr',self.dut_power), ('it6333b',self.it6333b),
-                   ('tbs2102b',self.tbs2102b), ('dg2052',self.dg2052), ('dmm34461',self.dmm34461)]
+                   ('tbs2102b',self.tbs2102b), ('dg2052',self.dg2052), ('dmm34461',self.dmm34461),
+                   ('rs_ws_eth6',getattr(self,'rs_ws_eth6',None))]
         devices.extend((f'sim{i}',sim) for i,sim in enumerate(self.simulators,1))
         operations.extend((key, device) for key,device in devices if self.is_enabled(key) and device)
         cfg = self.db_manager.load_sys_config() if self.db_manager else {}
@@ -341,6 +352,8 @@ class DeviceManager:
                 detail = getattr(device, 'last_error', '') if not ok else getattr(device, 'identity', '')
                 if key == 'e2_rfp' and ok:
                     logger('[+] e2_rfp: E2 USB已识别；目标连接未验证')
+                elif key == 'rs_ws_eth6' and ok and device.mode == 'upload':
+                    logger(f'[+] rs_ws_eth6: 本机 TCP {device.port} 监听已启动；等待传感器上传有效数据')
                 else:
                     logger(f"{'[+]' if ok else '[!]'} {key}: {'connected' if ok else 'offline'}" + (f" ({detail})" if isinstance(detail, str) and detail else ''))
         return success and not stop_requested()
@@ -399,6 +412,20 @@ class DeviceManager:
             add_status('tbs2102b', '泰克 TBS2102B 示波器', self.tbs2102b)
         if self.is_enabled('dmm34461'):
             add_status('dmm34461','34461A 万用表',self.dmm34461,f'{self.dmm34461.ip}:{self.dmm34461.port}')
+        sensor = getattr(self, 'rs_ws_eth6', None)
+        if sensor is not None and self.is_enabled('rs_ws_eth6'):
+            add_status('rs_ws_eth6', sensor.identity, sensor,
+                       f'{sensor.ip}:{sensor.port} / 站号 {sensor.unit}')
+            if sensor.mode == 'upload':
+                row = status_list[-1]
+                row['connection_verified'] = sensor.is_connected
+                if sensor.is_connected:
+                    row['status'] = '已收到数据'
+                    row['detail'] = f'终端 {sensor.terminal_id} / 数据距今 {sensor.data_age:.1f}s'
+                elif sensor.is_listening:
+                    age = sensor.data_age
+                    row.update(status='数据超时' if age is not None else '监听中，等待上传', color='#FFC107',
+                               detail=sensor.last_error or f'监听本机 TCP {sensor.port}，等待 {sensor.ip} 上传')
         from .rn_board import board_settings
         cfg = self.db_manager.load_sys_config() if self.db_manager else {}
         for setting in board_settings(cfg or {}):
@@ -416,7 +443,7 @@ class DeviceManager:
         devices = [(key, board) for key, board in self.rn_boards.items()]
         devices.extend((key, getattr(self, key, None)) for key in (
             'dmm34461', 'tbs2102b', 'dg2052', 'it6333b', 'hv_source',
-            'dut_power', 'easy320', 'ca550', 'scanner', 'pcan', 'opteeq', 'e2_rfp'))
+            'dut_power', 'easy320', 'ca550', 'scanner', 'pcan', 'opteeq', 'e2_rfp', 'rs_ws_eth6'))
         devices.extend((f'sim{index}', sim) for index, sim in
                        enumerate(getattr(self, 'simulators', []), 1))
         for name, device in devices:
