@@ -2,10 +2,11 @@ from ui.device_task import DeviceTask
 import time
 import queue
 from collections import deque
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtGui import QIntValidator
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFormLayout, QLabel, QLineEdit, QComboBox, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QGridLayout, QPlainTextEdit, QTabWidget, QCheckBox, QScrollArea, QLayout
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFormLayout, QLabel, QLineEdit, QComboBox, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QGridLayout, QPlainTextEdit, QTabWidget, QCheckBox, QScrollArea, QLayout, QFileDialog
 
 
 class UDSRequestWorker(QThread):
@@ -95,9 +96,14 @@ class PCANFDTab(QWidget):
         self.zlg_port.setRange(1, 65535)
         self.zlg_port.setValue(int(getattr(self.driver, 'zlg_port', 8000)))
         self.zlg_sdk = QLineEdit(str(getattr(self.driver, 'zlg_sdk_path', '')))
+        self.zlg_sdk.setReadOnly(True)
+        self.zlg_sdk.setToolTip('通过"浏览…"选择 zlgcan.dll 所在目录（绝对路径）。')
+        btn_zlg_sdk = QPushButton('浏览…')
+        btn_zlg_sdk.setFixedWidth(64)
+        btn_zlg_sdk.clicked.connect(self._browse_zlg_sdk)
         net.addWidget(QLabel('设备IP')); net.addWidget(self.zlg_ip)
         net.addWidget(QLabel('TCP端口')); net.addWidget(self.zlg_port)
-        net.addWidget(QLabel('官方SDK目录')); net.addWidget(self.zlg_sdk, 2)
+        net.addWidget(QLabel('官方SDK目录')); net.addWidget(self.zlg_sdk, 2); net.addWidget(btn_zlg_sdk)
         self.zlg_channels = QTableWidget(4, 5)
         self.zlg_channels.setHorizontalHeaderLabels(['物理通道', '使能', '仲裁波特率', '数据波特率', '120Ω终端电阻'])
         self.zlg_channels.verticalHeader().setVisible(False)
@@ -305,6 +311,15 @@ class PCANFDTab(QWidget):
     def run_device(self,action,callback):
         if self.operation.isRunning() or (getattr(self,'uds_worker',None) and not self.uds_worker.wait(0)):return
         self.operation.run(action,callback)
+
+    def _browse_zlg_sdk(self):
+        current = self.zlg_sdk.text().strip()
+        start = current if current and Path(current).is_dir() else ''
+        filename, _ = QFileDialog.getOpenFileName(
+            self, '选择 ZLG 官方SDK目录中的 zlgcan.dll', start,
+            'zlgcan.dll (zlgcan.dll);;动态链接库 (*.dll)')
+        if filename:
+            self.zlg_sdk.setText(str(Path(filename).resolve().parent))
 
     def connect_device(self):
         driver=self.driver

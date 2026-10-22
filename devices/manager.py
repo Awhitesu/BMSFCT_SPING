@@ -14,6 +14,30 @@ if getattr(sys, "frozen", False):
 else:
     _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _PCAN_BASIC_DIR = _PROJECT_ROOT / "vendor" / "PCAN-Basic" / "x64"
+_ZLG_SDK_DEFAULT_DIR = _PROJECT_ROOT / "vendor" / "zlgcan(20260806)" / "zlgcan_x64"
+
+
+def resolve_zlg_sdk_path(value):
+    """返回 ZLG 官方 SDK 目录的绝对路径。
+
+    相对路径按程序根目录解析（兼容省略 vendor 前缀的旧配置），
+    并在多个候选中优先选择实际包含 zlgcan.dll 的目录；
+    绝对路径视为用户显式选择，原样返回。
+    """
+    raw = str(value or '').strip()
+    if raw:
+        path = Path(raw)
+        if path.is_absolute():
+            return str(path)
+        candidates = [_PROJECT_ROOT / path]
+        if not path.parts or path.parts[0].lower() != 'vendor':
+            candidates.append(_PROJECT_ROOT / 'vendor' / path)
+        candidates.append(_ZLG_SDK_DEFAULT_DIR)
+        for candidate in candidates:
+            if (candidate / 'zlgcan.dll').is_file():
+                return str(candidate)
+        return str(candidates[0])
+    return str(_ZLG_SDK_DEFAULT_DIR)
 _pcan_dll_dir_handle = None
 if os.name == "nt" and _PCAN_BASIC_DIR.is_dir():
     os.environ["PATH"] = str(_PCAN_BASIC_DIR) + os.pathsep + os.environ.get("PATH", "")
@@ -150,7 +174,7 @@ class DeviceManager:
             fd_enabled=bool(cfg.get("pcan_fd_enabled", True)),
             logical_channel=0,
         )
-        self.pcan.zlg_sdk_path = cfg.get('zlg_sdk_path') or str(_PROJECT_ROOT / 'vendor' / 'zlgcan(20260806)' / 'zlgcan_x64')
+        self.pcan.zlg_sdk_path = resolve_zlg_sdk_path(cfg.get('zlg_sdk_path'))
         self.pcan.zlg_ip = cfg.get('zlg_ip', '192.168.0.177')
         self.pcan.zlg_port = int(cfg.get('zlg_port', 8000))
         from .rn_board import board_settings

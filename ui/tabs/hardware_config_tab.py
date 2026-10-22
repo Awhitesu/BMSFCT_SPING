@@ -4,13 +4,15 @@ from devices.simulator_config import simulator_settings
 from devices.rn_board import board_settings
 import ipaddress
 from copy import deepcopy
+from pathlib import Path
 from ui.tabs.multimeter_tab import MeterTask
 
 from PySide6.QtCore import Qt, QTimer, QSignalBlocker, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QCheckBox,
-    QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QComboBox, QSpinBox
+    QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QComboBox, QSpinBox,
+    QFileDialog, QLineEdit
 )
 
 
@@ -178,7 +180,11 @@ class HardwareConfigTab(QWidget):
 
                 cur_addr = str(cfg.get(address_key, address_default))
 
-                if self._is_serial_protocol(protocol) or self._is_usb_protocol(protocol):
+                if protocol == '目录':
+                    from devices.manager import resolve_zlg_sdk_path
+                    self.table.removeCellWidget(row, 3)
+                    self.table.setCellWidget(row, 3, self._make_path_picker(resolve_zlg_sdk_path(cur_addr)))
+                elif self._is_serial_protocol(protocol) or self._is_usb_protocol(protocol):
                     cb = QComboBox()
                     cb.setEditable(True)
                     cb.setProperty("embeddedCell", True)
@@ -322,11 +328,42 @@ class HardwareConfigTab(QWidget):
         self.refresh_hardware_status()
 
     def _address_text(self, row):
-        combo = self.table.cellWidget(row, 3)
-        if isinstance(combo, QComboBox):
-            return combo.currentText().split(' — ', 1)[0].strip()
+        widget = self.table.cellWidget(row, 3)
+        path_edit = getattr(widget, 'path_edit', None)
+        if path_edit is not None:
+            return path_edit.text().strip()
+        if isinstance(widget, QComboBox):
+            return widget.currentText().split(' — ', 1)[0].strip()
         item = self.table.item(row, 3)
         return item.text().strip() if item else ''
+
+    def _make_path_picker(self, path):
+        """目录/文件类配置的只读输入框 + 浏览按钮，始终保存绝对路径。"""
+        container = QWidget()
+        row_layout = QHBoxLayout(container)
+        row_layout.setContentsMargins(2, 2, 2, 2)
+        row_layout.setSpacing(4)
+        edit = QLineEdit(path)
+        edit.setReadOnly(True)
+        edit.setToolTip('通过"浏览…"选择 zlgcan.dll 所在目录，保存为绝对路径。')
+        browse = QPushButton('浏览…')
+        browse.setFixedWidth(64)
+        browse.clicked.connect(lambda: self._browse_sdk_path(edit))
+        row_layout.addWidget(edit, 1)
+        row_layout.addWidget(browse)
+        container.path_edit = edit
+        return container
+
+    def _browse_sdk_path(self, edit):
+        current = edit.text().strip()
+        start = current if current and Path(current).is_dir() else ''
+        filename, _ = QFileDialog.getOpenFileName(
+            self, '选择 ZLG 官方SDK目录中的 zlgcan.dll', start,
+            'zlgcan.dll (zlgcan.dll);;动态链接库 (*.dll)')
+        if not filename:
+            return
+        edit.setText(str(Path(filename).resolve().parent))
+        self._configuration_edited()
 
     def _configuration_edited(self, *_args):
         self._apply_row_visibility()
@@ -383,6 +420,9 @@ class HardwareConfigTab(QWidget):
                     from core.can_choices import CAN_CHANNELS
                     if cfg[address_key] not in CAN_CHANNELS:
                         raise ValueError('CAN卡仅支持PCAN_USBBUS1或ZLG CANFDNET-400U的CH1–CH4，请重新选择。')
+                if key == 'zlg_sdk' and cfg[f"{key}_enabled"]:
+                    if not (Path(cfg[address_key]) / 'zlgcan.dll').is_file():
+                        raise ValueError('ZLG 官方SDK目录中未找到 zlgcan.dll，请点击"浏览…"重新选择。')
 
                 if port_key:
                     cfg[port_key] = int(self.table.item(row, 4).text().strip())
