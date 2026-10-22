@@ -6,6 +6,8 @@
 
 | 源码版本 | 日期 | 本次更新 | 查看／回滚代码 |
 |---|---|---|---|
+| S2026.10.22.1 | 2026-10-22 | 修复ZLG官方SDK相对路径按程序资源目录解析，兼容打包后的_internal目录及旧配置；显式绝对路径保持不变。硬件管理和CAN调试增加浏览选择zlgcan.dll，保存时检查DLL存在。登记昨日V2026.10.21.2构建记录；27项相关回归通过，未做本次实机连接验收。 | [b6ba06a](https://github.com/pingsong1419-boop/BMSFCT/commit/b6ba06ab02290c8478f82816b3f2a6bfbb35d5b3) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/b6ba06ab02290c8478f82816b3f2a6bfbb35d5b3.zip) |
+| S2026.10.21.17 | 2026-10-21 | build: record application release V2026.10.21.1 | [b3def04](https://github.com/pingsong1419-boop/BMSFCT/commit/b3def04e92f8edef09c05cbe79604cd2d2cfae0d) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/b3def04e92f8edef09c05cbe79604cd2d2cfae0d.zip) |
 | S2026.10.21.16 | 2026-10-21 | docs: record temperature and humidity integration in version history | [3f0726e](https://github.com/pingsong1419-boop/BMSFCT/commit/3f0726e1a49532c9ae3daef60e13d5df82d43bfe) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/3f0726e1a49532c9ae3daef60e13d5df82d43bfe.zip) |
 | S2026.10.21.15 | 2026-10-21 | 硬件管理增加可选 RS-WS-ETH-6 温湿度传感器，支持厂家 P2 主动上传与 Modbus TCP 问询模式。; 主动上传后台处理登录、心跳和实时数据确认，校验帧长、校验和、节点与来源 IP；断线重连、数据过期和停止接收时使旧值失效。; 独立调试增加温湿度数值、采集时间、接收状态与日志。; 新增读取温度（℃）、读取湿度（%RH）子工步，支持数值上下限判定、范围等待与变量保存；失败清除指定变量旧值。; 变量选择列表自动收集设备工步配置的键名；修正电阻卡旧回归用例的过期编号期望。; 109 项测试及 259 个子用例通过。192.168.1.100:2404 实测接收 9 条实时数据，约每 4.96 秒一帧；经实际测试引擎验证两个读取子工步及变量输出。; 本次更新为源码，未生成新 EXE；实机通信验证不替代传感器精度校准。 | [8fded85](https://github.com/pingsong1419-boop/BMSFCT/commit/8fded85dd0edab6d5feed24708ba03ab91137653) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/8fded85dd0edab6d5feed24708ba03ab91137653.zip) |
 | S2026.10.21.14 | 2026-10-21 | Merge PR #4: DBC sampling groups and simulator improvements | [8bd5607](https://github.com/pingsong1419-boop/BMSFCT/commit/8bd560734e6f41d8d902173d3f4bf428b4661e4b) · [下载源码](https://github.com/pingsong1419-boop/BMSFCT/archive/8bd560734e6f41d8d902173d3f4bf428b4661e4b.zip) |
@@ -32,6 +34,7 @@
 
 | EXE版本 | 构建时间 | 更新内容 | 验证／限制 | 源码及回滚位置 | EXE SHA256（前12位） |
 |---|---|---|---|---|---|
+| V2026.10.21.2 | 2026-10-21T18:23:05.718646+08:00 | ZLG官方SDK目录改为绝对路径保存，界面提供浏览按钮选择zlgcan.dll，不再手工输入；兼容旧的相对路径配置；构建包含未提交源码；具体代码以本次构建快照为准 | 打包及资源检查通过；不代表硬件验收 | [b3def04](https://github.com/pingsong1419-boop/BMSFCT/commit/b3def04e92f8edef09c05cbe79604cd2d2cfae0d)；含未提交改动，不能仅按此提交精确还原EXE；使用已归档的同版本完整安装目录；若无安装包归档，只能按源码重新构建 | `74462bdb5191…` |
 | V2026.10.21.1 | 2026-10-21T17:35:21.651939+08:00 | 新增仁科温湿度传感器主动上传接收及独立调试，支持Modbus TCP模式；新增读取温度、读取湿度子工步，支持数值判定、范围等待、变量保存及变量列表自动识别；109项测试及259个子用例通过；实机上传与测试引擎读取均已验证；包含配方、设备配置、人员数据库和SeedKey辅助程序；构建包含未提交源码；具体代码以本次构建快照为准 | 打包及资源检查通过；不代表硬件验收 | [3f0726e](https://github.com/pingsong1419-boop/BMSFCT/commit/3f0726e1a49532c9ae3daef60e13d5df82d43bfe)；含未提交改动，不能仅按此提交精确还原EXE；使用已归档的同版本完整安装目录；若无安装包归档，只能按源码重新构建 | `a00f6edfe8c7…` |
 | V2026.10.20.6 | 2026-10-20T16:40:49.665919+08:00 | 仓库version.json登记的版本号；缺少逐版构建与更新清单，无法确认具体打包内容 | 待补全；不能仅凭版本号认定包含哪次Git提交 | 未记录对应提交；未找到原安装包和SHA256，需补充归档；不要据此直接回滚 | `未保留` |
 | V2026.10.19.12 | 2026-10-19T21:03:56.636402+08:00 | UDS子页12px字号、精简工具按钮并排成单行；三字段写入成功输出6E，匹配DID后将动态ASCII保存至主板序列号；测试页变量判定目标显示实际键值；VF-Limo7第11/13项按写入6E与读回变量值判定 | 相关回归68项通过，打包源码及辅助文件核验通过；未记录精确源码提交 | 未记录对应提交；本地dist/BMSFCT_V2026.10.19.12完整目录；未上传GitHub安装包 | `c12b7bcd5fbb…` |
