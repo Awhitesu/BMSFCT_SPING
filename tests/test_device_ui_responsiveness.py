@@ -64,7 +64,7 @@ class ResponsivenessTests(unittest.TestCase):
         manager = DeviceManager(db)
         cases = [
             (HVSourceTab, 'hv_source', 'set_voltage', lambda p: p.set_hv_volt()),
-            (SimulatorTab, 'simulators', 'set_voltage', lambda p: p.set_sim_volt()),
+            (SimulatorTab, 'simulators', 'set_voltages', lambda p: p.set_sim_volt()),
             (MainboardPowerTab, 'dut_power', 'output_control', lambda p: p.control_output(False)),
             (PCANFDTab, 'pcan', 'connect', lambda p: p.connect_device()),
         ]
@@ -85,6 +85,8 @@ class ResponsivenessTests(unittest.TestCase):
                     return True
                 setattr(device, method, Mock(side_effect=blocked))
                 page = cls(manager)
+                if cls is SimulatorTab:
+                    page._select_all_channels(True)
                 ticks = []
                 timer = QTimer()
                 timer.timeout.connect(lambda: ticks.append(1))

@@ -23,13 +23,14 @@ app = QApplication.instance() or QApplication([])
 
 def config(directory, model='型号 A', path='Slate SR'):
     (directory / 'Host.exe').touch()
+    (directory / 'Flash' / path).mkdir(parents=True, exist_ok=True)
     return dict(enabled=True, restart_name='Host.exe', host_path=str(directory / 'Host.exe'), model=model, flash_path=path)
 
 
 @pytest.fixture(autouse=True)
 def simulated_host(monkeypatch):
     """离线回归保留真实 INI 读写；只替换进程操作及等待，不操作现场上位机。"""
-    for name in ('stop_host', 'start_host', 'wait_seconds'):
+    for name in ('shutdown_host', 'start_host', 'wait_seconds'):
         monkeypatch.setattr('core.recipe_app_flash.' + name, Mock())
 
 
@@ -70,7 +71,8 @@ def test_missing_target_keys_or_section_are_added(tmp_path, content):
 def test_directory_host_percent_and_full_path_values_are_literal(tmp_path):
     ini = tmp_path / 'config.ini'
     ini.write_text('[App]\nType=old\nAddr=old\n', encoding='utf-8')
-    values = dict(config(tmp_path), host_path=str(tmp_path), model='100% 完整', flash_path=r'D:\Flash Files\A=B')
+    values = dict(config(tmp_path), host_path=str(tmp_path), model='100% 完整', flash_path=r'Flash Files\A=B')
+    (tmp_path / 'Flash' / values['flash_path']).mkdir(parents=True)
     prepare_app_flash(values)
     parsed = read_ini(ini)
     assert parsed['App']['Type'] == values['model']

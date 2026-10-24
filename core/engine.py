@@ -14,7 +14,7 @@ import threading
 from typing import List, Dict, Optional, Any
 from PySide6.QtCore import QObject, Signal, QThread, QTimer, Slot
 from core.debug_trace import trace
-from core.measurement_units import MeasurementValue, configured_read_unit, convert_reading, is_voltage_read, supports_read_units
+from core.measurement_units import MeasurementValue, configured_read_unit, convert_reading, convert_result, is_voltage_read, supports_read_units
 from core.device_steps import is_device_step, execute as execute_device_step
 
 
@@ -973,8 +973,7 @@ class ChannelWorker(QObject):
             if requested_unit:
                 result_value = convert_reading(result_value, is_volt, requested_unit)
                 unit = requested_unit
-            if 'simulator' in device or '\u7535\u6c60\u6a21\u62df\u5668' in device:
-                result_value=MeasurementValue(result_value,unit)
+            result_value = MeasurementValue(result_value, unit)
             hw_logger(f"[回读成功] {f_name} => {result_value:.3f} {unit}")
         else:
             hw_logger(f"[回读失败] {f_name} => 读取异常")
@@ -1397,7 +1396,9 @@ class ChannelWorker(QObject):
                     var_name = kv.get("VAR", "").strip()
                     val = self.variables.get(var_name, None)
                     if val is not None:
-                        if isinstance(val, (int, float)):
+                        if isinstance(val, MeasurementValue):
+                            result_value = val
+                        elif isinstance(val, (int, float)):
                             if "绝缘" in var_name:
                                 result_value = f"{val:.1f}kΩ"
                             elif "CSC_CELL" in var_name or "cell" in var_name.lower():
@@ -1411,11 +1412,11 @@ class ChannelWorker(QObject):
                         result_value = "变量未找到"
                         success = False
                     hw_logger(f"读取变量 [{var_name}] => {result_value}")
-                    return success, result_value
-                from core.read_until import settings, poll
-                config = settings(p_str)
-                read = lambda: self._read_instrument_once(mgr, params, hw_logger)
-                success, result_value = (poll(read, config, self.cancel_event.is_set, self.cancel_event.wait, hw_logger) if config else read())
+                else:
+                    from core.read_until import settings, poll
+                    config = settings(p_str)
+                    read = lambda: self._read_instrument_once(mgr, params, hw_logger)
+                    success, result_value = (poll(read, config, self.cancel_event.is_set, self.cancel_event.wait, hw_logger) if config else read())
 
             elif sub_step.type == SubStepType.CAN_DBC:
                 from core.dbc_signals import decode_step,execute_read,refresh_group,execute_snapshot
@@ -1990,12 +1991,28 @@ class ChannelWorker(QObject):
                         val = r_val
                         break
 
+        # 最终测试值使用测试项单位；子工步、变量和原始结果保持采集单位。
+        target_unit = str(getattr(step, 'unit', '') or '').strip()
+        if target_unit.upper() in ('NULL', 'NONE', '--'):
+            target_unit = ''
+        if getattr(step, 'standard_type', '数值') not in ('字符串', '变量'):
+            try:
+                converted = convert_result(val, target_unit)
+                if converted is not val:
+                    self.log_message.emit(self.channel_id, f'[单位换算] {val} {getattr(val, "unit", "")} => {converted} {target_unit}')
+                val = converted
+            except (ValueError, TypeError) as exc:
+                is_pass = False
+                val = f'FAIL: 单位换算失败：{exc}'
+                self.log_message.emit(self.channel_id, f'[ERROR] {val}')
+
         # 确定最终记录的值
-        if isinstance(val, MeasurementValue):
+        if getattr(step, "standard_type", "数值") in ("字符串", "变量"):
             val_to_log = val
-            step.unit = val.unit
-        elif getattr(step, "standard_type", "数值") in ("字符串","变量"):
+        elif isinstance(val, MeasurementValue):
             val_to_log = val
+            if not target_unit:
+                step.unit = val.unit
         else:
             # 智能识别非纯数字测量值（包含 PASS, FAIL, 字母等）
             if isinstance(val, str) and any(c.isalpha() for c in val) and val not in ("OK", "NG"):

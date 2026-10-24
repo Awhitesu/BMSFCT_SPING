@@ -255,28 +255,32 @@ def test_debug_configuration_follows_hardware_parameters_without_local_settings(
                                           sim3_enabled=True, sim3_channels=14)
     mgr = DeviceManager(db)
     page = SimulatorTab(mgr)
+    def extent(index):
+        channels=[ch for ch,sim,_ in page._routes if sim is mgr.simulators[index]]
+        return (channels[0],channels[-1]) if channels else None
     try:
-        assert [page.settings_table.item(row, 6).text() for row in range(3)] == ['1–24', '25–42', '43–56']
+        assert [extent(row) for row in range(3)] == [(1,24), (25,42), (43,56)]
         assert not hasattr(page, 'settings_controls') and not hasattr(page, 'save_simulator_settings')
         cfg = db.load_sys_config.return_value
         cfg['sim2_enabled'] = False
         mgr.update_config()
         page.refresh_configuration()
-        assert page.settings_table.item(1, 6).text() == '未启用'
-        assert page.settings_table.item(2, 6).text() == '25–38'
+        assert extent(1) is None
+        assert extent(2) == (25,38)
         cfg['sim1_channels'] = 18
         mgr.update_config()
         page.refresh_configuration()
-        assert page.settings_table.item(2, 6).text() == '19–32'
+        assert extent(2) == (19,32)
         cfg.update(sim1_number=3, sim3_number=1)
         mgr.update_config()
         page.refresh_configuration()
-        assert page.settings_table.item(2, 6).text() == '1–14'
-        assert page.settings_table.item(0, 6).text() == '15–32'
-        assert page.spin_ch.count() == 32 and page.spin_param_ch.count() == 32
+        assert extent(2) == (1,14)
+        assert extent(0) == (15,32)
+        assert page.table.rowCount() == 32 and len(page.channel_checks) == 24
         db.save_sys_config.assert_not_called()
     finally:
         page.status_timer.stop()
+        page.shutdown()
         page.close()
 
 

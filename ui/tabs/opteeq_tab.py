@@ -11,7 +11,7 @@ from ui.dialogs.step_dialog import SmartProjectComboBox
 
 
 class OpteeQTab(QWidget):
-    """力捷丰 SG400 调试页：始终复用 DeviceManager 在启动自检中创建的唯一驱动实例。"""
+    """力捷丰 SG400 调试页：复用 DeviceManager 管理的共享驱动实例。"""
 
     operation_finished = Signal(bool, str)
     log_message = Signal(str)
@@ -67,7 +67,7 @@ class OpteeQTab(QWidget):
         header_layout.setSpacing(12)
 
         lbl_title = QLabel("力捷丰 SG400 (CH1)")
-        lbl_title.setStyleSheet("font-weight: bold; color: #F8FAFC; font-size: 15px;")
+        lbl_title.setStyleSheet("font-weight: bold; color: #e6ebf2; font-size: 15px;")
         header_layout.addWidget(lbl_title)
 
         sep1 = QLabel("|")
@@ -184,27 +184,27 @@ class OpteeQTab(QWidget):
 
         info_grid.addWidget(QLabel("目标芯片:"), 0, 2)
         self.lbl_audit_chip = QLabel("—")
-        self.lbl_audit_chip.setStyleSheet("color:#F1F5F9; font-size:14px;")
+        self.lbl_audit_chip.setStyleSheet("color:#e6ebf2; font-size:14px;")
         info_grid.addWidget(self.lbl_audit_chip, 0, 3)
 
         info_grid.addWidget(QLabel("基准校验码:"), 1, 0)
         self.lbl_audit_exp_crc = QLabel("—")
-        self.lbl_audit_exp_crc.setStyleSheet("color:#FBBF24; font-family:monospace; font-weight:bold; font-size:15px;")
+        self.lbl_audit_exp_crc.setStyleSheet("color:#fbbf24; font-family:monospace; font-weight:bold; font-size:15px;")
         info_grid.addWidget(self.lbl_audit_exp_crc, 1, 1)
 
         info_grid.addWidget(QLabel("实测校验码:"), 1, 2)
         self.lbl_audit_act_crc = QLabel("未烧录")
-        self.lbl_audit_act_crc.setStyleSheet("color:#94A3B8; font-family:monospace; font-weight:bold; font-size:15px;")
+        self.lbl_audit_act_crc.setStyleSheet("color:#94a3b8; font-family:monospace; font-weight:bold; font-size:15px;")
         info_grid.addWidget(self.lbl_audit_act_crc, 1, 3)
 
         info_grid.addWidget(QLabel("物理扇区范围:"), 2, 0)
         self.lbl_audit_sectors = QLabel("—")
-        self.lbl_audit_sectors.setStyleSheet("color:#CBD5E1; font-size:13px;")
+        self.lbl_audit_sectors.setStyleSheet("color:#cbd5e1; font-size:13px;")
         info_grid.addWidget(self.lbl_audit_sectors, 2, 1)
 
         info_grid.addWidget(QLabel("比对结论:"), 2, 2)
         self.lbl_audit_status = QLabel("待烧录")
-        self.lbl_audit_status.setStyleSheet("color:#94A3B8; font-weight:bold; font-size:15px;")
+        self.lbl_audit_status.setStyleSheet("color:#94a3b8; font-weight:bold; font-size:15px;")
         info_grid.addWidget(self.lbl_audit_status, 2, 3)
 
         audit_layout.addLayout(info_grid)
@@ -238,7 +238,7 @@ class OpteeQTab(QWidget):
         self.txt_audit_summary.setReadOnly(True)
         self.txt_audit_summary.setMaximumHeight(85)
         self.txt_audit_summary.setPlaceholderText("烧录与留痕报告全息摘要将在此实时更新...")
-        self.txt_audit_summary.setStyleSheet("background-color:#0b1120; border:1px solid #1e293b; color:#94A3B8; font-size:12px;")
+        self.txt_audit_summary.setStyleSheet("background-color:#0b1120; border:1px solid #1e293b; color:#94a3b8; font-size:12px;")
         audit_layout.addWidget(self.txt_audit_summary)
 
         tab_burn_layout.addWidget(audit_group)
@@ -254,7 +254,7 @@ class OpteeQTab(QWidget):
 
         log_top_row = QHBoxLayout()
         log_tip = QLabel("实时显示力捷丰 SG400 控制器通信事件、Lua 脚本回显与底层 /log/ch.log 工序")
-        log_tip.setStyleSheet("color:#64748B; font-size:13px;")
+        log_tip.setStyleSheet("color:#64748b; font-size:13px;")
         log_top_row.addWidget(log_tip)
         log_top_row.addStretch()
 
@@ -278,7 +278,18 @@ class OpteeQTab(QWidget):
 
         layout.addWidget(self.sub_tabs, 1)
 
+    def _sync_programmer(self):
+        # 管理中心应用配置会重建设备；当前操作结束后再切换引用。
+        programmer = self.device_manager.opteeq
+        if not self._running and programmer is not self.programmer:
+            self.programmer = programmer
+            self.edit_ip.setText(programmer.ip)
+            self.edit_port.setText(str(programmer.port))
+            self.lbl_device_state.setText("未查询")
+            self._has_auto_read = False
+
     def refresh_connection_state(self):
+        self._sync_programmer()
         connected = bool(self.programmer and self.programmer.is_connected)
         self.lbl_connection.setText("●  已连接" if connected else "●  未连接")
         color = "#22C55E" if connected else "#FF4D5A"
@@ -303,6 +314,7 @@ class OpteeQTab(QWidget):
             self._has_auto_read = False
 
     def _require_initialized_connection(self):
+        self._sync_programmer()
         if self.programmer and self.programmer.is_connected:
             return True
         QMessageBox.warning(
@@ -462,7 +474,7 @@ class OpteeQTab(QWidget):
             self.lbl_audit_sectors.setText(meta.get("summary_address_range", "—"))
             self.lbl_audit_act_crc.setText("未烧录")
             self.lbl_audit_status.setText("待烧录")
-            self.lbl_audit_status.setStyleSheet("color:#94A3B8; font-weight:bold;")
+            self.lbl_audit_status.setStyleSheet("color:#94a3b8; font-weight:bold;")
 
     def _record_burn_and_emit(self, project: str, success: bool, state: str, duration: float, deep_diff: bool = True):
         # 运行结束重新绑定当前工程，不能使用异步预览留下的旧元数据。

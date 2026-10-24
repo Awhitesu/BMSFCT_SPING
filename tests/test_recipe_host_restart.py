@@ -2,6 +2,7 @@
 import configparser
 import threading
 from types import SimpleNamespace
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -21,8 +22,9 @@ def host(tmp_path, monkeypatch):
     program.touch()
     ini = tmp_path / 'config.ini'
     ini.write_bytes(b'[App]\r\nType=Old\r\nAddr=Old\r\n[Other]\r\nKeep=1\r\n')
+    (tmp_path / 'Flash' / 'New-path').mkdir(parents=True)
     controls = {}
-    for name in ('stop_host', 'start_host', 'wait_seconds'):
+    for name in ('shutdown_host', 'start_host', 'wait_seconds'):
         controls[name] = Mock()
         monkeypatch.setattr(flash, name, controls[name])
     return SimpleNamespace(program=program, ini=ini, controls=controls,
@@ -52,7 +54,7 @@ def test_disabled_or_legacy_config_does_nothing_even_with_hidden_incomplete_valu
 def test_enabled_requires_all_four_fields_before_stopping(host, key, label):
     with pytest.raises(ValueError, match=label):
         flash.prepare_app_flash(dict(host.config, **{key: ' '}))
-    host.controls['stop_host'].assert_not_called()
+    host.controls['shutdown_host'].assert_not_called()
 
 
 @pytest.mark.parametrize('name', ['C:/Host.exe', '../Host.exe', 'Host', 'Host.vi', 'x.exe & echo y',
@@ -79,43 +81,47 @@ def test_invalid_files_are_reported_before_stopping(host, failure):
         host.ini.write_text('not an ini', encoding='utf-8')
     with pytest.raises(ValueError, match='参数检查失败'):
         flash.prepare_app_flash(host.config)
-    host.controls['stop_host'].assert_not_called()
+    host.controls['shutdown_host'].assert_not_called()
     host.controls['start_host'].assert_not_called()
 
 
-def test_confirmed_stop_then_500ms_then_verified_write_then_500ms_then_start(host, monkeypatch):
+def test_confirmed_stop_then_verified_files_then_start_without_fixed_waits(host, monkeypatch):
     events = []
     replace = flash.os.replace
 
-    def stop(*_):
+    def stop(*_, **__):
         assert read_values(host.ini) == ('Old', 'Old')
         events.append('stop')
 
-    def wait(seconds, _):
-        assert seconds == .5
-        events.append(('wait', read_values(host.ini)))
-
     def write(source, target):
-        assert events == ['stop', ('wait', ('Old', 'Old'))]
+        if Path(target) == host.ini:
+            assert events == ['stop']
+            event = 'write'
+        else:
+            assert Path(target) == host.program.parent / 'Flash' / 'Record.txt'
+            assert events[-1] == 'write'
+            event = 'ready'
         replace(source, target)
-        events.append('write')
+        events.append(event)
 
-    def start(program, _):
+    def start(program, _, **options):
         assert program == host.program
         assert read_values(host.ini) == ('New', 'New-path')
+        assert options == dict(timeout=8)
+        assert (program.parent / 'Flash' / 'Record.txt').read_text().strip() == 'Ready'
         events.append('start')
 
-    host.controls['stop_host'].side_effect = stop
-    host.controls['wait_seconds'].side_effect = wait
+    host.controls['shutdown_host'].side_effect = stop
     host.controls['start_host'].side_effect = start
     monkeypatch.setattr(flash.os, 'replace', write)
     assert flash.prepare_app_flash(host.config) == host.config
-    assert events == ['stop', ('wait', ('Old', 'Old')), 'write', ('wait', ('New', 'New-path')), 'start']
+    assert events == ['stop', 'write', 'ready', 'start']
+    host.controls['wait_seconds'].assert_not_called()
 
 
 def test_stop_failure_does_not_write_or_restart(host):
     before = host.ini.read_bytes()
-    host.controls['stop_host'].side_effect = TimeoutError('仍在运行')
+    host.controls['shutdown_host'].side_effect = TimeoutError('仍在运行')
     with pytest.raises(RuntimeError, match='停止上位机失败.*仍在运行'):
         flash.prepare_app_flash(host.config)
     assert host.ini.read_bytes() == before
@@ -144,7 +150,7 @@ def test_readback_mismatch_prevents_restart(host, monkeypatch):
     with pytest.raises(RuntimeError, match='回读校验失败'):
         flash.prepare_app_flash(host.config)
     host.controls['start_host'].assert_not_called()
-    assert host.controls['wait_seconds'].call_count == 1
+    host.controls['wait_seconds'].assert_not_called()
 
 
 def test_restart_failure_is_not_reported_as_success(host):
@@ -152,11 +158,13 @@ def test_restart_failure_is_not_reported_as_success(host):
     with pytest.raises(RuntimeError, match='启动并确认上位机失败.*启动超时'):
         flash.prepare_app_flash(host.config)
     assert read_values(host.ini) == ('New', 'New-path')
+    assert host.controls['shutdown_host'].call_count == 2
 
 
 def test_real_exe_path_determines_start_target(host):
     flash.prepare_app_flash(host.config)
-    host.controls['start_host'].assert_called_once_with(host.program, None)
+    host.controls['start_host'].assert_called_once_with(host.program, None, timeout=8)
+    host.controls['shutdown_host'].assert_called_once_with(host.program, None, logger=None)
 
 
 def test_mismatched_process_name_is_rejected_before_stopping(host):
@@ -165,34 +173,36 @@ def test_mismatched_process_name_is_rejected_before_stopping(host):
     before = host.ini.read_bytes()
     with pytest.raises(ValueError, match='文件名不一致'):
         flash.prepare_app_flash(host.config)
-    host.controls['stop_host'].assert_not_called()
+    host.controls['shutdown_host'].assert_not_called()
     assert host.ini.read_bytes() == before
 
 
 def test_preserves_other_settings_saved_by_host_on_exit(host):
-    host.controls['stop_host'].side_effect = lambda *_: host.ini.write_bytes(
+    host.controls['shutdown_host'].side_effect = lambda *_, **__: host.ini.write_bytes(
         host.ini.read_bytes().replace(b'Keep=1', b'Keep=2\r\nAdded=3'))
     flash.prepare_app_flash(host.config)
     assert b'Keep=2\r\nAdded=3' in host.ini.read_bytes()
     assert read_values(host.ini) == ('New', 'New-path')
 
 
-@pytest.mark.parametrize('cancel_at', ['before', 'stopped', 'first_wait', 'second_wait'])
-def test_cancel_prevents_remaining_phases(host, cancel_at):
+@pytest.mark.parametrize('cancel_at', ['before', 'stopped', 'config_written', 'record_ready'])
+def test_cancel_prevents_remaining_phases(host, monkeypatch, cancel_at):
     cancel = threading.Event()
     if cancel_at == 'before':
         cancel.set()
     elif cancel_at == 'stopped':
-        host.controls['stop_host'].side_effect = lambda *_: cancel.set()
+        host.controls['shutdown_host'].side_effect = lambda *_, **__: cancel.set()
     else:
-        def wait(*_):
-            if host.controls['wait_seconds'].call_count == (1 if cancel_at == 'first_wait' else 2):
-                cancel.set()
-        host.controls['wait_seconds'].side_effect = wait
+        name = '_write_and_verify_ini' if cancel_at == 'config_written' else '_initialize_record'
+        operation = getattr(flash, name)
+        def finish_then_cancel(*args):
+            operation(*args)
+            cancel.set()
+        monkeypatch.setattr(flash, name, finish_then_cancel)
     with pytest.raises(RuntimeError, match='取消'):
         flash.prepare_app_flash(host.config, cancel=cancel.is_set)
     host.controls['start_host'].assert_not_called()
-    assert read_values(host.ini) == (('New', 'New-path') if cancel_at == 'second_wait' else ('Old', 'Old'))
+    assert read_values(host.ini) == (('New', 'New-path') if cancel_at in ('config_written', 'record_ready') else ('Old', 'Old'))
 
 
 def test_checkbox_hides_all_four_fields_and_preserves_values_across_recipes(host):
@@ -236,3 +246,55 @@ def test_editor_serializes_explicit_disabled_state_without_touching_ini(host):
         assert page._collect_recipe_data('new')['app_flash']['enabled'] is False
     finally:
         page.close()
+
+
+@pytest.mark.parametrize('address', ['missing', '../escape', 'C:/outside'])
+def test_invalid_flash_directory_cannot_initialize_record_or_start(host, address):
+    record = host.program.parent / 'Flash' / 'Record.txt'
+    record.write_text('Pass - previous\n', encoding='utf-8')
+    with pytest.raises(RuntimeError, match='检查刷写文件夹失败'):
+        flash.prepare_app_flash(dict(host.config, flash_path=address))
+    assert record.read_text() == 'Pass - previous\n'
+    host.controls['start_host'].assert_not_called()
+
+
+@pytest.mark.parametrize('failures', [2, 10])
+def test_ready_write_retries_locks_without_starting_early(host, monkeypatch, failures):
+    record = host.program.parent / 'Flash' / 'Record.txt'
+    record.write_text('Pass - previous\n', encoding='utf-8')
+    replace = flash.os.replace
+    attempts = []
+    def locked(source, target):
+        if Path(target) == record:
+            host.controls['start_host'].assert_not_called()
+            attempts.append(1)
+            if len(attempts) <= failures:
+                raise PermissionError('record locked')
+        replace(source, target)
+    monkeypatch.setattr(flash.os, 'replace', locked)
+    if failures == 10:
+        with pytest.raises(RuntimeError, match='初始化 Record.txt 为 Ready失败.*record locked'):
+            flash.prepare_app_flash(host.config)
+        assert len(attempts) == 10 and record.read_text() == 'Pass - previous\n'
+        host.controls['start_host'].assert_not_called()
+    else:
+        flash.prepare_app_flash(host.config)
+        assert len(attempts) == 3 and record.read_text().strip() == 'Ready'
+        assert sum(call.args[0] == .1 for call in host.controls['wait_seconds'].call_args_list) == failures
+    assert not list(record.parent.glob('.app_ready_*.tmp'))
+
+
+def test_cancel_during_start_requests_safe_shutdown_before_reporting_cancelled(host):
+    cancel = threading.Event()
+    host.controls['start_host'].side_effect = lambda *_, **__: cancel.set()
+    with pytest.raises(RuntimeError, match='取消'):
+        flash.prepare_app_flash(host.config, cancel=cancel.is_set)
+    assert host.controls['shutdown_host'].call_count == 2
+    assert host.controls['shutdown_host'].call_args.args == (host.program,)
+
+
+def test_start_failure_preserves_original_error_if_shutdown_cleanup_also_fails(host):
+    host.controls['start_host'].side_effect = TimeoutError('startup failed')
+    host.controls['shutdown_host'].side_effect = [None, RuntimeError('shutdown failed')]
+    with pytest.raises(RuntimeError, match='startup failed.*安全关闭清理失败.*shutdown failed'):
+        flash.prepare_app_flash(host.config)

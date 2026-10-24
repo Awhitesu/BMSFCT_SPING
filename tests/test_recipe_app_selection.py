@@ -4,10 +4,13 @@ import json
 import os
 import time
 from types import SimpleNamespace
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
 from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtCore import QCoreApplication, QEvent
+from shiboken6 import isValid
 from core.engine import TestEngine as Engine
 from ui.tabs.overview_tab import OverviewTab
 
@@ -16,7 +19,7 @@ app = QApplication.instance() or QApplication([])
 
 @pytest.fixture
 def page(tmp_path, monkeypatch):
-    for name in ('stop_host', 'start_host', 'wait_seconds'):
+    for name in ('shutdown_host', 'start_host', 'wait_seconds'):
         monkeypatch.setattr('core.recipe_app_flash.' + name, Mock())
     with patch.object(OverviewTab, 'load_default_or_first_recipe', lambda self: None):
         widget = OverviewTab(Engine(SimpleNamespace()))
@@ -32,11 +35,15 @@ def page(tmp_path, monkeypatch):
     for name in ('_prepare_task', '_plc_task', '_stats_task', '_recipe_match_task'):
         getattr(widget, name).shutdown()
     widget.close()
+    # processEvents() alone does not drain deferred deletion outside app.exec().
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    assert not isValid(widget)
 
 
 def recipe(page, directory, name, host_dir):
     (host_dir / 'Host.exe').touch()
     values = dict(enabled=True, restart_name='Host.exe', host_path=str(host_dir / 'Host.exe'), model=name, flash_path=name + '-APP')
+    (host_dir / 'Flash' / values['flash_path']).mkdir(parents=True, exist_ok=True)
     data = dict(name=name, can_config={}, app_flash=values, items=[dict(name='read', min='0', max='1',
         sub_steps=[dict(type='读取变量', params='VAR:x')])])
     (directory / f'{name}.json').write_text(json.dumps(data), encoding='utf-8')
@@ -119,19 +126,21 @@ def test_preparation_does_not_write_ini_again_and_changed_parameters_require_res
     ini = tmp_path / 'config.ini';ini.write_text('[App]\n', encoding='utf-8')
     replacement = Mock(wraps=os.replace)
     monkeypatch.setattr('core.recipe_app_flash.os.replace', replacement)
+    def ini_writes():
+        return sum(Path(call.args[1]).name.casefold() == 'config.ini' for call in replacement.call_args_list)
     select(page, 0)
-    assert replacement.call_count == 1
+    assert ini_writes() == 1
     page.db_manager = None
     snapshot = dict(data, _debug_run=True)
     assert page._prepare_run(snapshot, '')[0]
     assert page._prepare_run(snapshot, '')[0]
-    assert replacement.call_count == 1
+    assert ini_writes() == 1
     page.current_recipe_data['app_flash'][changed_key] = changed_value
     page.txt_sn.setText('SN');page._confirmed_barcode = 'SN'
     assert not page.start_single_channel_test()
     assert QMessageBox.warning.call_args.args[1] == 'APP刷写参数未同步'
     assert values(ini) == ('A', 'A-APP')
-    assert replacement.call_count == 1
+    assert ini_writes() == 1
 
 
 @pytest.mark.parametrize('enabled', [False, None])
@@ -149,7 +158,7 @@ def test_switching_to_disabled_or_legacy_recipe_skips_host_operations(page, tmp_
     (tmp_path / 'B.json').write_text(json.dumps(data), encoding='utf-8')
     page.combo_recipe.addItem('B', 'B.json')
     forbidden = Mock(side_effect=AssertionError('未使能不能操作上位机'))
-    for operation in ('stop_host', 'start_host', 'wait_seconds'):
+    for operation in ('shutdown_host', 'start_host', 'wait_seconds'):
         monkeypatch.setattr('core.recipe_app_flash.' + operation, forbidden)
     select(page, 1)
     forbidden.assert_not_called()
@@ -163,7 +172,7 @@ def test_failed_host_stop_blocks_can_preparation_and_test_start(page, tmp_path, 
     ini = tmp_path / 'config.ini'
     original = '[App]\nType=Old\nAddr=Old\n'
     ini.write_text(original, encoding='utf-8')
-    monkeypatch.setattr('core.recipe_app_flash.stop_host', Mock(side_effect=TimeoutError('stop timeout')))
+    monkeypatch.setattr('core.recipe_app_flash.shutdown_host', Mock(side_effect=TimeoutError('stop timeout')))
     page._apply_recipe_hardware = Mock(return_value=(True, 'CAN'))
     select(page, 0)
     assert '停止上位机失败' in page._recipe_can_error

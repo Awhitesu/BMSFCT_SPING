@@ -1,5 +1,6 @@
-"""Windows 外部上位机的停止、启动与进程确认。"""
+"""Windows 外部上位机的停止、启动与窗口就绪确认。"""
 import ctypes
+from datetime import datetime
 from ctypes import wintypes
 from contextlib import contextmanager
 import os
@@ -139,6 +140,7 @@ def _cmd(command):
 
 
 def stop_host(name, cancel=None, timeout=10):
+    """仅供安全退出失败后的强制清理；正常换型使用shutdown_host。"""
     check_cancelled(cancel)
     if not _process_ids(name):
         return  # 未运行时也已满足停止条件。
@@ -159,6 +161,107 @@ def stop_host(name, cancel=None, timeout=10):
         wait_seconds(.05, cancel)
 
 
+def shutdown_host(program, cancel=None, timeout=20, logger=None):
+    """请求协议安全退出，失败后清理残留并终止正常换型流程。"""
+    check_cancelled(cancel)
+    program = Path(program).absolute()
+    if program.suffix.casefold() != '.exe' or not program.is_file():
+        raise ValueError(f'未找到可安全关闭的上位机 exe 文件：{program}')
+    child, failure = None, ''
+    try:
+        with _external_dll_search_path():
+            child = subprocess.Popen([str(program), '--shutdown'], cwd=str(program.parent),
+                env=_external_environment(), stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, **background_process_options())
+        try:
+            output, errors = child.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            child.kill()  # 仅结束超时的命令进程，旧界面进程随后单独确认。
+            child.communicate()
+            failure = f'--shutdown 命令超过 {timeout:g} 秒未结束'
+        else:
+            if child.returncode != 0:
+                meanings = {2: '15秒内未完成安全退出', 3: '安全退出通信异常'}
+                failure = f'--shutdown 退出码 {child.returncode}：{meanings.get(child.returncode, "未知错误")}'
+                detail = (errors or output or b'').decode('utf-8', errors='replace').strip()
+                if detail:
+                    failure += '；' + detail
+    except OSError as exc:
+        failure = f'--shutdown 调用异常：{exc}'
+        try:
+            if child is not None and child.poll() is None:
+                child.kill()
+                child.communicate()
+        except OSError as cleanup_error:
+            failure += f'；命令进程清理失败：{cleanup_error}'
+    if not failure:
+        check_cancelled(cancel)
+        if _process_ids(program.name):
+            raise RuntimeError('刷写程序安全退出失败：命令返回0，但仍检测到旧进程；已停止换型，请人工确认后重新选择型号')
+        return
+
+    message = f'刷写程序安全退出失败 [{datetime.now():%Y-%m-%d %H:%M:%S}]：{failure}'
+    if logger:
+        logger('[上位机准备] ' + message)
+    try:
+        if _process_ids(program.name):
+            if logger:
+                logger('[上位机准备] 安全退出失败，确认残留进程后执行强制清理：' + program.name)
+            stop_host(program.name)
+    except Exception as exc:
+        message += f'；残留进程清理失败：{exc}'
+    finally:
+        wait_seconds(3)  # 异常冷却期间不因取消而提前开放重新启动。
+    raise RuntimeError(message + '；已停止换型，操作员确认故障后请重新选择型号')
+
+
+def _host_window_ready(process, timeout_ms=50):
+    """只检测新进程的可响应主窗口；对话框或单纯进程存活不算就绪。"""
+    user = ctypes.WinDLL('user32', use_last_error=True)
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    signatures = {
+        'WaitForInputIdle': ([wintypes.HANDLE, wintypes.DWORD], wintypes.DWORD),
+        'EnumWindows': ([callback_type, wintypes.LPARAM], wintypes.BOOL),
+        'GetWindowThreadProcessId': ([wintypes.HWND, ctypes.POINTER(wintypes.DWORD)], wintypes.DWORD),
+        'IsWindowVisible': ([wintypes.HWND], wintypes.BOOL),
+        'IsWindowEnabled': ([wintypes.HWND], wintypes.BOOL),
+        'GetWindow': ([wintypes.HWND, wintypes.UINT], wintypes.HWND),
+        'GetClassNameW': ([wintypes.HWND, wintypes.LPWSTR, ctypes.c_int], ctypes.c_int),
+        'SendMessageTimeoutW': ([wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
+                                wintypes.UINT, wintypes.UINT, ctypes.POINTER(ctypes.c_size_t)], ctypes.c_ssize_t),
+    }
+    for name, (arguments, result) in signatures.items():
+        function = getattr(user, name)
+        function.argtypes, function.restype = arguments, result
+    # Windows' idle indication is latched; also probe the current window below.
+    if user.WaitForInputIdle(process._handle, 0) != 0:
+        return False
+    windows, dialogs = [], []
+
+    @callback_type
+    def visit(window, _):
+        pid = wintypes.DWORD()
+        user.GetWindowThreadProcessId(window, ctypes.byref(pid))
+        if pid.value != process.pid or not user.IsWindowVisible(window):
+            return True
+        name = ctypes.create_unicode_buffer(256)
+        if not user.GetClassNameW(window, name, len(name)):
+            return True  # Window may have been destroyed during enumeration.
+        if name.value == '#32770':
+            dialogs.append(window)
+        elif not user.GetWindow(window, 4) and user.IsWindowEnabled(window):  # GW_OWNER
+            windows.append(window)
+        return True
+
+    if not user.EnumWindows(visit, 0):
+        raise ctypes.WinError(ctypes.get_last_error())
+    if dialogs or not windows:
+        return False
+    result = ctypes.c_size_t()
+    # WM_NULL checks the GUI thread without changing any application state.
+    return bool(user.SendMessageTimeoutW(windows[0], 0, 0, 0, 0x23, timeout_ms, ctypes.byref(result)))
+
+
 def start_host(program, cancel=None, timeout=5):
     check_cancelled(cancel)
     program = Path(program).absolute()
@@ -177,7 +280,6 @@ def start_host(program, cancel=None, timeout=5):
             except OSError as exc:
                 raise RuntimeError(f'无法启动上位机 {program.name}：{exc}；程序路径：{program}') from exc
             deadline = time.monotonic() + timeout
-            stable_since = None
             while True:
                 check_cancelled(cancel)
                 code = process.poll()
@@ -185,14 +287,16 @@ def start_host(program, cancel=None, timeout=5):
                     detail = _startup_output(errors)
                     message = f'上位机 {program.name} 启动后立即退出（退出码 {code}，0x{code & 0xffffffff:08X}）；程序路径：{program}'
                     raise RuntimeError(message + (f'；错误输出：{detail}' if detail else ''))
-                now = time.monotonic()
-                if stable_since is not None and now - stable_since >= .2:
-                    return process.pid
-                if now >= deadline:
-                    raise TimeoutError(f'上位机 {program.name} 启动确认超时（{timeout:g} 秒）；程序路径：{program}')
-                if stable_since is None:
-                    stable_since = now
-                wait_seconds(.05, cancel)
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(f'上位机 {program.name} 启动确认超时（{timeout:g} 秒）：未检测到可响应的主窗口；程序路径：{program}')
+                ready = _host_window_ready(process, min(50, max(1, int(remaining * 1000))))
+                check_cancelled(cancel)
+                if ready and time.monotonic() < deadline:
+                    if process.poll() is None:
+                        return process.pid
+                    continue  # Retain the exit code/error-output diagnosis above.
+                wait_seconds(min(.05, max(0, deadline - time.monotonic())), cancel)
         finally:
             if process is not None and process.poll() is None:
                 # 持有 Popen 并回收退出状态；等待线程不持有界面对象，也不阻塞主界面。

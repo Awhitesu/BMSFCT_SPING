@@ -22,6 +22,7 @@ def process(monkeypatch):
     child = SimpleNamespace(pid=77, poll=Mock(return_value=None), wait=Mock())
     monkeypatch.setattr(host.subprocess, 'Popen', Mock(return_value=child))
     monkeypatch.setattr(host.threading, 'Thread', Mock())
+    monkeypatch.setattr(host, '_host_window_ready', Mock(return_value=True))
     return child
 
 @pytest.fixture
@@ -74,7 +75,8 @@ def test_launch_resolves_full_path_and_working_directory_without_cmd_or_hiding_g
     assert host.subprocess.Popen.call_args.args[0] == [str(program)]
     assert options['cwd'] == str(program.parent)
     assert 'startupinfo' not in options  # GUI 不继承 SW_HIDE。
-    assert clock[0] >= .2
+    assert clock[0] == 0  # A ready window returns immediately, with no stability delay.
+    host._host_window_ready.assert_called_once_with(process, 50)
     run.assert_not_called()
     host.threading.Thread.return_value.start.assert_called_once()
 
@@ -87,9 +89,46 @@ def test_exited_process_is_not_reported_as_started(program, process, clock, code
     host.threading.Thread.assert_not_called()
 
 
-def test_startup_stability_window_has_a_bounded_deadline(program, process, clock):
+def test_window_readiness_has_a_bounded_deadline(program, process, clock):
+    host._host_window_ready.return_value = False
     with pytest.raises(TimeoutError, match='启动确认超时'):
         host.start_host(program, timeout=.1)
+    assert .1 <= clock[0] < .15
+
+
+def test_slow_window_returns_as_soon_as_ready_before_timeout(program, process, clock):
+    host._host_window_ready.side_effect = lambda *_: clock[0] >= .35
+    assert host.start_host(program, timeout=8) == 77
+    assert .35 <= clock[0] < .45
+
+
+def test_cancellation_during_readiness_probe_does_not_report_success(program, process, clock):
+    import threading
+    cancelled = threading.Event()
+    def probe(*_):
+        cancelled.set()
+        return True
+    host._host_window_ready.side_effect = probe
+    with pytest.raises(RuntimeError, match='取消'):
+        host.start_host(program, cancelled.is_set, timeout=8)
+
+
+def test_exit_during_readiness_probe_is_reported_with_exit_code(program, process, clock):
+    def probe(*_):
+        process.poll.return_value = 2
+        return True
+    host._host_window_ready.side_effect = probe
+    with pytest.raises(RuntimeError, match='启动后立即退出.*退出码 2'):
+        host.start_host(program, timeout=8)
+
+
+def test_probe_finishing_after_deadline_cannot_report_success(program, process, clock):
+    def probe(*_):
+        clock[0] = 8.1
+        return True
+    host._host_window_ready.side_effect = probe
+    with pytest.raises(TimeoutError, match='未检测到可响应的主窗口'):
+        host.start_host(program, timeout=8)
 
 
 def test_launch_failure_includes_real_path_and_windows_error(program, monkeypatch):

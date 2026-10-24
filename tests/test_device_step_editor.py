@@ -1,7 +1,10 @@
 import unittest
+import tempfile
+from pathlib import Path
 from PySide6.QtWidgets import QApplication
 from ui.dialogs.step_dialog import StepDialog
 from core.device_steps import DEVICES,ACTIONS,encode,decode
+from data.db_manager import DBManager
 
 
 app=QApplication.instance() or QApplication([])
@@ -53,6 +56,54 @@ class DeviceEditorTests(unittest.TestCase):
             page.sub_category_combo.setCurrentText(group);page.device_combo.setCurrentText(device)
             self.assertGreaterEqual(page.action_combo.findText(label),0)
         page.close()
+
+    def test_simulator_low_and_channels_survive_recipe_save_and_reopen(self):
+        source=StepDialog();restored=None
+        try:
+            source.sub_category_combo.setCurrentText('模拟电池')
+            source.action_combo.setCurrentText('快捷配置')
+            source.sim_batch_volt.setValue(2.5)
+            source.sim_batch_curr.setValue(.5)
+            source.sim_batch_output.setCurrentText('OFF')
+            source.sim_batch_range.setCurrentIndex(1)
+            source.sim_batch_channels.setText('1,7,25')
+            source.cb_judgment.setChecked(True)
+            source.fail_strategy_combo.setCurrentText('忽略继续')
+            saved=source.get_data()
+            self.assertIn('Range:LOW',saved['params'])
+            with tempfile.TemporaryDirectory() as directory:
+                db=DBManager(str(Path(directory)/'test.db'))
+                try:
+                    recipe={'name':'range_restore','items':[{'name':'simulator','sub_steps':[saved]}]}
+                    self.assertTrue(db.save_recipe_json('range_restore',recipe))
+                    loaded=db.load_recipe_json('range_restore')['items'][0]['sub_steps'][0]
+                    restored=StepDialog(step_data=loaded)
+                    self.assertEqual(restored.sim_batch_range.currentData(),'LOW')
+                    self.assertEqual(restored.sim_batch_curr.value(),1)
+                    self.assertEqual(restored.sim_batch_channels.text(),'1,7,25')
+                    self.assertEqual(restored.get_data(),{k:v for k,v in loaded.items() if k!='step_id'})
+                finally:db.close()
+        finally:
+            if restored:restored.close()
+            source.close()
+
+    def test_historical_quick_configuration_restores_low_and_resets_missing_defaults(self):
+        data=dict(device=DEVICES['simulator'][1],action='快捷批量配置',
+                  params='3.2V / 0.5mA / ON / Range:LOW / CH:2',type='设置仪表')
+        page=StepDialog(step_data=data)
+        try:
+            self.assertEqual(page.action_combo.currentText(),'快捷配置')
+            self.assertEqual(page.sim_batch_range.currentData(),'LOW')
+            self.assertEqual(page.sim_batch_curr.value(),1)
+            self.assertEqual(page.sim_batch_channels.text(),'2')
+            page._load_data(dict(data,params='3.2V / 1000mA / ON / Range:HIGH / CH:ALL'))
+            self.assertEqual(page.sim_batch_range.currentData(),'HIGH')
+            self.assertEqual(page.sim_batch_channels.text(),'ALL')
+            page._load_data(data)
+            page._load_data(dict(data,params='3.2V / 1000mA / ON'))
+            self.assertEqual(page.sim_batch_range.currentData(),'HIGH')
+            self.assertEqual(page.sim_batch_channels.text(),'ALL')
+        finally:page.close()
 
 
 if __name__=='__main__':unittest.main()

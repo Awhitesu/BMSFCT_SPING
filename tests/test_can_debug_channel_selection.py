@@ -1,5 +1,6 @@
 """Manual CAN/UDS channel choices stay separate from device connection."""
 import time
+from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -170,3 +171,106 @@ def test_external_recipe_channel_change_refreshes_manual_default(page):
     page.driver.channel='ZLG_CAN3'
     page._update_transmit_channels()
     assert page.send_channel.currentText()==page.uds_channel.currentText()=='ZLG_CAN3'
+
+
+def test_rebuilt_driver_uses_saved_sdk_and_network_settings_before_connect(page, tmp_path):
+    original = page.driver
+    original.zlg_sdk_path = str(tmp_path / 'old-sdk')
+    page.zlg_sdk.setText(original.zlg_sdk_path)
+    replacement = PCANFDDriver('ZLG_CAN3', 250000, 1000000)
+    replacement.zlg_sdk_path = str(tmp_path / 'new-sdk')
+    replacement.zlg_ip, replacement.zlg_port = '192.0.2.20', 8001
+    replacement.connect = Mock(return_value=True)
+    page.device_manager.pcan = replacement
+
+    page.connect_device()
+    pump(lambda: not page.operation.isRunning())
+
+    assert replacement.zlg_sdk_path == str(tmp_path / 'new-sdk')
+    assert (replacement.zlg_ip, replacement.zlg_port) == ('192.0.2.20', 8001)
+    assert (replacement.nominal_bitrate, replacement.data_bitrate) == (250000, 1000000)
+    replacement.connect.assert_called_once()
+    original.connect.assert_not_called()
+
+
+def test_reopening_debug_page_uses_rebuilt_hardware_configuration(page, tmp_path):
+    replacement = PCANFDDriver('PCAN_USBBUS1', 250000, 1000000)
+    replacement.zlg_sdk_path = str(tmp_path / 'saved-sdk')
+    replacement.zlg_ip, replacement.zlg_port = '192.0.2.30', 8002
+    page.device_manager.pcan = replacement
+
+    page.show()
+    app.processEvents()
+
+    assert page.device_type.currentIndex() == 0
+    assert page.zlg_sdk.text() == replacement.zlg_sdk_path
+    assert page.zlg_ip.text() == '192.0.2.30'
+    assert page.zlg_port.value() == 8002
+
+
+def test_refresh_keeps_manual_edits_until_hardware_driver_is_replaced(page):
+    page.zlg_sdk.setText('manually-selected-sdk')
+    page.zlg_ip.setText('192.0.2.40')
+    page.refresh_configuration()
+    assert page.zlg_sdk.text() == 'manually-selected-sdk'
+    assert page.zlg_ip.text() == '192.0.2.40'
+
+
+@pytest.mark.parametrize('busy_kind', ['operation', 'uds'])
+def test_configuration_refresh_waits_for_active_debug_operation(page, tmp_path, busy_kind):
+    original_path = page.zlg_sdk.text()
+    replacement = PCANFDDriver('ZLG_CAN1')
+    replacement.zlg_sdk_path = str(tmp_path / 'replacement-sdk')
+    page.device_manager.pcan = replacement
+    if busy_kind == 'operation':
+        page.operation.busy = True
+    else:
+        page.uds_worker = SimpleNamespace(wait=Mock(return_value=False), requestInterruption=Mock())
+    page.refresh_configuration()
+    assert page.zlg_sdk.text() == original_path
+    if busy_kind == 'operation':
+        page.operation.busy = False
+        page.operation.finished.emit()
+    else:
+        page.uds_worker.wait.return_value = True
+        page.refresh_configuration()
+    assert page.zlg_sdk.text() == replacement.zlg_sdk_path
+
+
+def test_hardware_save_updates_debug_form_without_reopening(tmp_path):
+    from devices.manager import DeviceManager
+    from ui.tabs.hardware_config_tab import HardwareConfigTab
+
+    old_sdk, new_sdk = tmp_path / 'old-sdk', tmp_path / 'new-sdk'
+    for sdk in (old_sdk, new_sdk):
+        sdk.mkdir()
+        (sdk / 'zlgcan.dll').write_bytes(b'test')
+    cfg = dict(pcan_channel='ZLG_CAN2', zlg_sdk_enabled=True,
+               zlg_sdk_path=str(old_sdk), zlg_ip='192.0.2.10', zlg_port=8000)
+    db = Mock()
+    db.load_sys_config.side_effect = lambda: deepcopy(cfg)
+    db.save_sys_config.side_effect = lambda saved: cfg.update(saved) or True
+    manager = DeviceManager(db)
+    manager.safe_shutdown_outputs = Mock(return_value=True)
+    manager.disconnect_all = Mock(return_value=True)
+    hardware = HardwareConfigTab(db)
+    hardware.status_timer.stop()
+    hardware.device_manager = manager
+    hardware.refresh_hardware_status = Mock()
+    debug = PCANFDTab(manager)
+    debug.timer.stop()
+    hardware.configuration_changed.connect(debug.refresh_configuration)
+    try:
+        previous = manager.pcan
+        sdk_row = next(i for i, spec in enumerate(hardware.DEVICE_SPECS) if spec[0] == 'zlg_sdk')
+        hardware.table.cellWidget(sdk_row, 3).path_edit.setText(str(new_sdk))
+        hardware.save_config()
+        pump(lambda: hardware.table.isEnabled())
+        assert manager.pcan is not previous
+        assert cfg['zlg_sdk_path'] == str(new_sdk)
+        assert manager.pcan.zlg_sdk_path == debug.zlg_sdk.text() == str(new_sdk)
+    finally:
+        hardware.shutdown()
+        debug.shutdown()
+        hardware.close()
+        debug.close()

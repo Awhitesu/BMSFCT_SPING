@@ -3,7 +3,7 @@ import copy
 import threading
 from ui.device_task import DeviceTask
 from core.single_channel_recipe import single_channel_items
-from core.result_display import format_result
+from core.result_display import format_result, result_for_display
 
 import json
 
@@ -12,7 +12,7 @@ import time
 from typing import List, Dict, Any
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox, QMessageBox, QLabel, QTreeWidget, QTreeWidgetItem, QFrame, QHeaderView, QAbstractItemView, QLineEdit, QInputDialog, QSizePolicy, QCheckBox, QPlainTextEdit
-from PySide6.QtCore import Qt, Slot, Signal, QTimer
+from PySide6.QtCore import Qt, Slot, Signal, QTimer, QCoreApplication
 from PySide6.QtGui import QColor
 
 from ui.dialogs.flash_status_dialog import FlashStatusDialog
@@ -46,6 +46,9 @@ class OverviewTab(QWidget):
 
     def __init__(self, engine=None, db_manager=None):
         super().__init__()
+        # Closed pages must be destroyed by the GUI event loop, before a later
+        # device action can collect their Python reference cycles on its thread.
+        self.setAttribute(Qt.WA_DeleteOnClose)
         self.engine = engine
         self.db_manager = db_manager
         self.preparation_log.connect(self._on_preparation_log)
@@ -70,6 +73,12 @@ class OverviewTab(QWidget):
         self._recipe_can_error = ''
         self._selected_app_flash_config = None
         self._closing = False
+        self._column_fit_timer = QTimer(self)
+        self._column_fit_timer.setSingleShot(True)
+        self._column_fit_timer.timeout.connect(self._fit_test_columns)
+        self._flash_render_timer = QTimer(self)
+        self._flash_render_timer.setSingleShot(True)
+        self._flash_render_timer.timeout.connect(self._render_flash_status)
         self._confirmed_barcode = ""
         self._scan_pending = False
         self._last_plc_signal = 0
@@ -237,6 +246,10 @@ class OverviewTab(QWidget):
 
     def begin_shutdown(self):
         self._closing = True
+        self._column_fit_timer.stop()
+        self._flash_render_timer.stop()
+        self.step_tree.viewport().removeEventFilter(self)
+        self.step_tree.stop_auto_scroll()
         self._waiting_board=None;self._arrival_continue=None
         if hasattr(self,'_sg_display_timer'):self._sg_display_timer.stop()
         if hasattr(self,'flash_dialog'):self.flash_dialog.hide()
@@ -248,6 +261,24 @@ class OverviewTab(QWidget):
         self._prepare_task.begin_shutdown()
         self._plc_task.begin_shutdown()
         self._recipe_match_task.begin_shutdown()
+
+    def closeEvent(self, event):
+        if not self._closing:
+            self.begin_shutdown()
+        # DeviceTask runtimes retain live workers independently of the page.
+        # WA_DeleteOnClose posts GUI-owned deletion after this event returns.
+        super().closeEvent(event)
+        if event.isAccepted():
+            app = QCoreApplication.instance()
+            pages = getattr(app, '_retiring_overview_pages', None)
+            if pages is None:
+                pages = app._retiring_overview_pages = {}
+            key = id(self)
+            if key not in pages:
+                # Keep the wrapper reachable until DeferredDelete is actually
+                # handled, even when a caller only pumps processEvents().
+                pages[key] = self
+                self.destroyed.connect(lambda: pages.pop(key, None))
 
     def _on_timer_tick(self):
         self.elapsed_seconds += 1
@@ -275,7 +306,7 @@ class OverviewTab(QWidget):
 
         lbl_title = QLabel(title)
         lbl_title.setAlignment(Qt.AlignCenter)
-        lbl_title.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 500; border: none; padding: 0px; background: transparent;")
+        lbl_title.setStyleSheet("color: #94a3b8; font-size: 11px; font-weight: 500; border: none; padding: 0px; background: transparent;")
 
         lbl_val = QLabel(val_text)
         lbl_val.setAlignment(Qt.AlignCenter)
@@ -658,8 +689,11 @@ class OverviewTab(QWidget):
             self._log_test_event(f"刷写[{kind}] 结束: {result}" + (f" | {detail}" if detail else ""))
         self._render_flash_status()
 
+    @Slot()
     def _render_flash_status(self):
         """渲染最新的刷写状态到监控弹窗。"""
+        if self._closing:
+            return
         if hasattr(self, 'flash_dialog'):
             self.flash_dialog.render_state(self._flash_state)
             if not self._flash_state.get('active') or self._flash_state.get('result'):
@@ -667,17 +701,13 @@ class OverviewTab(QWidget):
                 # suppress the popup for a later programming step.
                 self.flash_dialog.hide()
 
+    @Slot()
     def _fit_test_columns(self):
         """七列按指定比例铺满视口，始终不显示水平滚动条。"""
+        if self._closing:
+            return
         tree = self.step_tree
         tree.ensurePolished()
-        for row in range(tree.topLevelItemCount()):
-            parent = tree.topLevelItem(row)
-            for item in [parent] + [parent.child(i) for i in range(parent.childCount())]:
-                for col in range(tree.columnCount()):
-                    text = item.text(col)
-                    if item.parent() is None or col != 1:
-                        item.setToolTip(col, text)
         # Exact requested proportions: 1 : 3 : 2 : 2 : 2 : 1 : 1.5.
         available = max(7, tree.viewport().width())
         weights = [2, 6, 4, 4, 4, 2, 3]
@@ -688,20 +718,32 @@ class OverviewTab(QWidget):
         for col in order[:remainder]:
             fitted[col] += 1
         for col, width in enumerate(fitted):
-            tree.setColumnWidth(col, width)
+            if tree.columnWidth(col) != width:
+                tree.setColumnWidth(col, width)
+
+    def _update_test_row_tooltips(self, item, columns=range(7)):
+        """只更新变化行的提示；子工步名称保留设备及参数说明。"""
+        for col in columns:
+            if item.parent() is not None and col == 1:
+                continue
+            text = item.text(col)
+            if item.toolTip(col) != text:
+                item.setToolTip(col, text)
 
     def eventFilter(self,watched,event):
         from PySide6.QtCore import QEvent
-        if hasattr(self,'step_tree') and watched is self.step_tree.viewport() and event.type()==QEvent.Resize:
-            QTimer.singleShot(0,self._fit_test_columns)
+        if not self._closing and hasattr(self,'step_tree') and watched is self.step_tree.viewport() and event.type()==QEvent.Resize:
+            self._column_fit_timer.start(0)
         return super().eventFilter(watched,event)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        if self._closing:
+            return
         if hasattr(self, "step_tree"):
-            QTimer.singleShot(0, self._fit_test_columns)
+            self._column_fit_timer.start(0)
         if hasattr(self, "flash_dialog"):
-            QTimer.singleShot(0, self._render_flash_status)
+            self._flash_render_timer.start(0)
 
     def _validate_sn_with_ai_rule(self, text=""):
         sn_rule = str(self.current_recipe_data.get("sn_regex", "")).strip() if hasattr(self, "current_recipe_data") and self.current_recipe_data else ""
@@ -754,20 +796,15 @@ class OverviewTab(QWidget):
     # 配方加载与只读树结构展示
     # -----------------------------------------------------------------
     def load_default_or_first_recipe(self):
-        """加载 recipes 目录下的首个配方文件"""
+        """启动时只刷新候选配方，等待手动选择或扫码匹配。"""
         recipe_dir = None
         if self.db_manager and hasattr(self.db_manager, "get_recipe_dir"):
             recipe_dir = self.db_manager.get_recipe_dir()
         if not recipe_dir or not os.path.exists(recipe_dir):
             recipe_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "recipes")
 
-        if os.path.exists(recipe_dir):
-            files = [f for f in os.listdir(recipe_dir) if f.endswith(".json")]
-            if files:
-                self.update_recipes(files)
-                first_path = os.path.join(recipe_dir, files[0])
-                # 启动时只加载默认配方到界面，不产生 PLC 写操作。
-                if self._can_debug_tests():self.load_recipe_from_file(first_path, sync_plc=False)
+        files = [f for f in os.listdir(recipe_dir) if f.endswith(".json")] if os.path.exists(recipe_dir) else []
+        self.update_recipes(files)
 
     def update_recipes(self, recipes_list: List[str], preserve_results: bool = False):
         if self._run_busy():
@@ -783,14 +820,8 @@ class OverviewTab(QWidget):
                 clean_name = r.replace(".json", "")
                 filename = r if r.endswith(".json") else f"{r}.json"
                 self.combo_recipe.addItem(clean_name, filename)
-            if current_selection:
-                idx = self.combo_recipe.findText(current_selection)
-                if idx >= 0:
-                    self.combo_recipe.setCurrentIndex(idx)
-            if self._can_debug_tests() and self.combo_recipe.currentIndex()<0 and self.combo_recipe.count():
-                self.combo_recipe.setCurrentIndex(0)
-            if not self._can_debug_tests() and (not self.current_recipe_name or self.combo_recipe.findText(current_selection)<0):
-                self.combo_recipe.setCurrentIndex(-1)
+            idx = self.combo_recipe.findText(current_selection) if self.current_recipe_name and current_selection else -1
+            self.combo_recipe.setCurrentIndex(idx)
             self.combo_recipe.blockSignals(False)
             self.combo_recipe.setEnabled(not self._run_busy() and not self._closing)
             if keep_loaded:
@@ -846,7 +877,7 @@ class OverviewTab(QWidget):
         self.current_recipe_data = {}
         self._confirmed_barcode = ''
         self.step_tree.clear()
-        self.lbl_product_model.setText('未加载有效配方')
+        self.lbl_product_model.setText('等待选择测试配方')
         self._reset_flash_status()
         self.production_statistics=ProductionStatistics();self._recalculate_statistics()
         self.refresh_statistics(reason='project_changed')
@@ -892,6 +923,7 @@ class OverviewTab(QWidget):
                 item_node.setText(5, item.get("unit", "NULL"))             # 单位
                 item_node.setText(6, "待测试")                             # 判定
                 item_node.setData(0, Qt.UserRole, {"type": "item_node", "raw_data": item})
+                self._update_test_row_tooltips(item_node)
 
                 # 挂载子工步
                 sub_steps = item.get("sub_steps", [])
@@ -909,6 +941,7 @@ class OverviewTab(QWidget):
                         sub_node.setText(5, configured_read_unit(params_str) or ("A" if "电流" in params_str else "V"))
                     sub_node.setText(6, "待测试")
                     sub_node.setData(0, Qt.UserRole, {"type": "sub_step_node", "raw_data": sub})
+                    self._update_test_row_tooltips(sub_node)
 
             self.step_tree.collapseAll()
             self._fit_test_columns()
@@ -1163,31 +1196,25 @@ class OverviewTab(QWidget):
     def _test_context_menu(self, pos):
         if self._run_busy() or not self._can_debug_tests():
             return
-        from PySide6.QtWidgets import QMenu
-        node = self.step_tree.itemAt(pos)
-        while node is not None and node.parent() is not None:
-            node = node.parent()
-        menu = QMenu(self)
-        if node is not None:
-            index = self.step_tree.indexOfTopLevelItem(node)
-            action = menu.addAction('调试当前测试项', lambda: self._debug_test_items([index]))
-            action.setEnabled(self._debug_item_executable(node))
-        checked = [i for i in range(self.step_tree.topLevelItemCount())
-                   if self.step_tree.topLevelItem(i).checkState(0) == Qt.Checked]
-        action = menu.addAction(f'调试勾选测试项（{len(checked)}项）', lambda: self._debug_test_items(checked))
-        action.setEnabled(bool(checked))
-        menu.addSeparator()
+        from ui.widgets.sequence_context_menu import SequenceContextMenu
+        self.step_tree.stop_auto_scroll()
+        menu = SequenceContextMenu(self)
         selected = self._selected_debug_item_indices()
-        for text,mode in [(f'勾选选中测试项（{len(selected)}项）','selected'),('取消勾选选中测试项','selected_none')]:
+        for text,mode in [('选择','selected'),('取消选择','selected_none')]:
             action=menu.addAction(text,lambda checked=False,mode=mode:self._select_debug_items(mode))
             action.setEnabled(bool(selected))
+        menu.addSeparator()
+        checked = [i for i in range(self.step_tree.topLevelItemCount())
+                   if self.step_tree.topLevelItem(i).checkState(0) == Qt.Checked]
+        action = menu.addAction('勾选测试', lambda: self._debug_test_items(checked))
+        action.setEnabled(bool(checked))
         menu.addSeparator()
         for text, mode in [('全选', 'all'), ('全不选', 'none'), ('反选', 'invert'), ('只选失败项', 'failed')]:
             menu.addAction(text, lambda checked=False, mode=mode: self._select_debug_items(mode))
         menu.addSeparator()
         menu.addAction('展开全部', self.step_tree.expandAll)
         menu.addAction('折叠全部', self.step_tree.collapseAll)
-        menu.exec(self.step_tree.viewport().mapToGlobal(pos))
+        menu.popup(self.step_tree.viewport().mapToGlobal(pos))
 
     def _debug_item_executable(self, node):
         data = node.data(0, Qt.UserRole) or {}
@@ -1379,7 +1406,9 @@ class OverviewTab(QWidget):
 
     def _prepare_run(self, snapshot, sn_barcode):
         from core.recipe_can_requirement import validate_recipe_can
-        validate_recipe_can(snapshot)
+        manager = getattr(getattr(self, 'engine', None), 'device_manager', None)
+        enabled = getattr(manager, 'is_enabled', None)
+        validate_recipe_can(snapshot, hardware_enabled=bool(enabled('pcan')) if callable(enabled) else True)
         from core.mes_precheck import check_before_test
         if snapshot.get('_mes_already_checked'):
             passed,reason=True,'MES已在扫码后通过，本次不重复请求'
@@ -1459,14 +1488,24 @@ class OverviewTab(QWidget):
             item_node.setText(6, "等待")
             item_node.setBackground(6, QColor("#1A1A2E"))
             item_node.setForeground(6, QColor("#E0E0E0"))
+            self._update_test_row_tooltips(item_node, (4, 6))
             for j in range(item_node.childCount()):
                 sub_node = item_node.child(j)
                 sub_node.setText(4, "--")
                 sub_node.setText(6, "等待")
                 sub_node.setBackground(6, QColor("#1A1A2E"))
                 sub_node.setForeground(6, QColor("#E0E0E0"))
+                self._update_test_row_tooltips(sub_node, (4, 6))
 
-        self.step_tree.scrollToTop()
+        if self._active_debug_run:
+            self.step_tree.stop_auto_scroll()
+            first_index = next((index for index, item in enumerate(items)
+                                if not item.get('skip_runtime')
+                                and not str(item.get('name', '')).strip().startswith('#')), None)
+            if first_index is not None and first_index < self.step_tree.topLevelItemCount():
+                self.step_tree.show_running_item(self.step_tree.topLevelItem(first_index), animated=False)
+        else:
+            self.step_tree.scrollToTop()
 
         # 清空并开始新的测试记录
         if hasattr(self, 'test_log_view'):
@@ -1523,6 +1562,12 @@ class OverviewTab(QWidget):
             return False, "设备管理器未初始化"
 
         can_config = recipe_dict.get("can_config")
+        enabled = getattr(manager, 'is_enabled', None)
+        if callable(enabled) and not enabled('pcan'):
+            self._applied_recipe_can = None
+            if monitor is not None:
+                monitor.stop()
+            return True, '硬件管理中心未启用 CAN，已跳过 CAN 参数应用和 DBC 监控'
         mode = None
         if can_config and can_config.get('enabled') is not False:
             pcan = getattr(manager, "pcan", None)
@@ -1535,7 +1580,7 @@ class OverviewTab(QWidget):
                 current_signature = (getattr(pcan, 'bus', None), getattr(pcan, 'channel', None),
                     getattr(pcan, 'nominal_bitrate', None), getattr(pcan, 'data_bitrate', None), getattr(pcan, 'fd_enabled', None))
                 cached = getattr(self, '_applied_recipe_can', None)
-                if (str(can_config.get('channel', '')).startswith('PCAN_') and
+                if (str(can_config.get('channel', '')).startswith(('PCAN_', 'ZLG_CAN')) and
                         getattr(pcan, 'is_connected', False) is True and
                         cached == (requested_key, current_signature)):
                     OverviewTab._apply_recipe_dbc(manager,recipe_dict)
@@ -1691,6 +1736,7 @@ class OverviewTab(QWidget):
             item_node.setText(6, "RUNNING")
             item_node.setBackground(6, QColor("#FFC107"))
             item_node.setForeground(6, QColor("#000000"))
+            self._update_test_row_tooltips(item_node, (6,))
             self.step_tree.show_running_item(item_node)
         self._log_test_event(f"▶ 步骤{step_idx + 1} 开始: {step_name}")
 
@@ -1704,17 +1750,19 @@ class OverviewTab(QWidget):
             if sub_idx < item_node.childCount():
                 sub_node = item_node.child(sub_idx)
                 item_data = (item_node.data(0, Qt.UserRole) or {}).get('raw_data', {})
-                result_text = format_result(result, item_data) if result is not None else "Done"
+                display_value = result_for_display(result, item_data)
+                result_text = format_result(display_value, item_data) if result is not None else "Done"
                 sub_node.setText(4, result_text)
                 sub_node.setToolTip(4, result_text)
-                if getattr(result, "unit", ""):
-                    sub_node.setText(5, result.unit)
+                if getattr(display_value, "unit", ""):
+                    sub_node.setText(5, display_value.unit)
                 res_pass = "PASS" in status or "成功" in status or "OK" in status
                 skipped = '跳过' in status
                 sub_node.setText(6, 'SKIP' if skipped else ("PASS" if res_pass else "FAIL"))
                 bg_color = QColor('#475569') if skipped else (QColor("#28A745") if res_pass else QColor("#DC3545"))
                 sub_node.setBackground(6, bg_color)
                 sub_node.setForeground(6, QColor("#FFFFFF" if skipped else "#000000"))
+                self._update_test_row_tooltips(sub_node, (4, 5, 6))
 
     @Slot(int, int, str, bool, object)
     def on_worker_step_finished(self, channel_id: int, step_idx: int, name: str, is_pass: bool, val: object):
@@ -1725,14 +1773,15 @@ class OverviewTab(QWidget):
             skipped = isinstance(val, str) and val == '跳过'
             res_text = 'SKIP' if skipped else ("PASS" if is_pass else "FAIL")
             item_data = (item_node.data(0, Qt.UserRole) or {}).get('raw_data', {})
-            item_node.setText(4, format_result(val, item_data) if val is not None else "Done")
-            if getattr(val, "unit", ""):
-                item_node.setText(5, val.unit)
+            display_value = result_for_display(val, item_data)
+            item_node.setText(4, format_result(display_value, item_data) if val is not None else "Done")
+            if getattr(display_value, "unit", ""):
+                item_node.setText(5, display_value.unit)
             item_node.setText(6, res_text)
             bg_color = QColor('#475569') if skipped else (QColor("#28A745") if is_pass else QColor("#DC3545"))
             item_node.setBackground(6, bg_color)
             item_node.setForeground(6, QColor("#FFFFFF" if skipped else "#000000"))
-            self._fit_test_columns()
+            self._update_test_row_tooltips(item_node, (4, 5, 6))
         val_text = str(val) if val is not None else ""
         self._log_test_event(f"{'✔' if is_pass else '✘'} 步骤{step_idx + 1} 结束: {name} => {'PASS' if is_pass else 'FAIL'}" + (f" | {val_text}" if val_text else ""))
 

@@ -1,6 +1,7 @@
 import os
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from core.instrument_control import control_power, shutdown_calibrator, connect_instrument, control_generator
 from core.board_control import control_board
 from core.simulator_control import control_simulator, read_simulator
@@ -521,6 +522,7 @@ class DeviceManager:
         for sim, channels in grouped.values():
             if reachable(sim, f'Simulator {sim.sequence_number}'):
                 attempt(f"Simulator {sim.sequence_number}", lambda sim=sim, channels=channels: control_simulator(sim,'output',channels,False,logger=logger,batch=True))
+        resistor_boards = []
         for board in list(self.rn_boards.values()):
             if not reachable(board, board.setting['name']):
                 continue
@@ -528,10 +530,15 @@ class DeviceManager:
             if kind == 'insulation':
                 attempt(board.setting['name'], lambda board=board: control_board(board,'insulation',state=False))
             elif kind == 'resistor':
-                for channel in range(1, board.setting['channels'] + 1):
-                    attempt(f"{board.setting['key']} CH{channel}", lambda board=board, channel=channel: control_board(board,'resistance',channel=channel,resistance=0))
+                resistor_boards.append(board)
             else:
                 attempt(board.setting['name'], lambda board=board: control_board(board,'all_relays',state=False))
+        if resistor_boards:
+            def close_resistor(board):
+                attempt(board.setting['name'], lambda: control_board(
+                    board,'resistances',channels=range(1,board.setting['channels']+1),resistance=0))
+            with ThreadPoolExecutor(max_workers=len(resistor_boards)) as pool:
+                list(pool.map(close_resistor,resistor_boards))
         if emergency and reachable(self.dut_power, 'DUT power'):
             attempt("DUT power", lambda: control_power(self.dut_power, 'output_control', False))
         if reachable(self.hv_source, '高压源'):

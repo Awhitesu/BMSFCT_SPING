@@ -393,25 +393,25 @@ class StepDialog(QDialog):
         self.page_easy320 = QWidget()
         self.page_easy320.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.page_easy320.setObjectName('relayStepPage')
-        self.page_easy320.setStyleSheet('QWidget#relayStepPage { background:#0F172A; }')
+        self.page_easy320.setStyleSheet('QWidget#relayStepPage { background:#0f172a; }')
         e_layout = QVBoxLayout(self.page_easy320)
         
         scroll = QScrollArea()
         scroll.setObjectName('relayPointScroll')
         scroll.setStyleSheet('''
-            QScrollArea#relayPointScroll { background:#0F172A; border:0; }
-            QScrollArea#relayPointScroll QScrollBar:vertical { background:#0F172A; width:10px; margin:0; }
+            QScrollArea#relayPointScroll { background:#0f172a; border:0; }
+            QScrollArea#relayPointScroll QScrollBar:vertical { background:#0f172a; width:10px; margin:0; }
             QScrollArea#relayPointScroll QScrollBar::handle:vertical { background:#475569; border-radius:4px; min-height:24px; }
             QScrollArea#relayPointScroll QScrollBar::add-line:vertical,
             QScrollArea#relayPointScroll QScrollBar::sub-line:vertical { height:0; }
             QScrollArea#relayPointScroll QScrollBar::add-page:vertical,
-            QScrollArea#relayPointScroll QScrollBar::sub-page:vertical { background:#0F172A; }
+            QScrollArea#relayPointScroll QScrollBar::sub-page:vertical { background:#0f172a; }
         ''')
         scroll.viewport().setObjectName('relayPointViewport')
-        scroll.viewport().setStyleSheet('QWidget#relayPointViewport { background:#0F172A; }')
+        scroll.viewport().setStyleSheet('QWidget#relayPointViewport { background:#0f172a; }')
         scroll_content = QWidget()
         scroll_content.setObjectName('relayScrollContent')
-        scroll_content.setStyleSheet('QWidget#relayScrollContent { background:#0F172A; }')
+        scroll_content.setStyleSheet('QWidget#relayScrollContent { background:#0f172a; }')
         grid = QVBoxLayout(scroll_content)
         self.easy320_checks = []
         from core.easy320_channels import configured_channels
@@ -467,16 +467,18 @@ class StepDialog(QDialog):
         self.sim_batch_volt = QDoubleSpinBox()
         self.sim_batch_volt.setRange(0, 15); self.sim_batch_volt.setDecimals(3); self.sim_batch_volt.setValue(3.800)
         self.sim_batch_curr = QDoubleSpinBox()
-        self.sim_batch_curr.setRange(0, 5000); self.sim_batch_curr.setDecimals(1); self.sim_batch_curr.setValue(1000.0)
+        self.sim_batch_curr.setRange(0, 1000); self.sim_batch_curr.setDecimals(1); self.sim_batch_curr.setValue(1000.0)
         self.sim_batch_curr.setSuffix(" mA")
         self.sim_batch_output = QComboBox()
         self.sim_batch_output.addItems(["ON", "OFF"])
         self.sim_batch_range = QComboBox()
-        self.sim_batch_range.addItems(["HIGH (大量程)", "LOW (小量程)"])
+        for label, value in [('0–1000 mA', 'HIGH'), ('0–1 mA', 'LOW'), ('AUTO', 'AUTO')]:
+            self.sim_batch_range.addItem(label, value)
+        self.sim_batch_range.currentIndexChanged.connect(self._update_sim_batch_current_limit)
         self.sim_batch_channels = QLineEdit("ALL")
         
         sim_batch_layout.addRow("设定电压 (V):", self.sim_batch_volt)
-        sim_batch_layout.addRow("设定电流 (mA):", self.sim_batch_curr)
+        sim_batch_layout.addRow("输出限流 (mA):", self.sim_batch_curr)
         sim_batch_layout.addRow("输出状态:", self.sim_batch_output)
         sim_batch_layout.addRow("量程范围:", self.sim_batch_range)
         sim_batch_layout.addRow("作用通道:", self.sim_batch_channels)
@@ -729,7 +731,7 @@ class StepDialog(QDialog):
 
         self.cb_opteeq_verify_diff = QCheckBox("启用单片机 Flash 物理回读与源程序逐字节比对校验")
         self.cb_opteeq_verify_diff.setToolTip("烧录成功后，自动调用下载器从单片机回读 Flash 物理数据，与工程源数据逐字节比对防呆")
-        self.cb_opteeq_verify_diff.setStyleSheet("color: #F8FAFC; font-weight: bold; font-size: 13px;")
+        self.cb_opteeq_verify_diff.setStyleSheet("color: #e6ebf2; font-weight: bold; font-size: 13px;")
         verify_layout.addWidget(self.cb_opteeq_verify_diff)
 
         # 详细配置子容器
@@ -748,11 +750,11 @@ class StepDialog(QDialog):
 
         self.cb_opteeq_archive_report = QCheckBox("自动生成单板全息比对报告与双轨数据镜像 (logs/burn_records/)")
         self.cb_opteeq_archive_report.setChecked(True)
-        self.cb_opteeq_archive_report.setStyleSheet("color: #E2E8F0; font-size: 12px;")
+        self.cb_opteeq_archive_report.setStyleSheet("color: #e2e8f0; font-size: 12px;")
         verify_sub_layout.addRow("留痕归档:", self.cb_opteeq_archive_report)
 
         self.lbl_opteeq_meta_preview = QLabel("ℹ️ 源程序元数据: 切换或选定工程后自动探测物理扇区与基准CRC")
-        self.lbl_opteeq_meta_preview.setStyleSheet("color: #94A3B8; font-size: 12px; font-style: italic;")
+        self.lbl_opteeq_meta_preview.setStyleSheet("color: #94a3b8; font-size: 12px; font-style: italic;")
         self.lbl_opteeq_meta_preview.setWordWrap(True)
         verify_sub_layout.addRow("源信息预览:", self.lbl_opteeq_meta_preview)
 
@@ -793,7 +795,7 @@ class StepDialog(QDialog):
         )
         self.app_flash_path_help.setWordWrap(True)
         self.app_flash_path_help.setStyleSheet(
-            "color:#38BDF8; background-color:#0F172A; border:1px solid #1E3A5F; "
+            "color:#38BDF8; background-color:#0f172a; border:1px solid #1e3a5f; "
             "border-radius:5px; padding:8px;"
         )
         self.app_flash_record_help = QLabel(
@@ -803,7 +805,7 @@ class StepDialog(QDialog):
         )
         self.app_flash_record_help.setWordWrap(True)
         self.app_flash_record_help.setStyleSheet(
-            "color:#38BDF8; background-color:#0F172A; border:1px solid #1E3A5F; "
+            "color:#38BDF8; background-color:#0f172a; border:1px solid #1e3a5f; "
             "border-radius:5px; padding:8px;"
         )
         self.app_flash_record = QLineEdit(os.path.join("Flash", "Record.txt"))
@@ -944,7 +946,7 @@ class StepDialog(QDialog):
                 border-radius: 6px;
                 margin-top: 0px;
                 padding-top: 0px;
-                background-color: #0F172A;
+                background-color: #0f172a;
             }
         """)
         uds_ext_vbox = QVBoxLayout(self.uds_extract_group)
@@ -985,7 +987,7 @@ class StepDialog(QDialog):
         self.lbl_byte_int = ElidingLabel("大端整数: --")
         self.lbl_byte_int.setStyleSheet("font-size: 14px; color: #34D399; border: 0; background: transparent;")
         self.lbl_byte_phys = ElidingLabel("换算物理值: --")
-        self.lbl_byte_phys.setStyleSheet("font-size: 14px; color: #FBBF24; border: 0; background: transparent;")
+        self.lbl_byte_phys.setStyleSheet("font-size: 14px; color: #fbbf24; border: 0; background: transparent;")
 
         prev_layout.addWidget(self.lbl_byte_range,1)
         prev_layout.addWidget(self.lbl_byte_hex,1)
@@ -1006,7 +1008,7 @@ class StepDialog(QDialog):
         self.uds_extract_mode.addItems(["无数据提取", "ASCII 字符串解码 (如 VIN/版本号)", "数值计算 CALC (原始值 * 比例 + 偏移)", "自定义公式 FORMULA (如 (val*0.05)+12)"])
         self.uds_extract_mode.addItem('HEX 十六进制字节输出')
         self.uds_extract_mode.addItem('BCD 十进制数字串（保留前导零）')
-        self.uds_extract_mode.setStyleSheet("background-color: #1E293B; color: #F8FAFC;")
+        self.uds_extract_mode.setStyleSheet("background-color: #1e293b; color: #e6ebf2;")
         self.uds_extract_mode.currentIndexChanged.connect(self._on_uds_extract_mode_changed)
 
         self.uds_extract_offset = QSpinBox()
@@ -1200,7 +1202,7 @@ class StepDialog(QDialog):
         empty_layout.setContentsMargins(15, 25, 15, 25)
         self.lbl_empty_param_tip = QLabel("ℹ️ 当前动作无需配置额外参数")
         self.lbl_empty_param_tip.setAlignment(Qt.AlignCenter)
-        self.lbl_empty_param_tip.setStyleSheet("color: #64748B; font-size: 14px; font-weight: bold; padding: 25px 0;")
+        self.lbl_empty_param_tip.setStyleSheet("color: #64748b; font-size: 14px; font-weight: bold; padding: 25px 0;")
         empty_layout.addWidget(self.lbl_empty_param_tip)
         empty_layout.addStretch()
         self.param_stack.addWidget(self.page_empty) # 14
@@ -1255,7 +1257,7 @@ class StepDialog(QDialog):
 
         self.cb_e2_verify_diff = QCheckBox("启用单片机 Flash 物理回读比对校验 (rfp-cli 回读)")
         self.cb_e2_verify_diff.setToolTip("烧录成功后，自动经 rfp-cli 从单片机回读 Flash 物理数据并留痕归档")
-        self.cb_e2_verify_diff.setStyleSheet("color: #F8FAFC; font-weight: bold; font-size: 13px;")
+        self.cb_e2_verify_diff.setStyleSheet("color: #e6ebf2; font-weight: bold; font-size: 13px;")
 
         e2_layout.addRow("工程文件:", self.e2_file)
         e2_layout.addRow("文件操作:", e2_btn_row)
@@ -1828,6 +1830,11 @@ class StepDialog(QDialog):
                 idx = self.action_combo.findText('快捷配置')
             if idx >= 0: self.action_combo.setCurrentIndex(idx)
             self.on_action_changed()
+            if self.param_stack.currentWidget() is self.page_sim_batch:
+                range_index = self.sim_batch_range.findData(kv.get('RANGE', 'HIGH').upper())
+                self.sim_batch_range.setCurrentIndex(max(0, range_index))
+                self._update_sim_batch_current_limit()
+                self.sim_batch_channels.setText(kv.get('CH', 'ALL'))
             if self.param_stack.currentWidget() is self.dbc_form:
                 self.dbc_form.load(params_str)
                 from core.read_until import settings
@@ -2147,6 +2154,12 @@ class StepDialog(QDialog):
 
     def on_var_changed(self):
         pass
+
+    def _update_sim_batch_current_limit(self, *_):
+        low = self.sim_batch_range.currentData() == 'LOW'
+        self.sim_batch_curr.setRange(1 if low else 0, 1 if low else 1000)
+        self.sim_batch_curr.setEnabled(not low)
+        self.sim_batch_curr.setToolTip('0–1 mA 量程的输出限流固定为 1 mA' if low else '输出限流范围：0–1000 mA')
 
     def _load_legacy_simulator(self, data, decoded):
         """Keep historical single-channel operations intact until explicitly replaced."""
@@ -2561,7 +2574,7 @@ class StepDialog(QDialog):
             layout.setSpacing(12)
             tip = QLabel(description)
             tip.setWordWrap(True)
-            tip.setStyleSheet('color: #E2E8F0; padding: 8px; background: #16213E; border-radius: 4px;')
+            tip.setStyleSheet('color: #e2e8f0; padding: 8px; background: #16213E; border-radius: 4px;')
             layout.addWidget(tip)
             scroll.setWidget(content)
             self.uds_tabs.addTab(scroll, title)
@@ -2603,7 +2616,7 @@ class StepDialog(QDialog):
         self.uds_next = QPushButton('下一步')
         for button in (self.uds_previous, self.uds_next):
             button.setAutoDefault(False)
-            button.setStyleSheet('QPushButton { color: white; background: #16213E; border: 1px solid #64748B; border-radius: 4px; padding: 7px 16px; } QPushButton:disabled { color: #94A3B8; border-color: #334155; }')
+            button.setStyleSheet('QPushButton { color: white; background: #16213E; border: 1px solid #64748b; border-radius: 4px; padding: 7px 16px; } QPushButton:disabled { color: #94a3b8; border-color: #334155; }')
         self.uds_previous.clicked.connect(lambda: self.uds_tabs.setCurrentIndex(self.uds_tabs.currentIndex()-1))
         self.uds_next.clicked.connect(lambda: self.uds_tabs.setCurrentIndex(self.uds_tabs.currentIndex()+1))
         navigation.addWidget(self.uds_previous)
@@ -3619,7 +3632,7 @@ class StepDialog(QDialog):
             params.append(f"{self.sim_batch_volt.value()}V")
             params.append(f"{self.sim_batch_curr.value()}mA")
             params.append(f"{self.sim_batch_output.currentText()}")
-            params.append(f"Range:{self.sim_batch_range.currentText().split(' ')[0]}")
+            params.append(f"Range:{self.sim_batch_range.currentData()}")
             params.append(f"CH:{self.sim_batch_channels.text()}")
         elif "全部" in action:
             if "开启" in action: params.append("开启")

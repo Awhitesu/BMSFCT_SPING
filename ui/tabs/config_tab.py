@@ -634,42 +634,43 @@ class ConfigTab(QWidget):
         selected = self.step_tree.selectedItems()
         sel_count = len(selected)
 
-        menu = QMenu()
+        from ui.widgets.sequence_context_menu import SequenceContextMenu
+        menu = SequenceContextMenu(self)
 
         if sel_count > 1:
-            copy_act = QAction("批量复制 (Ctrl+C)", self)
+            copy_act = QAction("批量复制 (Ctrl+C)", menu)
             copy_act.triggered.connect(self.copy_node)
 
-            paste_act = QAction("批量粘贴 (Ctrl+V)", self)
+            paste_act = QAction("批量粘贴 (Ctrl+V)", menu)
             paste_act.setEnabled(self.clipboard_data is not None)
             paste_act.triggered.connect(self.paste_node)
 
             dup_act = None # 批量克隆已不需要，删除
 
-            del_act = QAction("批量删除 (Delete)", self)
+            del_act = QAction("批量删除 (Delete)", menu)
             del_act.triggered.connect(self.delete_node)
 
-            skip_action = QAction("批量屏蔽/取消 (Space)", self)
+            skip_action = QAction("批量屏蔽/取消 (Space)", menu)
             skip_action.triggered.connect(self.batch_toggle_skip)
         else:
-            copy_act = QAction("复制 (Ctrl+C)", self)
+            copy_act = QAction("复制 (Ctrl+C)", menu)
             copy_act.triggered.connect(self.copy_node)
 
-            paste_act = QAction("粘贴 (Ctrl+V)", self)
+            paste_act = QAction("粘贴 (Ctrl+V)", menu)
             paste_act.setEnabled(self.clipboard_data is not None)
             paste_act.triggered.connect(self.paste_node)
 
-            dup_act = QAction("克隆", self)
+            dup_act = QAction("克隆", menu)
             dup_act.triggered.connect(self.duplicate_node)
 
-            del_act = QAction("删除 (Delete)", self)
+            del_act = QAction("删除 (Delete)", menu)
             del_act.triggered.connect(self.delete_node)
 
             is_skipped = item.text(0).strip().startswith("#") or "└─ #" in item.text(0)
-            skip_action = QAction("取消屏蔽 (Space)" if is_skipped else "屏蔽该项 (添加#) (Space)", self)
+            skip_action = QAction("取消屏蔽 (Space)" if is_skipped else "屏蔽该项 (添加#) (Space)", menu)
             skip_action.triggered.connect(lambda: self.toggle_skip(item))
 
-        bulk_act = QAction("批量修改参数...", self)
+        bulk_act = QAction("批量修改参数...", menu)
         bulk_act.triggered.connect(self.bulk_edit_nodes)
 
         menu.addAction(copy_act)
@@ -678,7 +679,7 @@ class ConfigTab(QWidget):
         menu.addAction(skip_action)
 
         if sel_count <= 1:
-            prefix_action = QAction("添加自定义前缀", self)
+            prefix_action = QAction("添加自定义前缀", menu)
             prefix_action.triggered.connect(lambda: self.add_prefix(item))
             menu.addAction(prefix_action)
 
@@ -688,7 +689,7 @@ class ConfigTab(QWidget):
         menu.addAction(bulk_act)
         menu.addSeparator()
         menu.addAction(del_act)
-        menu.exec_(self.step_tree.viewport().mapToGlobal(pos))
+        menu.popup(self.step_tree.viewport().mapToGlobal(pos))
 
     def toggle_skip(self, item):
         """切换屏蔽状态：在名称前添加或移除 #"""

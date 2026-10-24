@@ -2,8 +2,9 @@ import math
 import re
 
 NUMBER = r'[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?'
-UNITS = {'', 'V', 'mV', 'kV', 'A', 'mA', 'uA', 'µA', 'μA', 'Ω', 'kΩ', 'MΩ',
-         'ohm', 'Ohm', 'Hz', 'kHz', 'MHz', 's', 'ms', 'us', 'µs', 'μs', '%', '℃', '°C', 'C'}
+UNITS = {'', 'V', 'mV', 'kV', 'uV', 'µV', 'μV', 'nV', 'A', 'mA', 'uA', 'µA', 'μA', 'nA',
+         'Ω', 'kΩ', 'MΩ', 'mΩ', 'uΩ', 'µΩ', 'μΩ', 'ohm', 'Ohm', 'Hz', 'kHz', 'MHz', 'GHz',
+         's', 'ms', 'us', 'µs', 'μs', 'ns', '%', '%RH', '℃', '°C', 'C'}
 
 
 def finite_reading(value):

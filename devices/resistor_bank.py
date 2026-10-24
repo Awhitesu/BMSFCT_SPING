@@ -2,7 +2,9 @@
 import time
 import re
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from core.board_control import control_board
+from core.numeric_validation import finite_reading
 
 
 def channel_routes(boards):
@@ -49,32 +51,26 @@ def select_channels(text, available=range(1,37)):
 def execute_selection(manager, selection, resistance, read, cancelled, logger):
     routes=manager.resistor_routes()
     channels=select_channels(selection,routes)
-    # Resolve every target before issuing the first write.
-    values={}
-    for ch in channels:
-        if cancelled():raise RuntimeError('测试已停止')
-        board,local=routes[ch]
-        with manager.device_step_lock(board.setting.get('key',f'resistor{board.setting["number"]}')):
-            if cancelled():raise RuntimeError('测试已停止')
-            if not board.is_connected and not board.connect():raise ConnectionError(board.last_error or '电阻板连接失败')
-            if read:
-                from core.numeric_validation import finite_reading
-                value=finite_reading(board.read_resistance(local))
-                if value<0:raise ValueError('电阻回读值不能为负数')
-            else:
-                value=control_board(board,'resistance',channel=local,resistance=resistance,cancelled=cancelled)
-            values[ch]=value
-            logger(f'电阻CH{ch} -> 序号{board.setting["number"]} / 本板CH{local}: {value} Ω')
-    return values
+    result=_operate_channels(routes,channels,'read' if read else 'set',resistance,
+                             cancelled,logger,manager.device_step_lock)
+    if cancelled():raise RuntimeError('测试已停止')
+    if not result['ok']:
+        raise RuntimeError('电阻板批量操作失败：'+'；'.join(
+            f'CH{ch}: {error}' for ch,error in result['errors'].items()))
+    return result['values']
 
 
 def operate_channels(boards,channels,operation,resistance=0):
-    routes=channel_routes(boards);channels=list(channels)
+    return _operate_channels(channel_routes(boards),list(channels),operation,resistance)
+
+
+def _operate_channels(routes,channels,operation,resistance=0,
+                      cancelled=lambda:False,logger=None,lock_for=None):
     if not channels:raise ValueError('没有选中有效通道')
     if len(channels)!=len(set(channels)) or any(ch not in routes for ch in channels):
         raise ValueError('所选通道未配置或重复')
     if operation not in ('read','set','disconnect'):raise ValueError('操作无效')
-    if operation=='set' and (not isinstance(resistance,int) or not 0<=resistance<=1500000 or resistance%10):
+    if operation=='set' and (type(resistance) is not int or not 0<=resistance<=1500000 or resistance%10):
         raise ValueError('阻值需为10Ω整数倍，范围0–1,500,000Ω')
     groups={}
     for channel in channels:
@@ -84,16 +80,34 @@ def operate_channels(boards,channels,operation,resistance=0):
     def execute(group):
         board,selected=group;values={};errors={}
         try:
-            if operation=='disconnect':
-                board.disconnect();return values,errors
-            if not board.is_connected and not board.connect():raise ConnectionError(board.last_error)
+            key=board.setting.get('key',f'resistor{board.setting["number"]}')
+            with lock_for(key) if lock_for else nullcontext():
+                if cancelled():raise RuntimeError('测试已停止')
+                if operation=='disconnect':
+                    board.disconnect();return values,errors
+                if not board.is_connected and not board.connect():raise ConnectionError(board.last_error)
+                if cancelled():raise RuntimeError('测试已停止')
+                local=[ch for _,ch in selected]
+                if operation=='set':
+                    actual=({local[0]:control_board(board,'resistance',channel=local[0],resistance=resistance,cancelled=cancelled)}
+                            if len(local)==1 else
+                            control_board(board,'resistances',channels=local,resistance=resistance,cancelled=cancelled))
+                elif len(local)==1:
+                    actual={local[0]:board.read_resistance(local[0])}
+                else:
+                    readings=board.read_resistances()['resistances']
+                    if len(readings)!=6:raise ValueError('批量阻值回读通道不完整')
+                    actual={ch:readings[ch-1] for ch in local}
+                if cancelled():raise RuntimeError('测试已停止')
+                for channel,ch in selected:
+                    value=finite_reading(actual[ch])
+                    if value<0:raise ValueError('电阻回读值不能为负数')
+                    values[channel]=actual[ch]
+                if logger:
+                    for channel,ch in selected:
+                        logger(f'电阻CH{channel} -> 序号{board.setting["number"]} / 本板CH{ch}: {values[channel]} Ω')
         except Exception as exc:
             return values,{ch:str(exc) for ch,_ in selected}
-        for channel,local in selected:
-            try:
-                values[channel]=(control_board(board,'resistance',channel=local,resistance=resistance) if operation=='set'
-                                 else board.read_resistance(local))
-            except Exception as exc:errors[channel]=str(exc)
         return values,errors
     with ThreadPoolExecutor(max_workers=len(groups)) as pool:
         results=list(pool.map(execute,groups.values()))

@@ -4,6 +4,16 @@ from core.numeric_validation import finite_reading
 import time
 
 
+def validate_current_limit(current, range_name=None):
+    """限流用 A；LOW 档固定 1mA，HIGH/AUTO 最大 1000mA。"""
+    current = finite_reading(current)
+    if not 0 <= current <= 1:
+        raise ValueError('模拟器输出限流必须在 0–1000 mA 之间')
+    if range_name == 'LOW' and abs(current - .001) > 1e-9:
+        raise ValueError('LOW（0–1 mA）量程的输出限流必须固定为 1 mA')
+    return current
+
+
 def simulator_configuration(value):
     """Validate one recipe configuration before sending any hardware command."""
     if (not isinstance(value, dict) or not value or
@@ -18,8 +28,10 @@ def simulator_configuration(value):
                 raise ValueError('模拟器电压和限流不能为负数')
     if 'range' in result and result['range'] not in ('HIGH', 'LOW', 'AUTO'):
         raise ValueError('模拟器量程无效')
-    if result.get('range') == 'LOW' and result.get('current', 0) > .001000001:
-        raise ValueError('LOW range current limit must not exceed 1 mA')
+    if 'current' in result:
+        result['current'] = validate_current_limit(result['current'], result.get('range'))
+    elif result.get('range') == 'LOW':
+        result['current'] = .001
     return result
 
 
@@ -70,6 +82,8 @@ def control_simulator(driver, action, channels, value=None, *, logger=None,
         value = finite_reading(value)
         if value < 0:
             raise ValueError('模拟器电压和限流不能为负数')
+        if action == 'current':
+            value = validate_current_limit(value)
     elif action == 'output' and type(value) is not bool:
         raise ValueError('模拟器输出状态必须为布尔值')
     elif action == 'range' and value not in ('HIGH', 'LOW', 'AUTO'):

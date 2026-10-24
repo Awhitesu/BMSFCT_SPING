@@ -18,7 +18,12 @@ class ZLGNetBus:
         self._rx_next = 0
         self.physical_channel = int(channel)
         root = Path(sdk_path).resolve()
-        raw = (root / 'zlgcan.dll').read_bytes()
+        dll_path = root / 'zlgcan.dll'
+        if not dll_path.is_file():
+            raise FileNotFoundError(
+                f'ZLG SDK目录中未找到 zlgcan.dll：{dll_path}。'
+                '请在硬件管理中心重新选择并保存，或在CAN调试页点击“浏览…”选择。')
+        raw = dll_path.read_bytes()
         machine = struct.unpack_from('<H', raw, struct.unpack_from('<I', raw, 60)[0] + 4)[0]
         required = 0x8664 if C.sizeof(C.c_void_p) == 8 else 0x14c
         if machine != required:

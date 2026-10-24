@@ -3,6 +3,7 @@ from decimal import Decimal, InvalidOperation, ROUND_DOWN, localcontext
 import re
 
 from core.numeric_validation import NUMBER, UNITS
+from core.measurement_units import convert_result
 
 
 MAX_DECIMAL_PLACES = 15
@@ -16,8 +17,20 @@ def decimal_places(value):
     return None
 
 
+def result_for_display(value, item=None):
+    item = item or {}
+    if item.get('standard_type', '数值') in ('字符串', '变量'):
+        return value
+    try:
+        return convert_result(value, item.get('unit'))
+    except (ValueError, TypeError):
+        # 同一测试项可包含不同物理量的诊断子工步，各自保留来源单位。
+        return value
+
+
 def format_result(value, item=None):
     item = item or {}
+    value = result_for_display(value, item)
     original = str(value)
     places = decimal_places(item.get('decimal_places'))
     if (places is None or isinstance(value, bool) or value is None or

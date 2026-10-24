@@ -354,6 +354,7 @@ class MonitorDialog(QDialog):
                 "strategy": step.ng_strategy.value,
                 "standard_type": getattr(step, 'standard_type', '数值'),
                 "decimal_places": getattr(step, 'decimal_places', None),
+                "unit": getattr(step, 'unit', 'NULL'),
                 "sub_steps": sub_data_list,
                 "skip_runtime": getattr(step, 'skip_runtime', False)
             }

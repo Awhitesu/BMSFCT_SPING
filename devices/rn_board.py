@@ -166,6 +166,39 @@ class RNBoard:
             if actual!=value: raise ValueError(f'阻值回读不一致: 设定{value}Ω / 回读{actual}Ω')
             return actual
 
+    def set_resistances(self, value, channels=None, *, cancelled=lambda: False):
+        """选中的连续通道合并写入；整板六路只发送一条 0x10。"""
+        if self.setting['kind'] != 'resistor':
+            raise ValueError('批量阻值设置仅适用于六通道电阻板')
+        channels = list(range(1, self.setting['channels'] + 1)) if channels is None else list(channels)
+        if (not channels or len(channels) != len(set(channels)) or
+                any(type(ch) is not int or not 1 <= ch <= self.setting['channels'] for ch in channels)):
+            raise ValueError('电阻通道未配置或重复')
+        if type(value) is not int or not 0 <= value <= self.setting['limit'] or value % 10:
+            raise ValueError(f'阻值需为10Ω整数倍，范围0–{self.setting["limit"]}Ω')
+        groups = []
+        for channel in sorted(channels):
+            if not groups or channel != groups[-1][-1] + 1:
+                groups.append([])
+            groups[-1].append(channel)
+        with self._lock:
+            for group in groups:
+                if cancelled():
+                    raise RuntimeError('测试已停止')
+                head = struct.pack('>HH', self._resistance_address(group[0]), len(group) * 2)
+                payload = head + bytes([len(group) * 4]) + struct.pack('>I', value) * len(group)
+                if self.request(16, payload) != head:
+                    raise ValueError('批量阻值写入响应不一致')
+            time.sleep(.1)
+            actual = self.read_resistances()['resistances']
+            if len(actual) != self.setting['channels']:
+                raise ValueError('批量阻值回读通道不完整')
+            failed = [ch for ch in channels if type(actual[ch - 1]) is not int or actual[ch - 1] != value]
+            if failed:
+                raise ValueError('批量阻值回读不一致: ' + ', '.join(
+                    f'CH{ch} 设定{value}Ω / 回读{actual[ch - 1]}Ω' for ch in failed))
+            return {ch: actual[ch - 1] for ch in sorted(channels)}
+
     def set_resistance_output(self, enabled, resistance):
         """IR protocol: write zero to disconnect; nonzero to restore output."""
         if self.setting['kind']!='insulation' or not self.setting['limit']:

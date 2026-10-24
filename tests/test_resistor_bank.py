@@ -1,7 +1,7 @@
 import threading
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, ANY
 from devices.resistor_bank import channel_routes,operate_channels
 
 
@@ -9,6 +9,8 @@ def board(number):
     result=SimpleNamespace(setting={'kind':'resistor','number':number,'enabled':True},
         is_connected=True,last_error='',connect=Mock(return_value=True),disconnect=Mock(),
         read_resistance=Mock(side_effect=lambda ch:number*1000+ch),
+        read_resistances=Mock(return_value={'resistances':[number*1000+ch for ch in range(1,7)]}),
+        set_resistances=Mock(side_effect=lambda value,channels,**kwargs:{ch:value for ch in channels}),
         set_resistance=Mock(side_effect=lambda value,ch:value))
     return result
 
@@ -31,15 +33,18 @@ class ResistorBankTests(unittest.TestCase):
         routes=channel_routes({'physical1':first,'physical2':second})
         self.assertEqual(routes[1],(second,1));self.assertEqual(routes[12],(first,6))
 
-    def test_parallel_boards_serialize_their_own_channels(self):
+    def test_parallel_boards_batch_their_selected_channels(self):
         first,second=board(1),board(2);barrier=threading.Barrier(2)
-        def set_value(value,ch):
-            if ch==1:barrier.wait(timeout=2)
-            return value
-        first.set_resistance.side_effect=second.set_resistance.side_effect=set_value
+        def set_values(value,channels,**kwargs):
+            barrier.wait(timeout=2)
+            return {ch:value for ch in channels}
+        first.set_resistances.side_effect=second.set_resistances.side_effect=set_values
         result=operate_channels({'a':first,'b':second},[1,2,7,8],'set',1000)
         self.assertTrue(result['ok']);self.assertEqual(len(result['values']),4)
-        self.assertEqual([c.args[1] for c in first.set_resistance.call_args_list],[1,2])
+        first.set_resistances.assert_called_once_with(1000,[1,2],cancelled=ANY)
+        second.set_resistances.assert_called_once_with(1000,[1,2],cancelled=ANY)
+        first.set_resistance.assert_not_called()
+        second.set_resistance.assert_not_called()
 
     def test_partial_failure_does_not_hide_other_results(self):
         first,second=board(1),board(2)

@@ -11,6 +11,13 @@ ROOT = Path(__file__).resolve().parents[1] / 'vendor' / 'zlgcan_python_260529'
 
 
 class ZLGTests(unittest.TestCase):
+    def test_missing_sdk_reports_selected_path_before_loading_driver(self):
+        missing = ROOT / 'missing-sdk'
+        with self.assertRaises(FileNotFoundError) as error:
+            ZLGNetBus(missing, '192.0.2.10', 8000)
+        self.assertIn(str(missing / 'zlgcan.dll'), str(error.exception))
+        self.assertIn('重新选择并保存', str(error.exception))
+
     def test_four_channel_receive_is_fair(self):
         spec = importlib.util.spec_from_file_location('test_zcan_four', ROOT / 'zlgcan.py')
         types = importlib.util.module_from_spec(spec)

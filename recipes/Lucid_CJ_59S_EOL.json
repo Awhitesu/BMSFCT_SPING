@@ -51,21 +51,61 @@
         {
             "step_id": "538199234b6a46eeae28dde5c60d07c8",
             "name": "#BMS对接",
-            "mode": "范围判定",
-            "min": "",
-            "max": "",
-            "standard_type": "数值",
+            "mode": "字符串比对",
+            "min": "PASS",
+            "max": "--",
+            "standard_type": "字符串",
             "retry_count": "不复测",
             "strategy": "NG继续",
             "unit": "NULL",
             "decimal_places": null,
             "sub_steps": [
                 {
+                    "step_id": "0242ed38e4c54441b3820d296658d942",
+                    "name": "Easy320 继电器 (Easy320)-组合设置ON/OFF (RELAY64:W3siaW5kZXgiOjgsIm9uIjpmYWxzZX0seyJpbmRleCI6OSwib24iOmZhbHNlfSx7ImluZGV4IjoxMCwib24iOmZhbHNlfSx7ImluZGV4IjoxMSwib24iOmZhbHNlfSx7ImluZGV4IjoxMiwib24iOmZhbHNlfSx7ImluZGV4IjoxMywib24iOmZhbHNlfSx7ImluZGV4IjoxNCwib24iOmZhbHNlfSx7ImluZGV4IjoxNSwib24iOmZhbHNlfSx7ImluZGV4IjoxNiwib24iOmZhbHNlfSx7ImluZGV4IjoyMCwib24iOmZhbHNlfSx7ImluZGV4IjoyMSwib24iOmZhbHNlfSx7ImluZGV4IjoyMiwib24iOmZhbHNlfSx7ImluZGV4IjoyMywib24iOmZhbHNlfV0=)",
+                    "action": "组合设置ON/OFF",
+                    "params": "RELAY64:W3siaW5kZXgiOjgsIm9uIjpmYWxzZX0seyJpbmRleCI6OSwib24iOmZhbHNlfSx7ImluZGV4IjoxMCwib24iOmZhbHNlfSx7ImluZGV4IjoxMSwib24iOmZhbHNlfSx7ImluZGV4IjoxMiwib24iOmZhbHNlfSx7ImluZGV4IjoxMywib24iOmZhbHNlfSx7ImluZGV4IjoxNCwib24iOmZhbHNlfSx7ImluZGV4IjoxNSwib24iOmZhbHNlfSx7ImluZGV4IjoxNiwib24iOmZhbHNlfSx7ImluZGV4IjoyMCwib24iOmZhbHNlfSx7ImluZGV4IjoyMSwib24iOmZhbHNlfSx7ImluZGV4IjoyMiwib24iOmZhbHNlfSx7ImluZGV4IjoyMywib24iOmZhbHNlfV0=",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": false,
+                    "fail_strategy": "忽略继续"
+                },
+                {
+                    "step_id": "79ad7549afcb42aa949249d30aaf487c",
+                    "name": "等待 (Wait)-固定延时 (500ms)",
+                    "action": "固定延时",
+                    "params": "500ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "忽略继续"
+                },
+                {
+                    "step_id": "797098c408674aaf94aad58285caa2f7",
+                    "name": "Easy320 继电器 (Easy320)-闭合勾选通道 (9,10,11)",
+                    "action": "闭合勾选通道",
+                    "params": "9,10,11",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": false,
+                    "fail_strategy": "忽略继续"
+                },
+                {
                     "step_id": "51391543e8d242b3b715bbe2e0b27831",
-                    "name": "电池模拟器 (NGI 83624A Simulator)-快捷配置 (2.5V / 1000.0mA / ON / Range:HIGH / CH:ALL)",
-                    "action": "快捷配置",
-                    "params": "2.5V / 1000.0mA / ON / Range:HIGH / CH:ALL",
-                    "device": "电池模拟器 (NGI 83624A Simulator)",
+                    "name": "等待 (Wait)-固定延时 (500ms)",
+                    "action": "固定延时",
+                    "params": "500ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "忽略继续"
+                },
+                {
+                    "step_id": "0401c2415c1641bf96b8af69a58da045",
+                    "name": "IT6722A 被测物供电电源 (IT6722A DUT Power)-设置参数 (12.0V / 3.0A / 开启输出)",
+                    "action": "设置参数",
+                    "params": "12.0V / 3.0A / 开启输出",
+                    "device": "IT6722A 被测物供电电源 (IT6722A DUT Power)",
                     "type": "设置仪表",
                     "is_judgment": true,
                     "fail_strategy": "忽略继续"
@@ -10162,9 +10202,9 @@
                 },
                 {
                     "step_id": "6b62fa17dad14df988e9cfb05a00bba2",
-                    "name": "等待 (Wait)-固定延时 (3000ms)",
+                    "name": "等待 (Wait)-固定延时 (2000ms)",
                     "action": "固定延时",
-                    "params": "3000ms",
+                    "params": "2000ms",
                     "device": "等待 (Wait)",
                     "type": "等待",
                     "is_judgment": false,
@@ -10172,9 +10212,9 @@
                 },
                 {
                     "step_id": "7c83eef3eb834ae193c4600279ba0be0",
-                    "name": "电池模拟器-批量读取电流（ODD，每通道100次，最大值）",
+                    "name": "电池模拟器-批量读取电流（ALL，每通道15次，最大值）",
                     "action": "回读数据",
-                    "params": "设备工步:{\"schema_version\":2,\"device_id\":\"simulator\",\"action_id\":\"current_batch\",\"values\":{\"selection\":\"ODD\",\"count\":100,\"mode\":\"max\"},\"设备\":\"电池模拟器 (NGI 83624A Simulator)\",\"动作\":\"回读数据\",\"参数\":{\"读取通道\":\"ODD\",\"读取最大次数（每通道）\":100,\"取值\":\"max\"}}",
+                    "params": "设备工步:{\"schema_version\":2,\"device_id\":\"simulator\",\"action_id\":\"current_batch\",\"values\":{\"selection\":\"ALL\",\"count\":15,\"mode\":\"max\"},\"设备\":\"电池模拟器 (NGI 83624A Simulator)\",\"动作\":\"回读数据\",\"参数\":{\"读取通道\":\"ALL\",\"读取最大次数（每通道）\":15,\"取值\":\"max\"}}",
                     "device": "电池模拟器 (NGI 83624A Simulator)",
                     "type": "读取仪表",
                     "is_judgment": false,
@@ -10395,767 +10435,7 @@
             ]
         },
         {
-            "step_id": "b0f6a3c2184944aa986cae1dc3291ae3",
-            "name": "均衡电流_19",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "bdd1550575ce41928771fe3544f1a988",
-                    "name": "读取变量：电流-19",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTE5IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "ba3e633362ba4d99a7bbfe78ea04e38d",
-            "name": "均衡电流_21",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "340626df6e00475d98c22c8eedef91f2",
-                    "name": "读取变量：电流-21",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTIxIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "84a5b00f60e54afab7cded7c7e8aab4c",
-            "name": "均衡电流_23",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "e967227c2f9740dbadccedc6a8fde3c6",
-                    "name": "读取变量：电流-23",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTIzIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "d894cc27b0194466b082d8869485b7ca",
-            "name": "均衡电流_25",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "67d74d892df4432f9ac17f4575e81d5a",
-                    "name": "读取变量：电流-25",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTI1IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "ac029c50ecbe43a8a97fd3091aed2205",
-            "name": "均衡电流_27",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "ede819974e7344deb286c6f44ac2dfdb",
-                    "name": "读取变量：电流-27",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTI3IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "bee69bee37b9442cae75cb6666630d39",
-            "name": "均衡电流_29",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "9756de58040b4ddc9b504b4a09f2a982",
-                    "name": "读取变量：电流-29",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTI5IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "8f24ad534780459b9c6f0594a116df1d",
-            "name": "均衡电流_31",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "f7c15fdc1c3c48b59cfb45c2e1d12ae0",
-                    "name": "读取变量：电流-31",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTMxIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "366abb62310147aaa19318c0fa2dc081",
-            "name": "均衡电流_33",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "17248db8d15945eab561793ecfef96a5",
-                    "name": "读取变量：电流-33",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTMzIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "914ea4741a8a421b9daa753c7ee8d8eb",
-            "name": "均衡电流_35",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "d19b9559862b4ea4a831e3f0d77319b7",
-                    "name": "读取变量：电流-35",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTM1IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "f1d8f2260b1d4907af800c3294dd7e05",
-            "name": "均衡电流_37",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "39d9f208a57046c1b16723c2f5de9f4c",
-                    "name": "读取变量：电流-37",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTM3IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "47bf0d8ecdf7463891af392f3a112e4c",
-            "name": "均衡电流_39",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "eb072d24131943e38f661bd3114b9eb7",
-                    "name": "读取变量：电流-39",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTM5IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "809daf0efc2e455ea5ce8e4f53abe3a5",
-            "name": "均衡电流_41",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "7cd3f73aadef4003826c79b3cfb1b021",
-                    "name": "读取变量：电流-41",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTQxIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "3315def1a315461980dca882eb239102",
-            "name": "均衡电流_43",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "490c814d494c42e29fe56d6b9797d9f7",
-                    "name": "读取变量：电流-43",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTQzIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "e211493a7e9e42ff936b195a1a9825b7",
-            "name": "均衡电流_45",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "92055037a99e457290bf5479ff883a1d",
-                    "name": "读取变量：电流-45",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTQ1IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "19d07d483f304ec18c7fc01785c5cba3",
-            "name": "均衡电流_47",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "48d9412bd09442c8abf0b335d8b50740",
-                    "name": "读取变量：电流-47",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTQ3IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "e456bebdc35e43e692691014b85635af",
-            "name": "均衡电流_49",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "35b39d7b90b046eb958d84e6c4aa3542",
-                    "name": "读取变量：电流-49",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTQ5IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "ac3eeb3d98ff4d94bad6ebabf134dff7",
-            "name": "均衡电流_51",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "45c662930a56469db726133acfc41dc1",
-                    "name": "读取变量：电流-51",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTUxIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "8ec7dd4c113b43ffa80c1bddd8c4687a",
-            "name": "均衡电流_53",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "4ca9d0b3cec14e4a806b09203eea621d",
-                    "name": "读取变量：电流-53",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTUzIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "23da8c95511d484da6c5f49b09ad5e49",
-            "name": "均衡电流_55",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "a820b997be3846a284c980cf3e9f6252",
-                    "name": "读取变量：电流-55",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTU1IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "a56c7806b7d943988dda1c0ab73be7f1",
-            "name": "均衡电流_57",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "e790ac9b187a4ef9bb7d8d234e369130",
-                    "name": "读取变量：电流-57",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTU3IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "7a573802e96249838055ff05d2f5e620",
-            "name": "均衡电流_59",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "32696476dcc54b05b0d88dcddc9a8348",
-                    "name": "读取变量：电流-59",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTU5IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "3aa8cfa8372a4312858b8bea1ab78686",
-            "name": "均衡电流_02",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "080579107820418ab52c9b92287dc64b",
-                    "name": "CAN 交互-发送指令 (ID:0x18000403 / DATA:04 00 00 00 00 00 00 00 / TYPE:0 / DLC:8 / CH:0 / PCH:2)",
-                    "action": "发送指令",
-                    "params": "ID:0x18000403 / DATA:04 00 00 00 00 00 00 00 / TYPE:0 / DLC:8 / CH:0 / PCH:2",
-                    "device": "CAN 交互",
-                    "type": "CAN发送",
-                    "is_judgment": false,
-                    "fail_strategy": "忽略继续"
-                },
-                {
-                    "step_id": "aace8563608545bd94b7aa6d00e32b2c",
-                    "name": "等待 (Wait)-固定延时 (3000ms)",
-                    "action": "固定延时",
-                    "params": "3000ms",
-                    "device": "等待 (Wait)",
-                    "type": "等待",
-                    "is_judgment": false,
-                    "fail_strategy": "忽略继续"
-                },
-                {
-                    "step_id": "37f7ebde49894ef9baae8074b9e3b4d8",
-                    "name": "电池模拟器-批量读取电流（EVEN，每通道5次，最大值）",
-                    "action": "回读数据",
-                    "params": "设备工步:{\"schema_version\":2,\"device_id\":\"simulator\",\"action_id\":\"current_batch\",\"values\":{\"selection\":\"EVEN\",\"count\":5,\"mode\":\"max\"},\"设备\":\"电池模拟器 (NGI 83624A Simulator)\",\"动作\":\"回读数据\",\"参数\":{\"读取通道\":\"EVEN\",\"读取最大次数（每通道）\":5,\"取值\":\"max\"}}",
-                    "device": "电池模拟器 (NGI 83624A Simulator)",
-                    "type": "读取仪表",
-                    "is_judgment": false,
-                    "fail_strategy": "忽略继续"
-                },
-                {
-                    "step_id": "2fb2c380d5f14bbfa62d6c2f5c1a798b",
-                    "name": "读取变量：电流-2",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTIiLCAic291cmNlIjogImxhc3QiLCAiaW5wdXQiOiAidGV4dCIsICJzZXBhcmF0b3IiOiAiIiwgInNlZ21lbnRzIjogW119",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                },
-                {
-                    "step_id": "75112f0f9a0d4482a2b91a40d2578482",
-                    "name": "CAN 交互-发送指令 (ID:0x18000403 / DATA:00 00 00 00 00 00 00 00 / TYPE:0 / DLC:8 / CH:0 / PCH:2)",
-                    "action": "发送指令",
-                    "params": "ID:0x18000403 / DATA:00 00 00 00 00 00 00 00 / TYPE:0 / DLC:8 / CH:0 / PCH:2",
-                    "device": "CAN 交互",
-                    "type": "CAN发送",
-                    "is_judgment": false,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "f481aed20d0c4ee2a92e7b1372e21fc1",
-            "name": "均衡电流_04",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "360c9463046b47b28475b1855618f84e",
-                    "name": "读取变量：电流-4",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTQiLCAic291cmNlIjogImxhc3QiLCAiaW5wdXQiOiAidGV4dCIsICJzZXBhcmF0b3IiOiAiIiwgInNlZ21lbnRzIjogW119",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "447b16b3fc0146f79f59ecf6cacc2f5f",
-            "name": "均衡电流_06",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "deb8cd42f38d46c4bd5d7d5f5a256899",
-                    "name": "读取变量：电流-6",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTYiLCAic291cmNlIjogImxhc3QiLCAiaW5wdXQiOiAidGV4dCIsICJzZXBhcmF0b3IiOiAiIiwgInNlZ21lbnRzIjogW119",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "dd55f9d0406448e890c0b33e2b12b99f",
-            "name": "均衡电流_08",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "392da52673584dc9a991d1a5e8da82bc",
-                    "name": "读取变量：电流-8",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTgiLCAic291cmNlIjogImxhc3QiLCAiaW5wdXQiOiAidGV4dCIsICJzZXBhcmF0b3IiOiAiIiwgInNlZ21lbnRzIjogW119",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "131a197aa8ea4c0c9f69b39014606657",
-            "name": "均衡电流_10",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "02fa07bc49b845548fd432e217744a24",
-                    "name": "读取变量：电流-10",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTEwIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "befe773664c045eab71a9fed09e9a864",
-            "name": "均衡电流_12",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "7870a09416f644d1a2edca14b421384a",
-                    "name": "读取变量：电流-12",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTEyIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "0dd44b8978674c69b996dcaa1f578fa7",
-            "name": "均衡电流_14",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "da950d55ebaf4c5c8e132bd3aaaae4aa",
-                    "name": "读取变量：电流-14",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTE0IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "d8473d6be9244449bd8ba39717a839d2",
-            "name": "均衡电流_16",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "87903ca0b62540dfa20657237df5c804",
-                    "name": "读取变量：电流-16",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTE2IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "92dd4acf1d98419f99568a4c3b4d32a4",
-            "name": "均衡电流_18",
-            "mode": "范围判定",
-            "min": "285",
-            "max": "345",
-            "standard_type": "数值",
-            "retry_count": "不复测",
-            "strategy": "NG继续",
-            "unit": "mA",
-            "decimal_places": 1,
-            "sub_steps": [
-                {
-                    "step_id": "e467ceac741c4db5884b5523e44eecab",
-                    "name": "读取变量：电流-18",
-                    "action": "读取变量",
-                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTE4IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
-                    "device": "读取变量",
-                    "type": "读取变量",
-                    "is_judgment": true,
-                    "fail_strategy": "忽略继续"
-                }
-            ]
-        },
-        {
-            "step_id": "8ddc87ce8f7247ab901d9db2a638bd86",
+            "step_id": "47a7e409b548414298f2bf200046aacf",
             "name": "均衡电流_20",
             "mode": "范围判定",
             "min": "285",
@@ -11167,7 +10447,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "d217960b091a44f3a410115d87d32270",
+                    "step_id": "b6f72adbf748417cafa3f4c21e1b1f54",
                     "name": "读取变量：电流-20",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTIwIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11179,7 +10459,7 @@
             ]
         },
         {
-            "step_id": "85b4b51bf6924aafb25b540721bf889b",
+            "step_id": "abb9e3468a9d4b8e9164c4c7141e7f43",
             "name": "均衡电流_22",
             "mode": "范围判定",
             "min": "285",
@@ -11191,7 +10471,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "25a5fb47a87c4d0d8f8fe29854e6fcd0",
+                    "step_id": "f5347e16dde246fda6ea79aa05b72750",
                     "name": "读取变量：电流-22",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTIyIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11203,7 +10483,7 @@
             ]
         },
         {
-            "step_id": "07c0db449f664961ba3ee22fb7576536",
+            "step_id": "5f74c074f4eb41aeaf82f54060007df8",
             "name": "均衡电流_24",
             "mode": "范围判定",
             "min": "285",
@@ -11215,7 +10495,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "cebed8c12b2d4e489facbe19952d2e31",
+                    "step_id": "b847642adb0245c186e98eacd29918db",
                     "name": "读取变量：电流-24",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTI0IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11227,7 +10507,7 @@
             ]
         },
         {
-            "step_id": "d8cd52990562481f9daf843d48ba4dbd",
+            "step_id": "d1f24865f0814c79b2dd04d6f3ececeb",
             "name": "均衡电流_26",
             "mode": "范围判定",
             "min": "285",
@@ -11239,7 +10519,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "ebbdfeff55d94360881eda3f720b9699",
+                    "step_id": "0e93329c1f2a4427a76c656f149d4de1",
                     "name": "读取变量：电流-26",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTI2IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11251,7 +10531,7 @@
             ]
         },
         {
-            "step_id": "bf00bbfa5c11424397dae83c75e07fd3",
+            "step_id": "b41fbe7780b54b4b8925171cfcb490b0",
             "name": "均衡电流_28",
             "mode": "范围判定",
             "min": "285",
@@ -11263,7 +10543,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "196f59ab8ec34c07b64966fce6656df2",
+                    "step_id": "864bd500c7ed433f80373aca5959a29e",
                     "name": "读取变量：电流-28",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTI4IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11275,7 +10555,7 @@
             ]
         },
         {
-            "step_id": "430ec8ebae894c76bac092f4239c9aef",
+            "step_id": "b727c452b00648a4b21e7c50c3c476bb",
             "name": "均衡电流_30",
             "mode": "范围判定",
             "min": "285",
@@ -11287,7 +10567,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "c227bc94798a4ecfb8c4f5d4dd86f5ee",
+                    "step_id": "2a755c4f695549a2b14539922fc40542",
                     "name": "读取变量：电流-30",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTMwIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11299,7 +10579,7 @@
             ]
         },
         {
-            "step_id": "63dba3caa83c42d0b737e93f3c9edcc0",
+            "step_id": "d542b269554b4c7e8be57d474eaae8dd",
             "name": "均衡电流_32",
             "mode": "范围判定",
             "min": "285",
@@ -11311,7 +10591,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "82b079faa2e64b45a8dbddb7df7af388",
+                    "step_id": "a1c5f9c195804818b7660f60851bc387",
                     "name": "读取变量：电流-32",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTMyIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11323,7 +10603,7 @@
             ]
         },
         {
-            "step_id": "095f3967545f46a4bf53b9ef24b03262",
+            "step_id": "6f1862b297d742d5be339d9b2965c158",
             "name": "均衡电流_34",
             "mode": "范围判定",
             "min": "285",
@@ -11335,7 +10615,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "c56fece3042e4b16bff0cd4ebd80814e",
+                    "step_id": "9330870ff8994280b03e0394847b2358",
                     "name": "读取变量：电流-34",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTM0IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11347,7 +10627,7 @@
             ]
         },
         {
-            "step_id": "486b4f0ae7f94bd89af7fc51aed89be2",
+            "step_id": "c403e3cf6a554e5b951f87e4a3425306",
             "name": "均衡电流_36",
             "mode": "范围判定",
             "min": "285",
@@ -11359,7 +10639,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "e5da2c6cb7fe4c3b954d1c5e3c40d73d",
+                    "step_id": "5b8f6eff79e6419995b9cd99c0697151",
                     "name": "读取变量：电流-36",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTM2IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11371,7 +10651,7 @@
             ]
         },
         {
-            "step_id": "ba4025d435df4ed0bb016ee888098890",
+            "step_id": "60a28b85e8e64502ba1f52c2433c0dac",
             "name": "均衡电流_38",
             "mode": "范围判定",
             "min": "285",
@@ -11383,7 +10663,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "11175053c15a4cf3b916e1981c014536",
+                    "step_id": "7f5b3b446d0c4e9b893b5314f3858f5a",
                     "name": "读取变量：电流-38",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTM4IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11395,7 +10675,7 @@
             ]
         },
         {
-            "step_id": "73822a3e3b74423286ebed22796e52ff",
+            "step_id": "e9c6d690d4084407afacf92ed046d1d0",
             "name": "均衡电流_40",
             "mode": "范围判定",
             "min": "285",
@@ -11407,7 +10687,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "00c99fa19a484232a12cf587bba7ab2b",
+                    "step_id": "dc559d6c164d4db4bc2ff177152dbb2c",
                     "name": "读取变量：电流-40",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTQwIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11419,7 +10699,7 @@
             ]
         },
         {
-            "step_id": "52f522e74e3c40bb90959178370e92fc",
+            "step_id": "2c98bc094b9c4ea79790875224ddff7d",
             "name": "均衡电流_42",
             "mode": "范围判定",
             "min": "285",
@@ -11431,7 +10711,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "93ea08a08dcb42dda29fc02dcc4fd57c",
+                    "step_id": "66b26d409796462eb04c25cd19547b78",
                     "name": "读取变量：电流-42",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTQyIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11443,7 +10723,7 @@
             ]
         },
         {
-            "step_id": "c5540ca632ea40ef8f00525670b3cdf1",
+            "step_id": "2e8e006105e34c90809012464d2b8740",
             "name": "均衡电流_44",
             "mode": "范围判定",
             "min": "285",
@@ -11455,7 +10735,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "3b6984bebe3a4f12a32f3ffa3c6a2df9",
+                    "step_id": "81f95111f64b4a2c9bdaea7b661ee8a8",
                     "name": "读取变量：电流-44",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTQ0IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11467,7 +10747,7 @@
             ]
         },
         {
-            "step_id": "6a6b7f2cf96345cb8fe4a02c04efc3d8",
+            "step_id": "feab0fdb10034eafbbca2252d094acc2",
             "name": "均衡电流_46",
             "mode": "范围判定",
             "min": "285",
@@ -11479,7 +10759,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "876245654a9f41259fc43ab456168745",
+                    "step_id": "e21c63e73feb4ddd97a38b4d5a34d1b6",
                     "name": "读取变量：电流-46",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTQ2IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11491,7 +10771,7 @@
             ]
         },
         {
-            "step_id": "3bf11e2838d949539077437ae829eb58",
+            "step_id": "25ea4296c6c54ddfa832e62913b691b3",
             "name": "均衡电流_48",
             "mode": "范围判定",
             "min": "285",
@@ -11503,7 +10783,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "32feaca3d5574fd083147f322e9a262b",
+                    "step_id": "b01373c47cc64f1597f73e27eab307a5",
                     "name": "读取变量：电流-48",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTQ4IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11515,7 +10795,7 @@
             ]
         },
         {
-            "step_id": "1d7891c385f34b4295ebdffc575fe32e",
+            "step_id": "a5c41bc818714d619c4a8b0e7dd03db9",
             "name": "均衡电流_50",
             "mode": "范围判定",
             "min": "285",
@@ -11527,7 +10807,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "d63d77e7b76949a3a3ba52e5bbec79a6",
+                    "step_id": "4250dbeab9c54c95a4bcb8c8f2a20c4d",
                     "name": "读取变量：电流-50",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTUwIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11539,7 +10819,7 @@
             ]
         },
         {
-            "step_id": "e46789888737422f9c6380b70c4ed1e2",
+            "step_id": "ee5f1698611e4f35b7e78a333c4b6c51",
             "name": "均衡电流_52",
             "mode": "范围判定",
             "min": "285",
@@ -11551,7 +10831,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "e87f73f0ee8c4933a9d99caa5036a023",
+                    "step_id": "5e31afd5bf9b49b4b6b015a51942bec1",
                     "name": "读取变量：电流-52",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTUyIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11563,7 +10843,7 @@
             ]
         },
         {
-            "step_id": "0ca81e5613e4481a988530c207d5aca2",
+            "step_id": "87ae549c5d2c48afa90eb9e72b39789b",
             "name": "均衡电流_54",
             "mode": "范围判定",
             "min": "285",
@@ -11575,7 +10855,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "16e8f85068704f9995c200fd6b02b941",
+                    "step_id": "b8f3e1c5cf1f41029a6f2911ab819a91",
                     "name": "读取变量：电流-54",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTU0IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11587,7 +10867,7 @@
             ]
         },
         {
-            "step_id": "548970fe076f47db95b8b19aaed53280",
+            "step_id": "5fb55466f0d34e679eb753e566c21635",
             "name": "均衡电流_56",
             "mode": "范围判定",
             "min": "285",
@@ -11599,7 +10879,7 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "65e484cee0414cac9a4de2fcd31bc382",
+                    "step_id": "814feab4163f4744841720694b9d7e91",
                     "name": "读取变量：电流-56",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTU2IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
@@ -11611,7 +10891,7 @@
             ]
         },
         {
-            "step_id": "1b87aa7a559c45aab691dbbc3436ad44",
+            "step_id": "c5030c15e57743e89eb2a4f675b4daf0",
             "name": "均衡电流_58",
             "mode": "范围判定",
             "min": "285",
@@ -11623,10 +10903,770 @@
             "decimal_places": 1,
             "sub_steps": [
                 {
-                    "step_id": "257581446c614773a9fc47d1b4f91451",
+                    "step_id": "145d3b2ce9f54967bc74e6823be1a5db",
                     "name": "读取变量：电流-58",
                     "action": "读取变量",
                     "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTU4IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "b7e1f41c437547d2a2b7592cbefdee7b",
+            "name": "均衡电流_02",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "92860603ef484cf8bb17e316acf5fded",
+                    "name": "CAN 交互-发送指令 (ID:0x18000403 / DATA:04 00 00 00 00 00 00 00 / TYPE:0 / DLC:8 / CH:0 / PCH:2)",
+                    "action": "发送指令",
+                    "params": "ID:0x18000403 / DATA:04 00 00 00 00 00 00 00 / TYPE:0 / DLC:8 / CH:0 / PCH:2",
+                    "device": "CAN 交互",
+                    "type": "CAN发送",
+                    "is_judgment": false,
+                    "fail_strategy": "忽略继续"
+                },
+                {
+                    "step_id": "a947edbf727f48cf961f12736a5b142a",
+                    "name": "等待 (Wait)-固定延时 (2000ms)",
+                    "action": "固定延时",
+                    "params": "2000ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "忽略继续"
+                },
+                {
+                    "step_id": "7fb4313baa324bdb9f826c7160a25414",
+                    "name": "电池模拟器-批量读取电流（ALL，每通道15次，最大值）",
+                    "action": "回读数据",
+                    "params": "设备工步:{\"schema_version\":2,\"device_id\":\"simulator\",\"action_id\":\"current_batch\",\"values\":{\"selection\":\"ALL\",\"count\":15,\"mode\":\"max\"},\"设备\":\"电池模拟器 (NGI 83624A Simulator)\",\"动作\":\"回读数据\",\"参数\":{\"读取通道\":\"ALL\",\"读取最大次数（每通道）\":15,\"取值\":\"max\"}}",
+                    "device": "电池模拟器 (NGI 83624A Simulator)",
+                    "type": "读取仪表",
+                    "is_judgment": false,
+                    "fail_strategy": "忽略继续"
+                },
+                {
+                    "step_id": "76623802768f4def99bee75639036a54",
+                    "name": "读取变量：电流-2",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTIiLCAic291cmNlIjogImxhc3QiLCAiaW5wdXQiOiAidGV4dCIsICJzZXBhcmF0b3IiOiAiIiwgInNlZ21lbnRzIjogW119",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                },
+                {
+                    "step_id": "5aab318b4597447f9ba27bcc8de29a1d",
+                    "name": "CAN 交互-发送指令 (ID:0x18000403 / DATA:00 00 00 00 00 00 00 00 / TYPE:0 / DLC:8 / CH:0 / PCH:2)",
+                    "action": "发送指令",
+                    "params": "ID:0x18000403 / DATA:00 00 00 00 00 00 00 00 / TYPE:0 / DLC:8 / CH:0 / PCH:2",
+                    "device": "CAN 交互",
+                    "type": "CAN发送",
+                    "is_judgment": false,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "a7ee7e24b5334c38bd1191166399c605",
+            "name": "均衡电流_04",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "beec2ca9fe4d4ac0aa90994b832a280c",
+                    "name": "读取变量：电流-4",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTQiLCAic291cmNlIjogImxhc3QiLCAiaW5wdXQiOiAidGV4dCIsICJzZXBhcmF0b3IiOiAiIiwgInNlZ21lbnRzIjogW119",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "4810ba21658c45d0b5d35e5459eacde4",
+            "name": "均衡电流_06",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "f8be31ec1de14b288430fe8d1ddc7634",
+                    "name": "读取变量：电流-6",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTYiLCAic291cmNlIjogImxhc3QiLCAiaW5wdXQiOiAidGV4dCIsICJzZXBhcmF0b3IiOiAiIiwgInNlZ21lbnRzIjogW119",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "5634a43935c94c748e420b311b6e9737",
+            "name": "均衡电流_08",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "f41338caaa754f12909581da89f6d15d",
+                    "name": "读取变量：电流-8",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTgiLCAic291cmNlIjogImxhc3QiLCAiaW5wdXQiOiAidGV4dCIsICJzZXBhcmF0b3IiOiAiIiwgInNlZ21lbnRzIjogW119",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "606df0fba98f46dc977f370a60a21837",
+            "name": "均衡电流_10",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "6e72094819684c93b54da22da59a5674",
+                    "name": "读取变量：电流-10",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTEwIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "10f64cd1847644e5923fcee3ed1f4f04",
+            "name": "均衡电流_12",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "edf9ea3650b34473b293d9100fb5513a",
+                    "name": "读取变量：电流-12",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTEyIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "1f0f553915b04544a3bfade66b578e82",
+            "name": "均衡电流_14",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "9c66c66058e4463ca2fe7bb36096ff04",
+                    "name": "读取变量：电流-14",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTE0IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "7ce68858713b46109ec7a11a532c784b",
+            "name": "均衡电流_16",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "5fcac5c82d1e4514aef13db5fbebdda4",
+                    "name": "读取变量：电流-16",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTE2IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "156b41aa3b8348bcab21e807b8756bce",
+            "name": "均衡电流_18",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "b7761180b34b41e799b145514a51c86d",
+                    "name": "读取变量：电流-18",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTE4IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "e88f8c0d0f6745bc9e82518814cb2b8f",
+            "name": "均衡电流_19",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "8163785c4b1f4152a64c4aabfe4af292",
+                    "name": "读取变量：电流-19",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTE5IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "d6011b909bc8423c9b7607cb68b0417f",
+            "name": "均衡电流_21",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "4f0ddad4544f4edcbdaa11e4efd259ac",
+                    "name": "读取变量：电流-21",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTIxIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "2c802539ddcd4ba1a48528292a00fb4e",
+            "name": "均衡电流_23",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "5582aab266954345baac37feec445219",
+                    "name": "读取变量：电流-23",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTIzIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "0ab38ff539fb4e22a1e8f4b2f4db8c1c",
+            "name": "均衡电流_25",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "024c1a6fa8634bd38a272edb077efdbb",
+                    "name": "读取变量：电流-25",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTI1IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "54b31870400e474d86c198f2e1921225",
+            "name": "均衡电流_27",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "3120e14119974554b0d14386e957946b",
+                    "name": "读取变量：电流-27",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTI3IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "0e3c25f0872b47a580d673473da51193",
+            "name": "均衡电流_29",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "dc2ecada983e4a90a68b83fe94b43718",
+                    "name": "读取变量：电流-29",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTI5IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "0084d78469104952ac49746d9888a4de",
+            "name": "均衡电流_31",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "05b75313b93d47ee8dbfa0ab67a3cd70",
+                    "name": "读取变量：电流-31",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTMxIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "6f552f3c98b54df08b0de6b5274bae80",
+            "name": "均衡电流_33",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "98d27af9c22946beaf0bd5b82b593b6f",
+                    "name": "读取变量：电流-33",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTMzIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "e87d8fc6579c471d810a018ff7cc3e91",
+            "name": "均衡电流_35",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "2b97bac49d7545d3a0289d2c9a89ea62",
+                    "name": "读取变量：电流-35",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTM1IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "e8e742a39eb34f8b902f838da88b13d0",
+            "name": "均衡电流_37",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "ac5b2af7562846afb7803dbac13f0209",
+                    "name": "读取变量：电流-37",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTM3IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "1b57db3663f941d29372abfdce415510",
+            "name": "均衡电流_39",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "072b505c5820472fb3eada70108de44c",
+                    "name": "读取变量：电流-39",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTM5IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "32403758430a4e5f89168192768a8549",
+            "name": "均衡电流_41",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "62679bc5524c4b558026a0b91248d477",
+                    "name": "读取变量：电流-41",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTQxIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "558909ec007b42e2906e6bd021b4729d",
+            "name": "均衡电流_43",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "b46564ae4f1c4fc19cb954a12488a077",
+                    "name": "读取变量：电流-43",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTQzIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "9321893189264c7d802b5ad043b7d9e2",
+            "name": "均衡电流_45",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "c8cb026a470b4db1b853189b4f5e6f57",
+                    "name": "读取变量：电流-45",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTQ1IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "c3e08aece5d045b5878f9ebb47f5e9eb",
+            "name": "均衡电流_47",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "6a5b7768755b4dcfa89b2b9498769839",
+                    "name": "读取变量：电流-47",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTQ3IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "74bdc969aacb48a5a9f51a7d7396686f",
+            "name": "均衡电流_49",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "fdcd6ab10ec241f78cd16f625d40fae6",
+                    "name": "读取变量：电流-49",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTQ5IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "0f6b38594951401fb3d15eadb1b384e8",
+            "name": "均衡电流_51",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "3a94cdd8b28b438d9bc0a4db97327ab0",
+                    "name": "读取变量：电流-51",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTUxIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "216fba3b567e4177a450f891c718ad70",
+            "name": "均衡电流_53",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "28dc0d0e9a56483c8e4cdd3be00b292a",
+                    "name": "读取变量：电流-53",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTUzIiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "880e0b9e2d2c4d64bae1ee2aaaddedad",
+            "name": "均衡电流_55",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "b557f0e1efee466784fabb3014127d12",
+                    "name": "读取变量：电流-55",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTU1IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "0bd92295dddf4951b1f897054e99125e",
+            "name": "均衡电流_57",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "be256490198f4a2784884802299580d3",
+                    "name": "读取变量：电流-57",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTU3IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
+                    "device": "读取变量",
+                    "type": "读取变量",
+                    "is_judgment": true,
+                    "fail_strategy": "忽略继续"
+                }
+            ]
+        },
+        {
+            "step_id": "c3f26d2671ab4e4a98345254972b1d51",
+            "name": "均衡电流_59",
+            "mode": "范围判定",
+            "min": "285",
+            "max": "345",
+            "standard_type": "数值",
+            "retry_count": "不复测",
+            "strategy": "NG继续",
+            "unit": "mA",
+            "decimal_places": 1,
+            "sub_steps": [
+                {
+                    "step_id": "05c5c5f57c7141a7b0b14336224ae14c",
+                    "name": "读取变量：电流-59",
+                    "action": "读取变量",
+                    "params": "VARSTEP64:eyJvcGVyYXRpb24iOiAicmVhZCIsICJrZXkiOiAi55S15rWBLTU5IiwgInNvdXJjZSI6ICJsYXN0IiwgImlucHV0IjogInRleHQiLCAic2VwYXJhdG9yIjogIiIsICJzZWdtZW50cyI6IFtdfQ==",
                     "device": "读取变量",
                     "type": "读取变量",
                     "is_judgment": true,
@@ -11668,9 +11708,9 @@
                 },
                 {
                     "step_id": "9c4d18e0575c4d94a453e28134dec8c5",
-                    "name": "电池模拟器 (NGI 83624A Simulator)-快捷配置 (3.8V / 1000.0mA / ON / Range:LOW / CH:ALL)",
+                    "name": "电池模拟器 (NGI 83624A Simulator)-快捷配置 (3.8V / 1000.0mA / ON / Range:HIGH / CH:ALL)",
                     "action": "快捷配置",
-                    "params": "3.8V / 1000.0mA / ON / Range:LOW / CH:ALL",
+                    "params": "3.8V / 1000.0mA / ON / Range:HIGH / CH:ALL",
                     "device": "电池模拟器 (NGI 83624A Simulator)",
                     "type": "设置仪表",
                     "is_judgment": false,
@@ -13092,23 +13132,63 @@
         },
         {
             "step_id": "354177dec4614f5294bafd90f92eb0e5",
-            "name": "#BMS推出",
-            "mode": "范围判定",
-            "min": "",
-            "max": "",
-            "standard_type": "数值",
+            "name": "BMS推出",
+            "mode": "字符串比对",
+            "min": "PASS",
+            "max": "--",
+            "standard_type": "字符串",
             "retry_count": "不复测",
             "strategy": "NG继续",
             "unit": "NULL",
             "decimal_places": null,
             "sub_steps": [
                 {
-                    "step_id": "8742fe4fd056492590cec913c3bf1a39",
-                    "name": "CANDBC CAN_PCB_NTC0.PCB_NTC0",
-                    "action": "读取DBC信号",
-                    "params": "DBC64:eyJleHRlbmRlZCI6IGZhbHNlLCAiZnJhbWVfaWQiOiAxMjg1LCAiaGFzX2Nob2ljZXMiOiBmYWxzZSwgImxhYmVsIjogIkNBTl9QQ0JfTlRDMC5QQ0JfTlRDMCBbMHg1MDVdIiwgIm1heGltdW0iOiA2MDUuMzUsICJtZXNzYWdlIjogIkNBTl9QQ0JfTlRDMCIsICJtaW5pbXVtIjogLTUwLCAic2lnbmFsIjogIlBDQl9OVEMwIiwgInVuaXQiOiAiZGVnQyIsICJzaGEyNTYiOiAiODE3OWNkNzIzYWQ3OTdjMWE0Y2I3OTcxOTY4NDBlNDc1ODIyM2QwOGM4ZjgxM2NhNzFhNTI5ODIwYjdkY2M3YiIsICJvdXRwdXQiOiAidmFsdWUiLCAidmFyaWFibGUiOiAiIiwgInRpbWVvdXQiOiAzLjAsICJpbnRlcnZhbCI6IDAuMDEsICJtYXhfYWdlIjogMi4wLCAibmV3X2ZyYW1lIjogZmFsc2V9 / PCH:2",
-                    "device": "CANDBC 交互",
-                    "type": "CANDBC交互",
+                    "step_id": "fffca681ee784ee4982354e02b401c38",
+                    "name": "Easy320 继电器 (Easy320)-组合设置ON/OFF (RELAY64:W3siaW5kZXgiOjE3LCJvbiI6ZmFsc2V9XQ==)",
+                    "action": "组合设置ON/OFF",
+                    "params": "RELAY64:W3siaW5kZXgiOjE3LCJvbiI6ZmFsc2V9XQ==",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": false,
+                    "fail_strategy": "忽略继续"
+                },
+                {
+                    "step_id": "2375b8d2f0364115a9dfecdd1fdf47e8",
+                    "name": "等待 (Wait)-固定延时 (1000ms)",
+                    "action": "固定延时",
+                    "params": "1000ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "忽略继续"
+                },
+                {
+                    "step_id": "92f5eab44dba4a5684d9cffa37c556ee",
+                    "name": "Easy320 继电器 (Easy320)-组合设置ON/OFF (RELAY64:W3siaW5kZXgiOjE4LCJvbiI6ZmFsc2V9LHsiaW5kZXgiOjE5LCJvbiI6dHJ1ZX1d)",
+                    "action": "组合设置ON/OFF",
+                    "params": "RELAY64:W3siaW5kZXgiOjE4LCJvbiI6ZmFsc2V9LHsiaW5kZXgiOjE5LCJvbiI6dHJ1ZX1d",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
+                    "is_judgment": false,
+                    "fail_strategy": "忽略继续"
+                },
+                {
+                    "step_id": "27b44895f4f24037978ac334c4a2e250",
+                    "name": "等待 (Wait)-固定延时 (1000ms)",
+                    "action": "固定延时",
+                    "params": "1000ms",
+                    "device": "等待 (Wait)",
+                    "type": "等待",
+                    "is_judgment": false,
+                    "fail_strategy": "忽略继续"
+                },
+                {
+                    "step_id": "a618426af057474faca7a75b6b2daafb",
+                    "name": "Easy320 继电器 (Easy320)-组合设置ON/OFF (RELAY64:W3siaW5kZXgiOjgsIm9uIjpmYWxzZX0seyJpbmRleCI6OSwib24iOmZhbHNlfSx7ImluZGV4IjoxMCwib24iOmZhbHNlfSx7ImluZGV4IjoxMSwib24iOmZhbHNlfSx7ImluZGV4IjoxMiwib24iOmZhbHNlfSx7ImluZGV4IjoxMywib24iOmZhbHNlfSx7ImluZGV4IjoxNCwib24iOmZhbHNlfSx7ImluZGV4IjoxNSwib24iOmZhbHNlfSx7ImluZGV4IjoxNiwib24iOmZhbHNlfSx7ImluZGV4IjoyMCwib24iOmZhbHNlfSx7ImluZGV4IjoyMSwib24iOmZhbHNlfSx7ImluZGV4IjoyMiwib24iOmZhbHNlfSx7ImluZGV4IjoyMywib24iOmZhbHNlfV0=)",
+                    "action": "组合设置ON/OFF",
+                    "params": "RELAY64:W3siaW5kZXgiOjgsIm9uIjpmYWxzZX0seyJpbmRleCI6OSwib24iOmZhbHNlfSx7ImluZGV4IjoxMCwib24iOmZhbHNlfSx7ImluZGV4IjoxMSwib24iOmZhbHNlfSx7ImluZGV4IjoxMiwib24iOmZhbHNlfSx7ImluZGV4IjoxMywib24iOmZhbHNlfSx7ImluZGV4IjoxNCwib24iOmZhbHNlfSx7ImluZGV4IjoxNSwib24iOmZhbHNlfSx7ImluZGV4IjoxNiwib24iOmZhbHNlfSx7ImluZGV4IjoyMCwib24iOmZhbHNlfSx7ImluZGV4IjoyMSwib24iOmZhbHNlfSx7ImluZGV4IjoyMiwib24iOmZhbHNlfSx7ImluZGV4IjoyMywib24iOmZhbHNlfV0=",
+                    "device": "Easy320 继电器 (Easy320)",
+                    "type": "继电器控制",
                     "is_judgment": true,
                     "fail_strategy": "忽略继续"
                 }

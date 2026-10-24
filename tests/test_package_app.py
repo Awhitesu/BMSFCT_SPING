@@ -38,6 +38,31 @@ def test_initial_files_preserve_machine_configuration(tmp_path):
     assert (target/'bms_test_data.db').read_bytes() == b'existing records'
 
 
+@pytest.mark.parametrize('selection', ['bundled', 'external', 'relative'])
+def test_new_package_sdk_path_is_portable_without_changing_other_settings(tmp_path, monkeypatch, selection):
+    import json
+    monkeypatch.setattr(package, 'ROOT', tmp_path)
+    bundled = 'vendor/zlgcan(20260806)/zlgcan_x64'
+    selected = {'bundled': str(tmp_path / bundled),
+                'external': str(tmp_path / 'custom-sdk'), 'relative': bundled}[selection]
+    settings = dict(zlg_sdk_path=selected, zlg_ip='192.0.2.10', pcan_channel='ZLG_CAN3',
+                    zlg_port=8001, pcan_enabled=False)
+    source, target = tmp_path / 'config', tmp_path / 'package' / 'config'
+    source.mkdir()
+    source_config = source / 'sys_config.json'
+    source_config.write_text(json.dumps(settings), encoding='utf-8')
+    original = source_config.read_bytes()
+
+    package.copy_initial_config(source, target)
+
+    expected = dict(settings, zlg_sdk_path=bundled if selection == 'bundled' else selected)
+    assert json.loads((target / 'sys_config.json').read_text(encoding='utf-8')) == expected
+    assert source_config.read_bytes() == original
+    (target / 'sys_config.json').write_bytes(b'existing machine config')
+    package.copy_initial_config(source, target)
+    assert (target / 'sys_config.json').read_bytes() == b'existing machine config'
+
+
 @pytest.mark.parametrize('versioned',[False,True])
 def test_build_uses_staging_and_preserves_production_database(tmp_path, monkeypatch,versioned):
     import json

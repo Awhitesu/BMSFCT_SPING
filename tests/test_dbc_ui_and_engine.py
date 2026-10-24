@@ -65,6 +65,7 @@ def test_engine_reads_same_monitor_as_debug_without_can_tx(asset,channel,physica
             params=encode_step(c)+f' / PCH:{physical}',is_judgment=True))
         ok,value=worker._execute_sub_step_logic(step)
         assert ok and value==10
+        assert value.unit == 'V'
         assert worker.current_step_results[-1]==(10,True)
         debug.show();app.processEvents();debug.channel.setCurrentText(interface);debug.refresh()
         row=next(i for i,r in enumerate(debug._rows) if r['signal']=='Voltage' and r['message']=='Status')

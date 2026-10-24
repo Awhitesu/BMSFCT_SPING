@@ -161,8 +161,6 @@ class MainWindow(QMainWindow):
 
         # 模拟器控制
         self.tab_simulator = SimulatorTab(self.device_manager)
-        self.tab_simulator.hardware_configuration_requested.connect(
-            lambda: self.tabs.setCurrentWidget(self.tab_hardware))
         self.tab_hardware.configuration_changed.connect(self.tab_simulator.refresh_configuration)
         self.tab_debug_center.add_debug_tab(self.tab_simulator, "电池模拟器控制")
 
@@ -188,6 +186,7 @@ class MainWindow(QMainWindow):
 
         # USB PCAN-FD 调试
         self.tab_pcan_fd = PCANFDTab(self.device_manager)
+        self.tab_hardware.configuration_changed.connect(self.tab_pcan_fd.refresh_configuration)
         self.tab_debug_center.add_debug_tab(self.tab_pcan_fd, "CAN调试（PCAN / ZLG）")
         self.tab_dbc_monitor = self.tab_pcan_fd.dbc_monitor
 
@@ -195,6 +194,7 @@ class MainWindow(QMainWindow):
         self.tab_download_center = QTabWidget()
         self.tab_debug_center.add_debug_tab(self.tab_download_center, "下载与刷写")
         self.tab_opteeq = OpteeQTab(self.device_manager)
+        self.tab_hardware.configuration_changed.connect(self.tab_opteeq.refresh_connection_state)
         self.tab_download_center.addTab(self.tab_opteeq, "力捷丰 SG400")
 
         # 瑞萨 E2 仿真器 (rfp-cli 命令行)

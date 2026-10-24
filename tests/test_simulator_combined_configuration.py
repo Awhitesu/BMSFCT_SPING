@@ -59,7 +59,7 @@ class Instrument(NGI83624):
                     self.data[channel]['range'] = int(value)
                     self.data[channel]['current'] = 0  # Hardware can reset the limit on a range change.
                 else:
-                    assert self.data[channel]['range'] != 2 or value <= 1.000001
+                    assert self.data[channel]['range'] != 2 or abs(value - 1) <= .000001
                     self.data[channel]['current'] = value
             else:
                 match = re.fullmatch(r'(SOUR:VOLT|OUTP:ONOFF) ([\d.]+)\(@([\d,]+)\)', command)
@@ -155,7 +155,7 @@ def test_accepted_write_with_wrong_limit_readback_still_fails_before_on():
     sim._verify_output_voltage.assert_not_called()
 
 
-@pytest.mark.parametrize('mode,current,target_mode,target_current', [(0, 1000, 'LOW', .0005), (2, .5, 'HIGH', 1.0)])
+@pytest.mark.parametrize('mode,current,target_mode,target_current', [(0, 1000, 'LOW', .001), (2, 1, 'HIGH', 1.0)])
 def test_range_switch_occurs_off_and_restores_requested_limit_without_intermediate_on(mode, current, target_mode, target_current):
     sim = Instrument(mode=mode, current=current, voltage=3.0)
     config = dict(CONFIG, range=target_mode, current=target_current)
@@ -170,9 +170,9 @@ def test_range_switch_occurs_off_and_restores_requested_limit_without_intermedia
 
 def test_mixed_states_and_ranges_only_switch_changed_on_channels_and_preserve_unselected():
     sim = Instrument(3)
-    sim.data[2].update(range=2, current=.5, output=False)
+    sim.data[2].update(range=2, current=1, output=False)
     before = copy.deepcopy(sim.data[3])
-    assert configure_simulator(sim, [1, 2], dict(CONFIG, range='LOW', current=.0005))
+    assert configure_simulator(sim, [1, 2], dict(CONFIG, range='LOW', current=.001))
     assert writes(sim)[0] == 'OUTP:ONOFF 0(@1)'
     assert writes(sim)[-1] == 'OUTP:ONOFF 1(@1,2)'
     assert sim.data[3] == before

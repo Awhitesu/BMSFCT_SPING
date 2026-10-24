@@ -31,6 +31,7 @@ def page():
     for sim in manager.simulators:
         sim.read_stable = Mock(return_value=-.0002)
         sim.read_current_sample = Mock(return_value=-.0002)
+        sim.read_stable_snapshot = Mock(side_effect=lambda channels,**_: [(3.25,3.25,True) for _ in channels])
         for method in ('output_control', 'output_controls', 'set_voltage', 'set_voltages', 'set_range', 'set_current_limit'):
             setattr(sim, method, Mock(return_value=True))
     widget = SimulatorTab(manager)
@@ -46,18 +47,24 @@ def assert_no_output_writes(manager):
             getattr(sim, method).assert_not_called()
 
 
+def select(widget, manager, slot, channels):
+    key = 'all' if slot is None else id(manager.simulators[slot])
+    widget.device_combo.setCurrentIndex(widget.device_combo.findData(key))
+    for local, check in widget.channel_checks.items():
+        check.setChecked(local in channels)
+
+
 def test_single_button_uses_global_channel_mapping_and_displays_signed_ma(page):
     widget, manager, db = page
     assert widget.table.columnCount() == 3
     assert widget.table.horizontalHeaderItem(2).text() == '实测电流 (mA)'
-    widget.spin_ch.setCurrentIndex(widget.spin_ch.findData(2))
+    select(widget, manager, 0, [1])
     widget.on_read_all_progress(2, 2.7)
     widget.btn_read_current.click()
-    pump(lambda:not widget.operation.isRunning())
-    assert manager.simulators[0].read_stable.call_args.args[:2] == (1, 'current')
-    manager.simulators[1].read_stable.assert_not_called()
+    pump(lambda:not widget._io_busy() and widget.btn_read_current.isEnabled())
+    assert manager.simulators[0].read_current_sample.call_args.args == (1,)
+    manager.simulators[1].read_current_sample.assert_not_called()
     assert float(widget.table.item(1, 2).text()) == -.0002
-    assert float(widget.lbl_read_current.text()) == -.0002
     assert 'mA' in widget.table.item(1, 2).toolTip()
     assert widget.table.item(1, 1).text() == '2.7000'
     assert_no_output_writes(manager)
@@ -66,6 +73,7 @@ def test_single_button_uses_global_channel_mapping_and_displays_signed_ma(page):
 
 def test_all_current_button_handles_partial_failure_without_losing_other_channels(page):
     widget, manager, _ = page
+    select(widget, manager, None, [1,2])
     manager.simulators[1].read_current_sample.return_value = -1.0
     def samples(channel, **_):
         if channel == 2:raise TimeoutError('current query timeout')
@@ -73,8 +81,8 @@ def test_all_current_button_handles_partial_failure_without_losing_other_channel
     manager.simulators[0].read_current_sample.side_effect = samples
     for ch in (1, 2, 3):widget.on_read_all_progress(ch, 2.5+ch/10)
     voltage_text = [widget.table.item(row, 1).text() for row in range(3)]
-    widget.btn_read_all_current.click()
-    pump(lambda:widget.read_all_worker.wait(0) and widget.btn_read_all_current.isEnabled())
+    widget.btn_read_current.click()
+    pump(lambda:widget.read_all_worker.wait(0) and widget.btn_read_current.isEnabled())
     assert float(widget.table.item(0, 2).text()) == -1.0
     assert float(widget.table.item(1, 2).text()) == .0000001
     assert widget.table.item(2, 2).text() == 'Error'
@@ -87,31 +95,32 @@ def test_all_current_button_handles_partial_failure_without_losing_other_channel
     assert_no_output_writes(manager)
     manager.simulators[0].read_current_sample.side_effect = None
     manager.simulators[0].read_current_sample.return_value = 4.5
-    widget.btn_read_all_current.click()
-    pump(lambda:widget.read_all_worker.wait(0) and widget.btn_read_all_current.isEnabled())
+    widget.btn_read_current.click()
+    pump(lambda:widget.read_all_worker.wait(0) and widget.btn_read_current.isEnabled())
     assert widget.table.item(2, 2).text() == '4.5' and not widget.current_warnings
 
 
 def test_failed_single_read_replaces_stale_value_and_keeps_the_error(page):
     widget, manager, _ = page
+    select(widget, manager, 1, [1])
     widget.on_current_read_progress(1, 5)
-    manager.simulators[1].read_stable.side_effect = TimeoutError('single current timeout')
+    manager.simulators[1].read_current_sample.side_effect = TimeoutError('single current timeout')
     widget.btn_read_current.click()
-    pump(lambda:not widget.operation.isRunning())
-    assert widget.lbl_read_current.text() == widget.table.item(0, 2).text() == 'Error'
-    assert 'single current timeout' in widget.lbl_read_current.toolTip()
-    assert 'single current timeout' in widget.lbl_result.text()
+    pump(lambda:not widget._io_busy() and widget.btn_read_current.isEnabled())
+    assert widget.table.item(0, 2).text() == 'Error'
+    assert 'single current timeout' in widget.table.item(0, 2).toolTip()
     assert_no_output_writes(manager)
 
 
 def test_single_read_is_background_and_selection_change_cannot_mislabel_the_result(page):
     widget, manager, _ = page
+    select(widget, manager, 1, [1])
     entered, release = threading.Event(), threading.Event()
-    def read(*_):
+    def read(*_, **__):
         entered.set()
         assert release.wait(3)
         return -2.5
-    manager.simulators[1].read_stable.side_effect = read
+    manager.simulators[1].read_current_sample.side_effect = read
     try:
         started = time.monotonic()
         widget.btn_read_current.click()
@@ -119,12 +128,12 @@ def test_single_read_is_background_and_selection_change_cannot_mislabel_the_resu
         assert entered.wait(1)
         assert not widget.btn_read_current.isEnabled()
         widget.btn_read_current.click()
-        widget.spin_ch.setCurrentIndex(widget.spin_ch.findData(2))
+        assert not widget.device_combo.isEnabled()
         release.set()
-        pump(lambda:not widget.operation.isRunning())
-        assert widget.lbl_read_current.text() == '—'
+        pump(lambda:not widget._io_busy() and widget.btn_read_current.isEnabled())
+        assert widget.device_combo.isEnabled()
         assert widget.table.item(0, 2).text() == '-2.5'
-        assert manager.simulators[1].read_stable.call_count == 1
+        assert manager.simulators[1].read_current_sample.call_count == 1
     finally:release.set()
 
 
@@ -158,9 +167,9 @@ def test_bulk_reads_devices_in_parallel_and_keeps_local_channels():
 
 def test_voltage_read_after_current_preserves_current_column(page):
     widget, manager, _ = page
+    select(widget, manager, 1, [1])
     widget.on_current_read_progress(1, -.0123)
-    manager.simulators[1].read_stable.return_value = 3.25
     widget.btn_read.click()
-    pump(lambda:not widget.operation.isRunning())
+    pump(lambda:not widget._io_busy() and widget.btn_read.isEnabled())
     assert widget.table.item(0, 1).text() == '3.2500'
     assert widget.table.item(0, 2).text() == '-0.0123'

@@ -1,7 +1,11 @@
 from ui.device_task import DeviceTask
-from core.simulator_control import control_simulator, read_simulator
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QGroupBox, QDoubleSpinBox, QGridLayout, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget, QScrollArea, QSizePolicy
-from PySide6.QtCore import Qt, QThread, Signal, QTimer,QSignalBlocker
+from core.simulator_control import control_simulator
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+                               QDoubleSpinBox, QGridLayout, QComboBox, QCheckBox,
+                               QTableWidget, QTableWidgetItem, QHeaderView, QSizePolicy,
+                               QAbstractItemView, QLayout, QFrame, QScrollArea)
+from PySide6.QtCore import Qt, QThread, Signal, QTimer, QSignalBlocker
+from ui.widgets.eliding_label import ElidingLabel
 import math
 
 
@@ -97,225 +101,265 @@ class ReadAllWorker(QThread):
                 self.diagnostic.emit(global_ch, text)
 
 class SimulatorTab(QWidget):
-    hardware_configuration_requested = Signal()
-
     def __init__(self, device_manager=None):
         super().__init__()
         self.mgr = device_manager
-        self.worker = None
         self.read_all_worker = None
-        self.batch_worker=None
-        self.operation=DeviceTask(self)
+        self.operation = DeviceTask(self)
         self.operation.finished.connect(self._operation_finished)
-        self.voltage_warnings={}
-        self.current_warnings={}
+        self.voltage_warnings = {}
+        self.current_warnings = {}
+        self._routes = []
+        self._rows = {}
+        self._scope_checks = {}
+        self._pending_read = None
         self._init_ui()
 
     def _init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        self.tabs = QTabWidget()
-        layout.addWidget(self.tabs)
-        run = QWidget()
-        run_layout = QVBoxLayout(run)
-        run_layout.setSpacing(16)
-        run_layout.setContentsMargins(16, 16, 16, 16)
-        self.lbl_summary = QLabel()
-        self.lbl_summary.setWordWrap(True)
-        self.lbl_status = QLabel()
-        run_layout.addWidget(self.lbl_summary)
-        run_layout.addWidget(self.lbl_status)
-        self.btn_settings = QPushButton("到硬件管理中心配置…")
-        self.btn_settings.clicked.connect(self.hardware_configuration_requested.emit)
-        run_layout.addWidget(self.btn_settings)
-        self.control_buttons = []
+        columns = QHBoxLayout(self)
+        columns.setSizeConstraint(QLayout.SetNoConstraint)
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
+        columns.setContentsMargins(8, 8, 8, 8)
+        columns.setSpacing(10)
 
-        def button(text, callback, grid, row, col, span=1):
+        def separator(shape=QFrame.HLine):
+            line = QFrame()
+            line.setFrameShape(shape)
+            line.setStyleSheet('QFrame { background-color: #334155; border: none; }')
+            if shape == QFrame.VLine:
+                line.setFixedWidth(1)
+            else:
+                line.setFixedHeight(1)
+            return line
+
+        self.table = QTableWidget(0, 3)
+        self.table.setHorizontalHeaderLabels(['通道 / 全局映射', '实测电压 (V)', '实测电流 (mA)'])
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.verticalHeader().setDefaultSectionSize(28)
+        self.table.verticalHeader().setMinimumSectionSize(24)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.table.setMinimumSize(240, 120)
+        columns.addWidget(self.table, 1)
+        columns.addWidget(separator(QFrame.VLine))
+
+        self.control_scroll = QScrollArea()
+        self.control_scroll.setWidgetResizable(True)
+        self.control_scroll.setFrameShape(QFrame.NoFrame)
+        self.control_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.control_scroll.setFixedWidth(320)
+        self.control_panel = QFrame()
+        self.control_panel.setObjectName('simulatorControls')
+        self.control_panel.setStyleSheet('QFrame#simulatorControls { background-color: #151f30; border: 1px solid #334155; border-radius: 6px; }')
+        layout = QVBoxLayout(self.control_panel)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+        self.control_scroll.setWidget(self.control_panel)
+        columns.addWidget(self.control_scroll)
+
+        header = QHBoxLayout()
+        header.setSpacing(8)
+        header.addWidget(QLabel('模拟电池'))
+        self.device_combo = QComboBox()
+        self.device_combo.setMinimumWidth(160)
+        self.device_combo.currentIndexChanged.connect(self._render_scope)
+        header.addWidget(self.device_combo, 1)
+        layout.addLayout(header)
+        status_row = QHBoxLayout()
+        self.lbl_status = QLabel('未启用设备')
+        status_row.addWidget(self.lbl_status)
+        status_row.addStretch()
+        self.lbl_selection = QLabel('已选 0 路')
+        status_row.addWidget(self.lbl_selection)
+        layout.addLayout(status_row)
+        self.lbl_summary = ElidingLabel('')
+        self.lbl_summary.setMinimumWidth(0)
+        self.lbl_summary.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        layout.addWidget(self.lbl_summary)
+        layout.addWidget(separator())
+
+        selection_row = QHBoxLayout()
+        selection_row.addWidget(QLabel('通道选择'))
+        selection_row.addStretch()
+        self.chk_all = QCheckBox('全选')
+        self.chk_all.toggled.connect(self._select_all_channels)
+        selection_row.addWidget(self.chk_all)
+        layout.addLayout(selection_row)
+
+        self.channel_grid = QGridLayout()
+        self.channel_grid.setContentsMargins(0, 0, 0, 0)
+        self.channel_grid.setHorizontalSpacing(6)
+        self.channel_grid.setVerticalSpacing(2)
+        self.channel_checks = {}
+        for local in range(1, 25):
+            check = QCheckBox(f'CH{local:02d}')
+            check.setFixedHeight(26)
+            check.setStyleSheet('QCheckBox { padding: 0px; spacing: 3px; }')
+            check.toggled.connect(self._selection_changed)
+            self.channel_checks[local] = check
+            self.channel_grid.addWidget(check, (local-1)//4, (local-1)%4, Qt.AlignLeft)
+        for column in range(4):
+            self.channel_grid.setColumnStretch(column, 1)
+        layout.addLayout(self.channel_grid)
+        layout.addWidget(separator())
+
+        self.control_buttons = []
+        def button(text, callback, row):
             widget = QPushButton(text)
-            widget.setMinimumHeight(42)
+            widget.setStyleSheet('QPushButton { min-height: 0px; padding: 5px 12px; }')
+            widget.setFixedHeight(34)
+            widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             widget.clicked.connect(callback)
-            grid.addWidget(widget, row, col, 1, span)
+            row.addWidget(widget)
             self.control_buttons.append(widget)
             return widget
+        def spin(maximum, value, decimals, width):
+            widget = QDoubleSpinBox()
+            widget.setDecimals(decimals)
+            widget.setRange(0, maximum)
+            widget.setValue(value)
+            widget.setFixedWidth(width)
+            widget.setStyleSheet('QDoubleSpinBox { min-height: 0px; padding: 3px 6px; }')
+            widget.setFixedHeight(34)
+            return widget
 
-        def group(title):
-            box = QGroupBox(title)
-            grid = QGridLayout(box)
-            grid.setContentsMargins(16, 30, 16, 16)
-            grid.setHorizontalSpacing(12)
-            grid.setVerticalSpacing(14)
-            run_layout.addWidget(box)
-            return grid
+        def parameter_group(title):
+            row = QHBoxLayout()
+            row.setSpacing(6)
+            label = QLabel(title)
+            label.setFixedWidth(52)
+            row.addWidget(label)
+            layout.addLayout(row)
+            return row
 
-        single = group("单通道控制")
-        single.addWidget(QLabel("全局通道"), 0, 0)
-        self.spin_ch = QComboBox()
-        self.spin_ch.setMinimumHeight(42)
-        single.addWidget(self.spin_ch, 0, 1, 1, 2)
-        single.addWidget(QLabel("电压 (V)"), 1, 0)
-        self.spin_volt = QDoubleSpinBox()
-        self.spin_volt.setRange(0, 15)
-        self.spin_volt.setDecimals(3)
-        self.spin_volt.setValue(3.7)
-        self.spin_volt.setMinimumHeight(42)
-        single.addWidget(self.spin_volt, 1, 1)
-        self.btn_set_volt = button("设定电压", self.set_sim_volt, single, 1, 2)
-        self.btn_on = button("开启输出", lambda: self.control_output(True), single, 2, 0)
-        self.btn_off = button("关闭输出", lambda: self.control_output(False), single, 2, 1)
-        self.btn_read = button("回读电压", self.read_sim_volt, single, 2, 2)
-        single.addWidget(QLabel("实测电流 (mA)"), 3, 0)
-        self.lbl_read_current = QLabel('—')
-        single.addWidget(self.lbl_read_current, 3, 1)
-        self.btn_read_current = button("回读电流", self.read_sim_current, single, 3, 2)
-        self.spin_ch.currentIndexChanged.connect(self._clear_current_display)
+        voltage_row = parameter_group('电压(V)')
+        self.spin_volt = spin(15, 3.8, 3, 128)
+        voltage_row.addWidget(self.spin_volt)
+        self.btn_set_volt = button('设定电压', self.set_sim_volt, voltage_row)
+        voltage_row.addStretch()
+        layout.addWidget(separator())
+        range_row = parameter_group('量程')
+        self.range_combo = QComboBox()
+        for label, value in [('0–1000 mA', 'HIGH'), ('0–1 mA', 'LOW'), ('AUTO', 'AUTO')]:
+            self.range_combo.addItem(label, value)
+        self.range_combo.setFixedWidth(128)
+        self.range_combo.setStyleSheet('QComboBox { min-height: 0px; padding: 3px 6px; }')
+        self.range_combo.setFixedHeight(34)
+        range_row.addWidget(self.range_combo)
+        self.btn_set_range = button('设置量程', lambda: self.set_current_parameter('range', self.range_combo.currentData()), range_row)
+        range_row.addStretch()
+        layout.addWidget(separator())
+        current_row = parameter_group('限流(A)')
+        self.current_limit = spin(1, .1, 7, 128)
+        self.current_limit.setSingleStep(.01)
+        current_row.addWidget(self.current_limit)
+        self.btn_set_current = button('设置限流', lambda: self.set_current_parameter('current', self.current_limit.value()), current_row)
+        current_row.addStretch()
+        self.range_combo.currentIndexChanged.connect(self._update_current_limit_control)
+        self.range_combo.setToolTip('LOW先自动将勾选通道限流设为1mA并确认，再切量程；HIGH/AUTO不主动改限流。不联动输出或电压。手册要求换档后再次ON生效。')
+        layout.addWidget(separator())
 
-        batch = group("整套设备控制 · 所有已启用的实际通道")
-        batch.addWidget(QLabel("电压 (V)"), 0, 0)
-        self.spin_global_volt = QDoubleSpinBox()
-        self.spin_global_volt.setRange(0, 15)
-        self.spin_global_volt.setDecimals(3)
-        self.spin_global_volt.setValue(3.8)
-        self.spin_global_volt.setMinimumHeight(42)
-        batch.addWidget(self.spin_global_volt, 0, 1)
-        self.btn_global_set = button("全部设压", self.global_broadcast_volt, batch, 0, 2)
-        self.btn_global_on = button("全部开启", lambda: self.global_broadcast_output(True), batch, 1, 0)
-        self.btn_global_off = button("全部关闭", lambda: self.global_broadcast_output(False), batch, 1, 1)
-        self.btn_one_key = button("设压并全部开启", self.one_key_global_action, batch, 1, 2)
-        self.btn_all_on = self.btn_global_on
-        self.btn_all_off = self.btn_global_off
-        reads = QGridLayout()
-        reads.setColumnStretch(0, 1);reads.setColumnStretch(1, 1)
-        batch.addLayout(reads, 2, 0, 1, 3)
-        self.btn_read_all = button("回读全部通道电压", self.read_all_channels, reads, 0, 0)
-        self.btn_read_all_current = button("回读全部通道电流", self.read_all_currents, reads, 0, 1)
-        self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["全局通道 / 设备通道", "实测电压 (V)", "实测电流 (mA)"])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setMinimumHeight(240)
-        run_layout.addWidget(self.table, 1)
-        self.lbl_result = QLabel("待操作")
-        self.lbl_result.setWordWrap(True)
-        run_layout.addWidget(self.lbl_result)
-        for label in (self.lbl_result,self.lbl_summary,self.lbl_status):
-            label.setMinimumWidth(0)
-            label.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Preferred)
-            label.setWordWrap(True)
-        run.setMinimumWidth(0)
-        scroll = QScrollArea()
-        self.run_scroll=scroll
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(run)
-        self.tabs.addTab(scroll, "运行控制")
-        self._init_settings()
-        self._init_current_settings()
-        self.status_timer = QTimer(self)
-        self.status_timer.timeout.connect(self.update_net_info)
-        self.status_timer.start(1000)
-        self.update_net_info()
+        layout.addWidget(QLabel('输出控制'))
+        action_row = QHBoxLayout()
+        action_row.setSpacing(6)
+        self.btn_on = button('开启输出', lambda: self.control_output(True), action_row)
+        self.btn_off = button('关闭输出', lambda: self.control_output(False), action_row)
+        self.btn_one_key = button('设压并开启', self.one_key_global_action, action_row)
+        action_row.addStretch()
+        layout.addLayout(action_row)
+        layout.addWidget(separator())
 
-    def _init_current_settings(self):
-        page=QWidget(); layout=QVBoxLayout(page)
-        tip=QLabel('这里设置电流量程和输出限流。高量程/低量程/自动量程对应HIGH/LOW/AUTO；限流用A输入。设备具体支持的电流上限以型号为准，写入后回读确认。设置参数不会自动开启输出。')
-        tip.setWordWrap(True); layout.addWidget(tip)
-        self.spin_param_ch=QComboBox(); self.spin_param_ch.setMinimumHeight(42)
-        layout.addWidget(QLabel('单通道选择（全局通道）')); layout.addWidget(self.spin_param_ch)
-        for batch,title in [(False,'单通道量程与限流'),(True,'整套设备 · 全部已启用通道')]:
-            box=QGroupBox(title); grid=QGridLayout(box); grid.setContentsMargins(16,30,16,16); grid.setSpacing(14)
-            combo=QComboBox()
-            for label,value in [('高量程','HIGH'),('低量程','LOW'),('自动量程','AUTO')]: combo.addItem(label,value)
-            current=QDoubleSpinBox(); current.setRange(0,5); current.setDecimals(7); current.setSingleStep(.01); current.setSuffix(' A'); current.setValue(.1)
-            combo.setToolTip('切换量程会短暂关闭并恢复原先开启的通道。切换LOW前，请先将限流设为不超过0.001 A（1 mA）。')
-            current.setToolTip('单位A：0.0005 A = 0.5 mA。LOW最大1 mA；已开启通道修改参数后会确认实际电压稳定。')
-            combo.currentIndexChanged.connect(lambda _,c=combo,w=current:w.setSingleStep(.0001 if c.currentData()=='LOW' else .01))
-            combo.setMinimumHeight(42); current.setMinimumHeight(42)
-            grid.addWidget(QLabel('电流量程'),0,0);grid.addWidget(combo,0,1)
-            grid.addWidget(QLabel('输出限流'),1,0);grid.addWidget(current,1,1)
-            for row,label,parameter,control in [(0,'设置量程','range',combo),(1,'设置限流','current',current)]:
-                button=QPushButton(('全部' if batch else '')+label); button.setMinimumHeight(42)
-                button.clicked.connect(lambda checked=False,b=batch,p=parameter,w=control:self.set_current_parameter(b,p,w.currentData() if p=='range' else w.value()))
-                grid.addWidget(button,row,2); self.control_buttons.append(button)
-            if not batch:
-                button=QPushButton('回读量程和限流');button.setMinimumHeight(42);button.clicked.connect(self.read_current_parameters)
-                grid.addWidget(button,2,0,1,3);self.control_buttons.append(button)
-            layout.addWidget(box)
-        self.lbl_current_result=QLabel('参数尚未读取');self.lbl_current_result.setWordWrap(True);layout.addWidget(self.lbl_current_result)
+        layout.addWidget(QLabel('数据回读'))
+        read_row = QHBoxLayout()
+        read_row.setSpacing(6)
+        self.btn_read = button('回读电压', self.read_all_channels, read_row)
+        self.btn_read_current = button('回读电流', self.read_all_currents, read_row)
+        self.btn_read_parameters = button('回读参数', self.read_current_parameters, read_row)
+        self.btn_read_parameters.setToolTip('回读勾选通道的量程与输出限流')
+        read_row.addStretch()
+        layout.addLayout(read_row)
+        layout.addWidget(separator())
         layout.addStretch()
-        from ui.layout_safety import protect_form_layout
-        protect_form_layout(page)
-        self.tabs.addTab(page,'量程与限流')
+        self.lbl_result = ElidingLabel('待操作；控制与回读仅作用于当前范围内的勾选通道')
+        self.lbl_result.setMinimumWidth(0)
+        self.lbl_result.setFixedHeight(26)
+        layout.addWidget(self.lbl_result)
+        self._update_current_limit_control()
+        self.status_timer = QTimer(self)
+        self.status_timer.setInterval(1000)
+        self.status_timer.timeout.connect(self.update_net_info)
+        self.status_timer.start()
+        self.update_net_info(force=True)
 
-    def set_current_parameter(self,batch,parameter,value):
-        if not self.mgr:return
-        channels=self.mgr.simulator_channels() if batch else []
-        global_ch=self.spin_param_ch.currentData()
-        if not batch:
-            sim,ch=self.mgr._get_sim_and_ch(global_ch)
-            if sim:channels=[(global_ch,sim,ch)]
-        def action():
-            from devices.simulator_batch import run_simulator_batch
-            def apply(sim,chs):
-                return control_simulator(sim,parameter,chs,value)
-            return run_simulator_batch(channels,apply)
-        def completed(ok,result):
-            success=ok and isinstance(result,dict) and result['ok']
-            errors='；'.join(str(row) for row in result['results'] if not row['ok']) if ok and isinstance(result,dict) else str(result)
-            text=('全部通道' if batch else f'CH{global_ch}')+('量程' if parameter=='range' else '限流')+f'设置为{value}'+(' A' if parameter=='current' else '')+('，回读确认成功' if success else '，失败：'+errors)
-            self.lbl_current_result.setText(text[:240]);self.lbl_current_result.setToolTip(text)
-            self._notify_status(text)
-        self.run_device(parameter,action,completed)
+    def _io_busy(self):
+        return self.operation.isRunning() or (self.read_all_worker is not None and not self.read_all_worker.wait(0))
 
-    def read_current_parameters(self):
-        if not self.mgr:return
-        global_ch=self.spin_param_ch.currentData();sim,ch=self.mgr._get_sim_and_ch(global_ch)
-        def completed(ok,result):
-            text=f'CH{global_ch}：量程{result["range"]}，输出限流{result["current"]:.4f} A' if ok and result else f'CH{global_ch}参数读取失败：{result}'
-            self.lbl_current_result.setText(text)
-        if sim:self.run_device("Read parameters",lambda:sim.read_source_settings(ch),completed)
+    def _scope_routes(self):
+        key = self.device_combo.currentData()
+        return [route for route in self._routes if key == 'all' or id(route[1]) == key]
 
-    def _init_settings(self):
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        tip = QLabel("IP、端口、设备序号、实际通道数和使能状态统一在硬件管理中心设置。本页只显示已应用参数，独立调试与测试工步共用同一套设备和通道；已启用设备按序号连续编号，未启用设备不占编号。")
-        tip.setWordWrap(True)
-        layout.addWidget(tip)
-        self.settings_table = QTableWidget(0, 7)
-        self.settings_table.setHorizontalHeaderLabels(["启用状态", "配置", "IP地址", "端口", "设备序号", "实际通道数", "有效全局通道"])
-        self.settings_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.settings_table.verticalHeader().setVisible(False)
-        self.settings_table.verticalHeader().setDefaultSectionSize(58)
-        self.settings_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        self.settings_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        layout.addWidget(self.settings_table, 1)
-        self.btn_hardware_config = QPushButton("到硬件管理中心修改")
-        self.btn_hardware_config.setMinimumHeight(44)
-        self.btn_hardware_config.clicked.connect(self.hardware_configuration_requested.emit)
-        layout.addWidget(self.btn_hardware_config)
-        self.tabs.addTab(page, "硬件配置（只读）")
+    def selected_channels(self):
+        return [route for route in self._scope_routes() if self.channel_checks[route[2]].isChecked()]
 
-    def _update_settings(self, channels):
-        devices = list(getattr(self.mgr, 'simulators', ()))
-        settings = [(self.mgr.is_enabled(f'sim{slot}'), slot,
-                     str(getattr(sim, 'ip', '')), getattr(sim, 'port', ''),
-                     sim.sequence_number, sim.max_channels)
-                    for slot, sim in enumerate(devices, 1)]
-        ranges = {}
-        for global_ch, sim, _ in channels:
-            ranges.setdefault(id(sim), []).append(global_ch)
-        rows = []
-        for sim, (enabled, slot, ip, port, number, count) in zip(devices, settings):
-            mapped = ranges.get(id(sim), [])
-            extent = f'{mapped[0]}–{mapped[-1]}' if mapped else ('无有效通道' if enabled else '未启用')
-            rows.append(('已启用' if enabled else '未启用', str(slot), ip, str(port), str(number), str(count), extent))
-        if getattr(self, '_settings_signature', None) == rows:return
-        self._settings_signature = rows
-        with QSignalBlocker(self.settings_table):
-            self.settings_table.setRowCount(len(rows))
-            for row, values in enumerate(rows):
-                for col, text in enumerate(values):
-                    item = QTableWidgetItem(text)
-                    item.setFlags(item.flags() & ~Qt.ItemIsEditable & ~Qt.ItemIsUserCheckable)
-                    self.settings_table.setItem(row, col, item)
+    def _render_scope(self, *_):
+        scope = self._scope_routes()
+        key = self.device_combo.currentData()
+        selected = self._scope_checks.get(key, set())
+        for local, check in self.channel_checks.items():
+            routes = [route for route in scope if route[2] == local]
+            with QSignalBlocker(check):
+                check.setChecked(bool(routes) and local in selected)
+            check.setEnabled(bool(routes) and not self._io_busy())
+            check.setToolTip('、'.join(f'第{sim.sequence_number}台 CH{ch} → 全局CH{global_ch}' for global_ch, sim, ch in routes) or '当前范围未配置此通道')
+        visible = {global_ch for global_ch, _, _ in scope}
+        for global_ch, row in self._rows.items():
+            self.table.setRowHidden(row, global_ch not in visible)
+        self.table.scrollToTop()
+        summary = ('整体模式：勾选各台同号通道' if key == 'all' else '单台模式：只控制当前设备')
+        self.lbl_summary.setText(summary)
+        self.lbl_summary.setToolTip(summary)
+        self._selection_changed()
+
+    def _selection_changed(self, *_):
+        scope = self._scope_routes()
+        available = {local for _, _, local in scope}
+        selected = {local for local, check in self.channel_checks.items() if check.isChecked() and local in available}
+        self._scope_checks[self.device_combo.currentData()] = selected
+        with QSignalBlocker(self.chk_all):
+            self.chk_all.setChecked(bool(available) and selected == available)
+        count = sum(local in selected for _, _, local in scope)
+        self.lbl_selection.setText(f'已选 {count}/{len(scope)} 路')
+        self._update_controls()
+
+    def _select_all_channels(self, checked):
+        available = {local for _, _, local in self._scope_routes()}
+        for local, check in self.channel_checks.items():
+            with QSignalBlocker(check):
+                check.setChecked(bool(checked) and local in available)
+        self._selection_changed()
+
+    def _update_controls(self):
+        busy = self._io_busy()
+        scope = self._scope_routes()
+        available = {local for _, _, local in scope}
+        devices = {id(sim): sim for _, sim, _ in scope}.values()
+        self.lbl_status.setText(f'已连接 {sum(bool(sim.is_connected) for sim in devices)}/{len(devices)} 台')
+        self.device_combo.setEnabled(bool(self._routes) and not busy)
+        self.chk_all.setEnabled(bool(available) and not busy)
+        for local, check in self.channel_checks.items():
+            check.setEnabled(local in available and not busy)
+        enabled = bool(self.selected_channels()) and not busy
+        for button in self.control_buttons:
+            button.setEnabled(enabled)
+        self.spin_volt.setEnabled(not busy)
+        self.range_combo.setEnabled(not busy)
+        self._update_current_limit_control()
+
+    def _update_current_limit_control(self, *_):
+        low = self.range_combo.currentData() == 'LOW'
+        self.current_limit.setRange(.001 if low else 0, .001 if low else 1)
+        self.current_limit.setEnabled(not low and not self._io_busy())
+        self.current_limit.setToolTip('LOW固定0.001 A（1 mA）' if low else '输出限流范围：0–1 A；AUTO自动选择测量量程，仍需设置限流')
 
     def refresh_configuration(self):
         self.update_net_info(force=True)
@@ -324,96 +368,128 @@ class SimulatorTab(QWidget):
         super().showEvent(event)
         self.refresh_configuration()
 
-    def update_net_info(self, index=0, *, force=False):
-        if self.operation.isRunning():return
-        if not force and not self.isVisible() and hasattr(self,'_channel_signature'): return
-        if self.batch_worker and self.batch_worker.isRunning(): return
-        if not self.mgr:
+    def update_net_info(self, *_args, force=False):
+        if self._io_busy() or (not force and not self.isVisible() and hasattr(self, '_channel_signature')):
             return
-        if self.read_all_worker and not self.read_all_worker.wait(0):
-            return
-        channels = self.mgr.simulator_channels()
-        self._update_settings(channels)
-        signature = [(ch, id(sim), local, sim.sequence_number, getattr(sim, 'ip', ''), getattr(sim, 'port', ''))
-                     for ch, sim, local in channels]
+        routes = self.mgr.simulator_channels() if self.mgr else []
+        signature = [(ch, id(sim), local, sim.sequence_number, getattr(sim, 'ip', ''), getattr(sim, 'port', '')) for ch, sim, local in routes]
         if getattr(self, '_channel_signature', None) != signature:
-            selected = self.spin_ch.currentData()
-            selected_param=self.spin_param_ch.currentData()
-            with QSignalBlocker(self.spin_ch), QSignalBlocker(self.spin_param_ch):
-                self._channel_signature = signature
-                self._clear_current_display()
-                self.spin_ch.clear()
-                self.spin_param_ch.clear()
-                self.table.setRowCount(len(channels))
-                self._rows = {}
-                for row, (ch, sim, local) in enumerate(channels):
-                    self._rows[ch] = row
-                    self.spin_ch.addItem(f"CH{ch}（第{sim.sequence_number}台 / CH{local}）", ch)
-                    self.spin_param_ch.addItem(f"CH{ch}（第{sim.sequence_number}台 / CH{local}）", ch)
-                    self.table.setItem(row, 0, QTableWidgetItem(f"CH{ch} / 第{sim.sequence_number}台 CH{local}"))
-                    self.table.setItem(row, 1, QTableWidgetItem("—"))
-                    self.table.setItem(row, 2, QTableWidgetItem("—"))
-                idx = self.spin_ch.findData(selected)
-                if idx >= 0:
-                    self.spin_ch.setCurrentIndex(idx)
-                idx=self.spin_param_ch.findData(selected_param)
-                if idx>=0:self.spin_param_ch.setCurrentIndex(idx)
-        devices = {id(sim): sim for _, sim, _ in channels}.values()
-        count = len(devices)
-        connected = sum(bool(sim.is_connected) for sim in devices)
-        self.lbl_summary.setText(f"整套设备：{count}台模拟器，共{len(channels)}个有效通道")
-        self.lbl_status.setText(f"已连接 {connected}/{count} 台")
-        for button in self.control_buttons:
-            button.setEnabled(bool(channels))
+            key = self.device_combo.currentData()
+            self._channel_signature = signature
+            self._routes = list(routes)
+            devices = {id(sim): sim for _, sim, _ in routes}
+            self._scope_checks = {k: v for k, v in self._scope_checks.items() if k == 'all' or k in devices}
+            with QSignalBlocker(self.device_combo):
+                self.device_combo.clear()
+                for identity, sim in devices.items():
+                    count = sum(driver is sim for _, driver, _ in routes)
+                    self.device_combo.addItem(f'模拟电池{sim.sequence_number}（{count}路）', identity)
+                    self.device_combo.setItemData(self.device_combo.count()-1, f'{getattr(sim,"ip","")}:{getattr(sim,"port","")}', Qt.ToolTipRole)
+                if devices:
+                    self.device_combo.addItem(f'整体模拟电池（{len(devices)}台/{len(routes)}路）', 'all')
+                index = self.device_combo.findData(key)
+                self.device_combo.setCurrentIndex(index if index >= 0 else 0)
+            self.table.setRowCount(len(routes))
+            self._rows = {}
+            self.voltage_warnings.clear()
+            self.current_warnings.clear()
+            for row, (global_ch, sim, local) in enumerate(routes):
+                self._rows[global_ch] = row
+                item = QTableWidgetItem(f'CH{local} / 第{sim.sequence_number}台 / 全局CH{global_ch}')
+                item.setToolTip(item.text())
+                self.table.setItem(row, 0, item)
+                self.table.setItem(row, 1, QTableWidgetItem('—'))
+                self.table.setItem(row, 2, QTableWidgetItem('—'))
+            self._render_scope()
+        self._update_controls()
 
-    def run_device(self,label,action,callback=None):
-        if self.operation.isRunning() or (self.batch_worker and self.batch_worker.isRunning()) or (self.read_all_worker and not self.read_all_worker.wait(0)): return
-        for button in self.control_buttons:button.setEnabled(False)
-        def completed(ok,value):
-            if callback:callback(ok,value)
-            else:self._notify_status(label+("成功" if ok and value is not False else "失败："+str(value)))
-        self.operation.run(action,completed)
+    def run_device(self, label, action, callback=None):
+        if self._io_busy():
+            return False
+        def completed(ok, value):
+            if callback:
+                callback(ok, value)
+            else:
+                self._notify_status(label + ('成功' if ok and value is not False else '失败：'+str(value)))
+        accepted = self.operation.run(action, completed)
+        self._update_controls()
+        return accepted
 
     def _operation_finished(self):
         self.refresh_configuration()
+        if self._pending_read is not None:
+            channels, self._pending_read = self._pending_read, None
+            self._start_read_all('voltage', channels)
+
+    def _control_selected(self, action, value=None, read_after=False):
+        if self._io_busy():
+            return
+        channels = list(self.selected_channels())
+        if not channels:
+            self._notify_status('请先勾选需要控制的通道')
+            return
+        from devices.simulator_batch import run_simulator_batch
+        def completed(ok, result):
+            if not ok:
+                self._notify_status('操作失败：'+str(result))
+                return
+            errors = ['全局'+','.join(f'CH{ch}' for ch in row['channels'])+'：'+row['error'] for row in result['results'] if not row['ok']]
+            if action == 'output' and value is False:
+                for row in result['results']:
+                    if row['ok']:
+                        for ch in row['channels']:
+                            item = QTableWidgetItem('输出已关闭（未重新测量）')
+                            item.setToolTip('已回读确认输出关闭；端子残余电压需另行测量。')
+                            if ch in self._rows:
+                                self.table.setItem(self._rows[ch], 1, item)
+            self._notify_status(('勾选通道设置及校验成功' if result['ok'] else '勾选通道操作失败')+f'，{len(channels)}路，耗时{result["elapsed"]:.3f}s'+('；'+'；'.join(errors) if errors else ''))
+            if read_after and result['ok']:
+                self._pending_read = channels
+        self._notify_status(f'正在设置并回读确认 {len(channels)} 路勾选通道…')
+        self.run_device(action, lambda: run_simulator_batch(channels, lambda sim, chs: control_simulator(sim, action, chs, value, batch=True)), completed)
 
     def set_sim_volt(self):
-        if self.mgr:
-            ch,volt=self.spin_ch.currentData(),self.spin_volt.value()
-            sim,local=self.mgr._get_sim_and_ch(ch)
-            if sim:self.run_device(f"CH{ch}设压",lambda:control_simulator(sim,'voltage',[local],volt))
+        self._control_selected('voltage', self.spin_volt.value())
 
-    def control_output(self,state):
-        if self.mgr:
-            ch=self.spin_ch.currentData();sim,local=self.mgr._get_sim_and_ch(ch)
-            if sim:self.run_device(f"CH{ch}输出控制",lambda:control_simulator(sim,'output',[local],state))
+    def control_output(self, state):
+        self._control_selected('output', state, read_after=state)
 
-    def read_sim_volt(self):
-        if self.mgr:
-            ch=self.spin_ch.currentData();sim,local=self.mgr._get_sim_and_ch(ch)
-            def completed(ok,value):
-                if ok and value>=0 and ch in self._rows:
-                    self.on_read_all_progress(ch,value)
-                else:self._notify_status(str(value))
-            if sim:self.run_device(f"CH{ch}电压回读",lambda:read_simulator(sim,'voltage',local),completed)
+    def one_key_global_action(self):
+        self._control_selected('voltage_on', self.spin_volt.value(), read_after=True)
 
-    def _clear_current_display(self, *_):
-        self.lbl_read_current.setText('—')
-        self.lbl_read_current.setToolTip('')
+    def set_current_parameter(self, parameter, value):
+        self._control_selected(parameter, value)
 
-    def read_sim_current(self):
-        if not self.mgr:return
-        ch = self.spin_ch.currentData()
-        sim, local = self.mgr._get_sim_and_ch(ch)
-        if not sim:return
-        def completed(ok, value):
-            if ok:
-                self.on_current_read_progress(ch, value)
-            else:
-                self.on_current_read_error(ch, str(value))
-                self._notify_status(f'CH{ch}电流回读失败：{value}')
-        self.run_device(f'CH{ch}电流回读',
-                        lambda:_current_reading(read_simulator(sim, 'current', local)), completed)
+    def read_current_parameters(self):
+        if self._io_busy():
+            return
+        channels = list(self.selected_channels())
+        if not channels:
+            self._notify_status('请先勾选需要读取的通道')
+            return
+        from devices.simulator_batch import run_simulator_batch
+        values = {}
+        mapping = {(id(sim), local): global_ch for global_ch, sim, local in channels}
+        def read(sim, local_channels):
+            for local in local_channels:
+                result = sim.read_source_settings(local)
+                if result is None:
+                    raise RuntimeError(sim.last_error or '量程和限流回读失败')
+                values[mapping[id(sim), local]] = result
+            return True
+        def completed(ok, result):
+            if not ok:
+                self._notify_status('参数回读失败：'+str(result))
+                return
+            details = []
+            for ch, settings in sorted(values.items()):
+                text = f'全局CH{ch}：量程{settings["range"]}，限流{settings["current"]*1000:g} mA'
+                details.append(text)
+                if ch in self._rows:
+                    self.table.item(self._rows[ch], 0).setToolTip(text)
+            errors = [row['error'] for row in result['results'] if not row['ok']]
+            self._notify_status(('参数回读完成：' if result['ok'] else '参数回读部分失败：')+'；'.join(details+errors))
+        self.run_device('参数回读', lambda: run_simulator_batch(channels, read), completed)
 
     def read_all_channels(self):
         self._start_read_all('voltage')
@@ -421,26 +497,20 @@ class SimulatorTab(QWidget):
     def read_all_currents(self):
         self._start_read_all('current')
 
-    def _start_read_all(self, quantity):
-        if self.operation.isRunning():return
-        if not self.mgr: return
-        if self.batch_worker and self.batch_worker.isRunning(): return
-        if self.read_all_worker and not self.read_all_worker.wait(0): return
-        channels = self.mgr.simulator_channels()
-        if not channels:
-            self._notify_status("请先配置并启用模拟器。")
+    def _start_read_all(self, quantity, channels=None):
+        if self._io_busy():
             return
-        if quantity == 'current':
-            self.btn_read_all_current.setText('正在读取全部电流…')
-            self.current_warnings={}
-            self._clear_current_display()
-            for row in self._rows.values():
-                self.table.setItem(row, 2, QTableWidgetItem('—'))
-        else:
-            self.btn_read_all.setText("正在读取整套设备...")
-            self.voltage_warnings={}
-        self.btn_read_all.setEnabled(False)
-        self.btn_read_all_current.setEnabled(False)
+        channels = list(self.selected_channels() if channels is None else channels)
+        if not channels:
+            self._notify_status('请先勾选需要读取的通道')
+            return
+        warnings = self.current_warnings if quantity == 'current' else self.voltage_warnings
+        for ch, _, _ in channels:
+            warnings.pop(ch, None)
+            if quantity == 'current' and ch in self._rows:
+                self.table.setItem(self._rows[ch], 2, QTableWidgetItem('—'))
+        if self.read_all_worker is not None:
+            self.read_all_worker.deleteLater()
         self.read_all_worker = ReadAllWorker(channels, quantity)
         if quantity == 'current':
             self.read_all_worker.progress.connect(self.on_current_read_progress)
@@ -450,171 +520,103 @@ class SimulatorTab(QWidget):
             self.read_all_worker.progress.connect(self.on_read_all_progress)
             self.read_all_worker.diagnostic.connect(self.on_channel_diagnostic)
         self.read_all_worker.finished.connect(self.on_read_all_finished)
+        self._notify_status(f'正在回读勾选的 {len(channels)} 路'+('电流…' if quantity == 'current' else '电压…'))
         self.read_all_worker.start()
+        self._update_controls()
 
     def on_current_read_progress(self, ch, value):
-        if ch not in self._rows:return
-        try:value = _current_reading(value)
+        if ch not in self._rows:
+            return
+        try:
+            value = _current_reading(value)
         except (TypeError, ValueError) as exc:
-            self.on_current_read_error(ch, str(exc));return
+            self.on_current_read_error(ch, str(exc))
+            return
         item = self.table.item(self._rows[ch], 2)
         if item is None:
-            item = QTableWidgetItem();self.table.setItem(self._rows[ch], 2, item)
+            item = QTableWidgetItem()
+            self.table.setItem(self._rows[ch], 2, item)
         item.setText(f'{value:.9g}')
-        item.setToolTip(f'CH{ch}：实测电流 {value:.9g} mA')
+        item.setToolTip(f'全局CH{ch}：实测电流 {value:.9g} mA')
         from PySide6.QtGui import QBrush
         item.setBackground(QBrush())
         self.current_warnings.pop(ch, None)
-        if self.spin_ch.currentData() == ch:
-            self.lbl_read_current.setText(item.text())
-            self.lbl_read_current.setToolTip(item.toolTip())
 
     def on_current_read_error(self, ch, error):
-        if ch not in self._rows:return
-        self.current_warnings[ch] = error
+        if ch not in self._rows:
+            return
+        from PySide6.QtGui import QColor
         item = QTableWidgetItem('Error')
         item.setToolTip(error)
-        from PySide6.QtGui import QColor
         item.setBackground(QColor('#78350f'))
         self.table.setItem(self._rows[ch], 2, item)
-        if self.spin_ch.currentData() == ch:
-            self.lbl_read_current.setText('Error')
-            self.lbl_read_current.setToolTip(error)
+        self.current_warnings[ch] = error
 
     def on_current_diagnostic(self, ch, text):
         if ch in self._rows:
-            item = self.table.item(self._rows[ch], 2)
-            if item:item.setToolTip(text)
+            self.table.item(self._rows[ch], 2).setToolTip(text)
         print(f'[Simulator] {text}')
 
-    def on_read_all_progress(self, ch, v):
-        import math
-        if ch not in self._rows:return
-        row=self._rows[ch]
-        item=self.table.item(row,1)
+    def on_read_all_progress(self, ch, value):
+        if ch not in self._rows:
+            return
+        item = self.table.item(self._rows[ch], 1)
         if item is None:
-            item=QTableWidgetItem();self.table.setItem(row,1,item)
-        text=f'{v:.4f}' if math.isfinite(v) and v>=0 else 'Error'
-        if item.text()!=text:item.setText(text)
+            item = QTableWidgetItem()
+            self.table.setItem(self._rows[ch], 1, item)
+        text = f'{value:.4f}' if math.isfinite(value) and value >= 0 else 'Error'
+        if item.text() != text:
+            item.setText(text)
         if item.data(Qt.UserRole) is True:
             from PySide6.QtGui import QBrush
-            item.setBackground(QBrush());item.setData(Qt.UserRole,False)
+            item.setBackground(QBrush())
+            item.setData(Qt.UserRole, False)
 
-    def on_channel_diagnostic(self,ch,text):
-        if ch not in self._rows:return
-        item=self.table.item(self._rows[ch],1)
-        if item: item.setToolTip(text)
-        if item and '输出关闭' in text: item.setText(item.text()+'（输出关闭）')
+    def on_channel_diagnostic(self, ch, text):
+        if ch not in self._rows:
+            return
+        item = self.table.item(self._rows[ch], 1)
+        if item:
+            item.setToolTip(text)
+        if item and '输出关闭' in text:
+            item.setText(item.text()+'（输出关闭）')
         if '偏差超过' in text or '诊断读取失败' in text:
-            self.voltage_warnings[ch]=text
+            self.voltage_warnings[ch] = text
             if item:
                 from PySide6.QtGui import QColor
                 item.setBackground(QColor('#78350f'))
-                item.setData(Qt.UserRole,True)
+                item.setData(Qt.UserRole, True)
                 item.setText(item.text()+'（异常）')
         print(f'[Simulator] {text}')
 
     def on_read_all_finished(self):
-        self.btn_read_all.setText("回读全部通道电压")
-        self.btn_read_all_current.setText("回读全部通道电流")
-        self.btn_read_all.setEnabled(True)
-        self.btn_read_all_current.setEnabled(True)
-        current = self.read_all_worker.quantity == 'current'
+        if self.read_all_worker is not None and not self.read_all_worker.wait(0):
+            QTimer.singleShot(10, self.on_read_all_finished)
+            return
+        worker = self.read_all_worker
+        if worker is None:
+            return
+        current = worker.quantity == 'current'
         warnings = self.current_warnings if current else self.voltage_warnings
-        self._notify_status("整套设备所有通道"+('电流' if current else '电压')+"回读完成"+('；异常通道：'+','.join(f'CH{ch}' for ch in warnings) if warnings else ''))
-        QTimer.singleShot(0, self.refresh_configuration)
-
-    def batch_control(self, state):
-        if self.mgr:
-            res = self._all_channels(lambda sim, ch: control_simulator(sim,'output',[ch],state))
-            self._notify_status(f"整套设备批量{'开启' if state else '关闭'} {'成功' if res else '失败'}")
-
-    def global_broadcast_volt(self):
-        voltage=self.spin_global_volt.value()
-        self.fast_batch(lambda sim,chs:control_simulator(sim,'voltage',chs,voltage,batch=True))
-
-    def global_broadcast_output(self,state):
-        self.fast_batch(lambda sim,chs:control_simulator(sim,'output',chs,state,batch=True),read_after=state,output_closed=not state)
-
-    def one_key_global_action(self):
-        voltage=self.spin_global_volt.value()
-        self.fast_batch(lambda sim,chs:control_simulator(sim,'voltage_on',chs,voltage,batch=True),read_after=True)
-
-    def _all_channels(self, action):
-        self.batch_error=''
-        if not self.mgr:
-            return False
-        if self.read_all_worker and not self.read_all_worker.wait(0):
-            self.batch_error='：正在回读，请等待完成后操作'
-            return False
-        channels = self.mgr.simulator_channels()
-        results=[]; failures=[]
-        for global_ch,sim,ch in channels:
-            try:
-                ok=bool(action(sim,ch))
-                error=getattr(sim,'last_error','')
-            except Exception as exc:
-                ok=False; error=str(exc)
-            results.append(ok)
-            if not ok:
-                failures.append(f'CH{global_ch}/第{getattr(sim,"sequence_number",0)}台CH{ch} ({error or "命令或回读失败"})')
-        if failures: self.batch_error='：'+'；'.join(failures)
-        return bool(results) and all(results)
-
-    def fast_batch(self,action,read_after=False,output_closed=False):
-        if self.operation.isRunning():return
-        if not self.mgr or (self.batch_worker and self.batch_worker.isRunning()): return
-        if self.read_all_worker and not self.read_all_worker.wait(0):
-            self._notify_status('正在回读，请完成后操作');return
-        from devices.simulator_batch import run_simulator_batch
-        from ui.tabs.multimeter_tab import MeterTask
-        channels=self.mgr.simulator_channels()
-        if not channels:
-            self._notify_status('请先启用模拟器');return
-        position=self.run_scroll.verticalScrollBar().value()
-        # Disabling an entire tab moves keyboard focus and scrolls its next child into view.
-        # Keep navigation/scrolling active; only lock device commands.
-        from PySide6.QtWidgets import QApplication
-        if QApplication.focusWidget() in self.control_buttons:
-            self.run_scroll.setFocus(Qt.OtherFocusReason)
-        for button in self.control_buttons:button.setEnabled(False)
-        self.run_scroll.verticalScrollBar().setValue(position)
-        QTimer.singleShot(0,lambda:self.run_scroll.verticalScrollBar().setValue(position))
-        self._notify_status('正在并行批量设置并回读确认…')
-        self._batch_result_ok=False
-        self.batch_worker=MeterTask(lambda:run_simulator_batch(channels,action))
-        def result(ok,value):
-            if not ok:self._notify_status('批量操作失败：'+str(value));return
-            self._batch_result_ok=value['ok']
-            errors=['全局'+','.join(f'CH{ch}' for ch in row['channels'])+'：'+row['error'] for row in value['results'] if not row['ok']]
-            if output_closed:
-                for row in value['results']:
-                    if row['ok']:
-                        for ch in row['channels']:
-                            item=QTableWidgetItem('输出已关闭（未重新测量）')
-                            item.setToolTip('已回读确认输出关闭；端子残余电压需另行测量。')
-                            self.table.setItem(self._rows[ch],1,item)
-            self._notify_status(('批量设置及校验成功' if value['ok'] else '批量操作失败')+f'，耗时{value["elapsed"]:.3f}s'+('；'+'；'.join(errors) if errors else ''))
-        def finished():
-            self.refresh_configuration()
-            if read_after and self._batch_result_ok:self.read_all_channels()
-        self.batch_worker.result.connect(result);self.batch_worker.finished.connect(finished);self.batch_worker.start()
+        failed = [ch for ch, _, _ in worker.channels if ch in warnings]
+        self._notify_status(f'勾选的 {len(worker.channels)} 路'+('电流' if current else '电压')+'回读完成'+('；异常通道：'+','.join(f'CH{ch}' for ch in failed) if failed else ''))
+        self.refresh_configuration()
 
     def shutdown(self):
         self.status_timer.stop()
         self.operation.shutdown()
-        for worker in (self.batch_worker,self.read_all_worker):
-            if worker:worker.wait()
+        if self.read_all_worker:
+            self.read_all_worker.requestInterruption()
+            self.read_all_worker.wait()
 
     def _notify_status(self, msg):
-        self.lbl_result.setText(msg if len(msg)<=240 else msg[:240]+'…（完整信息见悬停提示）')
+        self.lbl_result.setText(msg)
         self.lbl_result.setToolTip(msg)
         import datetime
-        print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}] [Simulator] {msg}")
-
-        p = self.parent()
-        while p:
-            if hasattr(p, "show_status"):
-                p.show_status(msg)
+        print(f'[{datetime.datetime.now():%Y-%m-%d %H:%M:%S.%f}] [Simulator] {msg}')
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, 'show_status'):
+                parent.show_status(msg)
                 break
-            p = p.parent()
+            parent = parent.parent()

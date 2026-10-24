@@ -233,7 +233,7 @@ class NGI83624:
     def set_current_limit(self, channel: int, current: float, logger=None):
         if channel==0:
             return all([self.set_current_limit(ch,current,logger) for ch in range(1,self.max_channels+1)])
-        if not 1<=channel<=self.max_channels or not math.isfinite(current) or current<0:
+        if not 1<=channel<=self.max_channels or not math.isfinite(current) or not 0<=current<=1:
             self.last_error='通道或限流值无效'; return False
         return self._set_verified_parameter(channel,'OUTCURR',current*1000,0.00001,logger)
 
@@ -404,7 +404,7 @@ class NGI83624:
 
     def configure_confirmed(self, channels, configuration, *, logger=None, cancelled=lambda:False):
         """Configure once; only final ON validates measured output voltage."""
-        from core.simulator_control import simulator_configuration
+        from core.simulator_control import simulator_configuration, validate_current_limit
         configuration = simulator_configuration(configuration)
         channels = list(channels)
         if (not channels or len(channels) != len(set(channels)) or
@@ -427,8 +427,8 @@ class NGI83624:
                 active()
                 currents = {ch: configuration.get('current', snapshot[ch]['current']) for ch in channels}
                 ranges = {ch: configuration.get('range', snapshot[ch]['range']) for ch in channels}
-                if any(ranges[ch] == 'LOW' and currents[ch] > .001000001 for ch in channels):
-                    raise ValueError('LOW range current limit must not exceed 1 mA')
+                for ch in channels:
+                    validate_current_limit(currents[ch], ranges[ch])
                 changed_ranges = [ch for ch in channels if ranges[ch] != snapshot[ch]['range']]
                 changed_currents = [ch for ch in channels if abs(currents[ch] - snapshot[ch]['current']) > 1e-8]
                 changed_voltages = [ch for ch in channels if 'voltage' in configuration and
@@ -443,8 +443,8 @@ class NGI83624:
                     checked(self.output_controls(False, range_on, logger))
                 for ch in changed_ranges:
                     active(); must_cleanup = True
-                    # Lower the limit before entering LOW; range changes may reset it.
-                    if ranges[ch] == 'LOW' and snapshot[ch]['current'] > .001000001:
+                    # 进入 LOW 前固定 1mA；切换量程后仍须恢复并回读确认限流。
+                    if ranges[ch] == 'LOW' and abs(snapshot[ch]['current'] - .001) > 1e-9:
                         checked(self.set_current_limit(ch, currents[ch], logger))
                     active()
                     checked(self.set_range(ch, ranges[ch], logger))
@@ -479,6 +479,7 @@ class NGI83624:
 
     def apply_confirmed(self,action,channels,value,*,logger=None,cancelled=lambda:False,batch=False):
         """Application transaction: preserve OFF channels; verify live outputs."""
+        from core.simulator_control import validate_current_limit
         with self._lock:
             def active():
                 if cancelled():raise RuntimeError('Simulator control cancelled')
@@ -503,30 +504,38 @@ class NGI83624:
                     return True
                 except Exception as exc:
                     raise failure(channels,str(exc)) from exc
+            if action == 'range':
+                saved = {ch: self.read_source_settings(ch) for ch in channels}
+                if any(settings is None for settings in saved.values()):
+                    raise RuntimeError('Cannot read settings before range change')
+                try:
+                    for ch in channels:
+                        active()
+                        if value == 'LOW' and abs(saved[ch]['current'] - .001) > 1e-9:
+                            checked(self.set_current_limit(ch, .001, logger))
+                            active()
+                        if saved[ch]['range'] != value:
+                            checked(self.set_range(ch, value, logger))
+                    active()
+                    self.last_error = ''
+                    return True
+                except Exception as exc:
+                    self.last_error = str(exc)
+                    # LOW可先设1mA；独立量程不联动输出或电压，失败不回滚已确认设置。
+                    raise RuntimeError(self.last_error) from exc
             states={ch:self.read_output_state(ch,logger) for ch in channels}
             if any(state is None for state in states.values()):
                 raise RuntimeError('Cannot confirm output states before changing parameters')
             enabled=[ch for ch,state in states.items() if state]
             cleanup_channels=list(enabled)
-            if action in ('range','current'):
+            if action == 'current':
                 saved={ch:self.read_source_settings(ch) for ch in channels}
                 if any(v is None for v in saved.values()):
                     raise RuntimeError('Cannot read settings before parameter change')
-                if action=='range' and value=='LOW' and any(v['current']>.001000001 for v in saved.values()):
-                    raise ValueError('LOW range requires current limit <= 1 mA; set limit first')
-                if action=='current' and value>.001000001 and any(v['range']=='LOW' for v in saved.values()):
-                    raise ValueError('LOW range current limit must not exceed 1 mA')
+                for settings in saved.values():
+                    validate_current_limit(value,settings['range'])
             try:
-                if action=='range':
-                    if enabled:checked(self.output_controls(False,enabled,logger))
-                    for ch in channels:
-                        active()
-                        checked(self.set_range(ch,value,logger))
-                        checked(self.set_current_limit(ch,saved[ch]['current'],logger))
-                    if enabled:
-                        active()
-                        checked(self.output_controls(True,enabled,logger))
-                elif action in ('voltage','voltage_on'):
+                if action in ('voltage','voltage_on'):
                     active()
                     checked(self.set_voltage(channels[0],value,logger) if len(channels)==1 and not batch
                             else self.set_voltages(value,channels,logger))

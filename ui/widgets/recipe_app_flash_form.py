@@ -90,7 +90,7 @@ class RecipeAppFlashForm(QWidget):
                 image: url("ARROW_PATH"); width: 12px; height: 12px;
             }
         '''.replace('ARROW_PATH', (Path(__file__).resolve().parents[2] / 'resources/combobox_down.svg').as_posix()))
-        self.setToolTip('启用后，在测试界面选择型号时：停止并确认上位机 → 等待500ms → 写入并校验同级config.ini的[App] Type、Addr → 等待500ms → 启动并确认上位机。刷写工步不重复执行。')
+        self.setToolTip('启用后，在测试界面选择型号时：安全关闭并确认上位机退出 → 写入并校验同级config.ini的[App] Type、Addr → 初始化刷写状态 → 启动并检测主窗口就绪，就绪即继续，最多等待8秒。刷写工步不重复执行。')
 
     def _select_host_file(self):
         current = Path(os.path.expandvars(self.host_path.text().strip().strip('"')))

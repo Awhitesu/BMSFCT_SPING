@@ -118,6 +118,21 @@ def copy_missing(source, destination):
                 shutil.copy2(path, target)
 
 
+def copy_initial_config(source, destination):
+    """新成品使用随包SDK的相对路径，已有工位配置保持原样。"""
+    source_config = source / 'sys_config.json'
+    target_config = destination / 'sys_config.json'
+    if source_config.is_file() and not target_config.exists():
+        config = json.loads(source_config.read_text(encoding='utf-8'))
+        bundled_sdk = Path('vendor/zlgcan(20260806)/zlgcan_x64')
+        selected = str(config.get('zlg_sdk_path') or '').strip()
+        if selected and Path(selected).is_absolute() and Path(selected).resolve() == (ROOT / bundled_sdk).resolve():
+            config['zlg_sdk_path'] = bundled_sdk.as_posix()
+        destination.mkdir(parents=True, exist_ok=True)
+        target_config.write_text(json.dumps(config, ensure_ascii=False, indent=4), encoding='utf-8')
+    copy_missing(source, destination)
+
+
 def copy_database(source, destination):
     """SQLite online backup includes users, roles and parameters consistently."""
     if destination.exists() or not source.is_file():
@@ -211,8 +226,8 @@ def build_release(args, versions):
     guide=output/'使用说明'/'统计追溯与现场安全升级_20261019.md'
     guide.parent.mkdir(parents=True,exist_ok=True)
     shutil.copy2(ROOT/'doc'/'guides'/'统计追溯与现场安全升级_20261019.md',guide)
-    for name in ('config', 'recipes'):
-        copy_missing(ROOT / name, output / name)
+    copy_initial_config(ROOT / 'config', output / 'config')
+    copy_missing(ROOT / 'recipes', output / 'recipes')
     copied_database = copy_database(ROOT / 'bms_test_data.db', output / 'bms_test_data.db')
     print('人员和系统数据库：' + ('已备份到成品' if copied_database else '保留成品已有数据库（或源数据库不存在）'), flush=True)
     with executable.open('rb') as stream:

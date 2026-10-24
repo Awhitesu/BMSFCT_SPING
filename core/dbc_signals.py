@@ -382,6 +382,9 @@ def execute_snapshot(snapshot,c,key,cancelled,logger):
     if cancelled():raise RuntimeError('DBC快照读取已取消')
     value=snapshot['values'][key]
     result=value['choice'] if c.get('output')=='choice' else value['value']
+    if c.get('output') != 'choice' and value['unit']:
+        from core.measurement_units import MeasurementValue
+        result=MeasurementValue(result,value['unit'])
     logger(f'DBC快照输出【{snapshot["name"]}】{key[0]} {c["message"]}.{c["signal"]}={result} {value["unit"]} 采集时数据年龄={value["age"]:.3f}s')
     return True,result
 
@@ -412,6 +415,9 @@ def execute_read(monitor,c,interface,cancelled,wait,logger,range_config=None,sin
                     logger(f'DBC {interface} {c["message"]}.{c["signal"]}={last} {unit} 连续合格={streak}/{range_config["consecutive"]}')
                 if not range_config or streak>=range_config['consecutive']:
                     result=value['choice'] if c.get('output')=='choice' else last
+                    if c.get('output') != 'choice' and unit:
+                        from core.measurement_units import MeasurementValue
+                        result=MeasurementValue(result,unit)
                     logger(f'DBC输出 {interface} {c["message"]}.{c["signal"]}={result} {unit} 数据年龄={value["age"]:.3f}s')
                     return True,result
         except ValueError as exc:

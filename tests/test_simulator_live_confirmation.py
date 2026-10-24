@@ -34,25 +34,26 @@ def test_off_parameter_change_never_enables_or_requires_output_voltage():
     d.output_controls.assert_not_called()
 
 
-def test_range_cycles_only_previously_enabled_channels_and_preserves_limit():
+def test_range_only_changes_range_without_output_or_limit_commands():
     d=driver({1:True,2:False})
-    events=Mock()
-    events.attach_mock(d.output_controls,'output')
-    events.attach_mock(d.set_range,'range')
+    d.read_source_settings.return_value={'range':'HIGH','current':.001}
     assert control_simulator(d,'range',[1,2],'LOW')
-    assert events.mock_calls[0].args== (False,[1],None)
-    assert events.mock_calls[-1].args== (True,[1],None)
-    d.set_current_limit.assert_any_call(1,.0005,None)
-    d.set_current_limit.assert_any_call(2,.0005,None)
+    assert [call.args for call in d.set_range.call_args_list] == [(1,'LOW',None),(2,'LOW',None)]
+    d.output_controls.assert_not_called()
+    d.set_current_limit.assert_not_called()
+    d._verify_output_voltage.assert_not_called()
 
 
-def test_invalid_low_limit_does_not_modify_or_interrupt_output():
+def test_entering_low_automatically_sets_one_ma_before_switching_range():
     d=driver({1:True})
     d.read_source_settings.return_value={'range':'HIGH','current':.01}
-    with pytest.raises(ValueError,match='1 mA'):
-        control_simulator(d,'range',[1],'LOW')
+    calls=Mock()
+    calls.attach_mock(d.set_current_limit,'limit')
+    calls.attach_mock(d.set_range,'range')
+    assert control_simulator(d,'range',[1],'LOW')
+    assert [(call[0],call.args) for call in calls.mock_calls] == [('limit',(1,.001,None)),('range',(1,'LOW',None))]
     d.output_controls.assert_not_called()
-    d.set_range.assert_not_called()
+    d._verify_output_voltage.assert_not_called()
 
 
 def test_current_above_low_range_is_rejected_before_write():
@@ -89,13 +90,14 @@ def test_cleanup_exception_preserves_primary_control_error():
         control_simulator(d,'voltage',[1],4.2)
 
 
-def test_cancel_during_range_change_never_reenables_output():
+def test_cancel_during_range_change_does_not_send_output_commands():
     d=driver({1:True})
+    d.read_source_settings.return_value={'range':'HIGH','current':.001}
     stopped=threading.Event()
     d.set_range.side_effect=lambda *a:stopped.set() or True
     with pytest.raises(RuntimeError,match='cancelled'):
         control_simulator(d,'range',[1],'LOW',cancelled=stopped.is_set)
-    assert all(call.args[0] is False for call in d.output_controls.call_args_list)
+    d.output_controls.assert_not_called()
 
 
 def test_unknown_output_state_prevents_parameter_write():

@@ -38,9 +38,12 @@ class PCANFDTab(QWidget):
         self._monitor_ids = None
         self._monitor_skipped = 0
         self._init_ui()
+        self._configuration_driver = self.driver
+        self.operation.finished.connect(self.refresh_configuration)
         from ui.layout_safety import protect_form_layout
         protect_form_layout(self)
         self.timer = QTimer(self)
+        self.timer.timeout.connect(self.refresh_configuration)
         self.timer.timeout.connect(self._update_transmit_channels)
         self.timer.timeout.connect(self.update_monitor)
         self.timer.start(50)
@@ -308,6 +311,25 @@ class PCANFDTab(QWidget):
     def driver(self):
         return self.device_manager.pcan
 
+    def refresh_configuration(self):
+        """硬件中心重建驱动后同步连接表单，避免旧表单覆盖新配置。"""
+        if self.operation.isRunning() or (getattr(self, 'uds_worker', None) and not self.uds_worker.wait(0)):
+            return
+        driver = self.driver
+        if driver is self._configuration_driver:
+            return
+        self.device_type.blockSignals(True)
+        self.device_type.setCurrentIndex(1 if driver.channel.startswith('ZLG_CAN') else 0)
+        self.device_type.blockSignals(False)
+        self.refresh_pcan_channels(driver.channel)
+        self.nominal.setCurrentText(str(driver.nominal_bitrate))
+        self.data_rate.setCurrentText(str(driver.data_bitrate))
+        self.zlg_ip.setText(str(getattr(driver, 'zlg_ip', '192.168.0.177')))
+        self.zlg_port.setValue(int(getattr(driver, 'zlg_port', 8000)))
+        self.zlg_sdk.setText(str(getattr(driver, 'zlg_sdk_path', '')))
+        self._configuration_driver = driver
+        self._update_connection_controls()
+
     def run_device(self,action,callback):
         if self.operation.isRunning() or (getattr(self,'uds_worker',None) and not self.uds_worker.wait(0)):return
         self.operation.run(action,callback)
@@ -322,6 +344,7 @@ class PCANFDTab(QWidget):
             self.zlg_sdk.setText(str(Path(filename).resolve().parent))
 
     def connect_device(self):
+        self.refresh_configuration()
         driver=self.driver
         if self.device_type.currentIndex()==1:
             channel=driver.channel if driver.channel.startswith('ZLG_CAN') else 'ZLG_CAN1'
@@ -451,6 +474,7 @@ class PCANFDTab(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
+        self.refresh_configuration()
         self._update_transmit_channels()
         QTimer.singleShot(0, self._fit_zlg_channel_table)
 

@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import tempfile
 
-from core.host_process import check_cancelled, start_host, stop_host, wait_seconds
+from core.host_process import check_cancelled, start_host, shutdown_host, wait_seconds
 
 
 def validate_app_flash(config):
@@ -46,23 +46,63 @@ def prepare_app_flash(config, logger=None, cancel=None):
     except Exception as exc:
         raise ValueError(f'上位机参数检查失败：{exc}') from exc
     stages = (
-        ('停止上位机', lambda: stop_host(values['restart_name'], cancel)),
-        ('停止确认后等待 500 ms', lambda: wait_seconds(.5, cancel)),
-        ('写入并校验 config.ini', lambda: _write_and_verify_ini(ini, encoding, raw, updated, values)),
-        ('写入确认后等待 500 ms', lambda: wait_seconds(.5, cancel)),
-        ('启动并确认上位机', lambda: start_host(program, cancel)),
+        ('安全停止上位机', program, lambda: shutdown_host(program, cancel, logger=logger)),
+        ('写入并校验 config.ini', ini, lambda: _write_and_verify_ini(ini, encoding, raw, updated, values)),
+        ('检查刷写文件夹', program.parent / 'Flash' / values['flash_path'], lambda: _check_flash_directory(program, values['flash_path'])),
+        ('初始化 Record.txt 为 Ready', program.parent / 'Flash' / 'Record.txt', lambda: _initialize_record(program, cancel)),
+        ('启动并确认上位机', program, lambda: start_host(program, cancel, timeout=8)),
     )
-    for label, action in stages:
+    for label, target, action in stages:
         check_cancelled(cancel)
         if logger:
-            logger(f'[上位机准备] {label}：{program.name if "上位机" in label else ini}')
+            logger(f'[上位机准备] {label}：{target}')
         try:
             action()
+            check_cancelled(cancel)
         except Exception as exc:
+            if label == '启动并确认上位机':
+                try:
+                    shutdown_host(program, logger=logger)
+                except Exception as cleanup_error:
+                    raise RuntimeError(f'{label}失败：{exc}；安全关闭清理失败：{cleanup_error}') from exc
             raise RuntimeError(f'{label}失败：{exc}') from exc
     if logger:
         logger(f'[APP刷写参数] {ini} → [App] Type={values["model"]}；Addr={values["flash_path"]}；上位机已启动')
     return values
+
+
+def _check_flash_directory(program, address):
+    root = (program.parent / 'Flash').resolve()
+    folder = (root / address).resolve()
+    if Path(address).is_absolute() or not folder.is_relative_to(root) or folder == root:
+        raise ValueError('App刷写路径必须是上位机Flash目录内的文件夹名称')
+    if not folder.is_dir():
+        raise ValueError(f'未找到刷写文件夹：{folder}')
+
+
+def _initialize_record(program, cancel=None):
+    record = program.parent / 'Flash' / 'Record.txt'
+    for attempt in range(10):
+        check_cancelled(cancel)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=record.parent, prefix='.app_ready_', suffix='.tmp', delete=False) as stream:
+                temporary = Path(stream.name)
+                stream.write(b'Ready\n')
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, record)
+            lines = record.read_text(encoding='utf-8-sig').splitlines()
+            if not lines or lines[-1] != 'Ready':
+                raise ValueError('Record.txt Ready回读校验失败')
+            return
+        except OSError:
+            if attempt == 9:
+                raise
+            wait_seconds(.1, cancel)
+        finally:
+            if temporary is not None and temporary.exists():
+                temporary.unlink()
 
 
 def _prepare_ini_update(values):
