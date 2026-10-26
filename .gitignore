@@ -45,4 +45,6 @@ config/sys_config.json
 recipes/
 
 config/sys_config.json.bak
+config/generic_mes.json.bak
+data/mes_uploads/
 tools/native_debug/

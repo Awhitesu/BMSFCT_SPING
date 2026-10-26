@@ -196,6 +196,10 @@ class ChannelWorker(QObject):
         self.sub_step_statuses = {}
         self.step_measured_values = {}
         self.results_by_id = {}
+        self.generic_mes_config = {}
+        self.mes_result_rows = []
+        self.mes_upload_job = None
+        self.mes_upload_error = ''
         self.current_progress = 0.0
         self.step_start_times = {}
         def _on_log_msg(_, msg):
@@ -266,6 +270,22 @@ class ChannelWorker(QObject):
     def set_test_info(self, test_id: int):
         self.test_id = test_id
 
+    def _queue_mes_upload(self, passed):
+        if (not self.generic_mes_config or not self.generic_mes_config.get('generic_mes_upload_enabled')
+                or getattr(self, 'debug_run', False)
+                or self.mes_upload_job or self.mes_upload_error or self.record_error
+                or self.cancel_event.is_set()):
+            return
+        try:
+            from core.mes_outbox import create_upload_job
+            self.mes_upload_job = create_upload_job(
+                self.generic_mes_config, self.sn_barcode, passed, self.mes_result_rows,
+                getattr(self.db_manager, 'db_path', None), self.execution_id)
+            self.log_message.emit(self.channel_id, f'[锐能MES] 上传数据已落盘：{self.mes_upload_job}')
+        except Exception as exc:
+            self.mes_upload_error = f'锐能MES上传文件保存失败：{exc}'
+            self.log_message.emit(self.channel_id, '[ERROR] ' + self.mes_upload_error)
+
     def start(self):
         trace("CHANNEL_START", self.channel_id, test_id=self.test_id, steps=len(self.steps), sn=self.sn_barcode)
         if self.cancel_event.is_set():
@@ -321,6 +341,8 @@ class ChannelWorker(QObject):
                 self.record_error = str(e)
                 trace("DB_FINISH_TEST_ERROR", self.channel_id, test_id=tid, error=str(e))
                 self.log_message.emit(self.channel_id, f"[WARN] 数据库停止写入超时/失败: {e}")
+        if final_status == 'NG':
+            self._queue_mes_upload(False)
 
 
     def _shutdown_outputs(self):
@@ -367,6 +389,7 @@ class ChannelWorker(QObject):
                     self.log_message.emit(self.channel_id, f"[WARN] 数据库完成写入超时/失败，通道状态继续完成: {e}")
                 
             trace("CHANNEL_FINISH_EMIT", self.channel_id, success=not has_ng)
+            self._queue_mes_upload(not has_ng)
             self.test_finished.emit(self.channel_id, not has_ng)
             return
 
@@ -2123,6 +2146,14 @@ class ChannelWorker(QObject):
                 return
 
         trace("STEP_DONE", self.channel_id, step_idx=self.current_step_index, step=step.name, pass_status=is_pass, value=val_to_log, duration=duration)
+        # Use the final parent judgment/value after local retries, not substep intermediates.
+        standard = getattr(step, 'standard_type', '数值')
+        lower = self.variables.get(str(step.min_limit or '').strip()) if standard == '变量' else step.min_limit
+        self.mes_result_rows.append(dict(
+            name=step.name, step_id=step.step_id, sequence=self.current_step_index + 1, lower=lower,
+            upper=None if standard == '变量' else step.max_limit,
+            value=str(val_to_log) if val_to_log is not None else '',
+            unit=getattr(step, 'unit', ''), passed=bool(is_pass)))
         self.step_finished.emit(self.channel_id, self.current_step_index, step.name, is_pass, val_to_log)
         if not is_pass and (step.ng_strategy == NGStrategy.STOP_ON_ANY or getattr(step, "drop_on_ng", False)):
             trace("STEP_NG_STOP", self.channel_id, step_idx=self.current_step_index, step=step.name, value=val_to_log)
@@ -2172,12 +2203,15 @@ class TestEngine(QObject):
         # API 客户端与后台心跳默认保持关闭，按配置或环境变量启用。
 
 
-    def start_channel_test(self, cid, recipe_data, test_id=-1, sn_barcode="", recipe_name="", operator_name=None, debug_run=False, app_flash_config=None):
+    def start_channel_test(self, cid, recipe_data, test_id=-1, sn_barcode="", recipe_name="", operator_name=None, debug_run=False, app_flash_config=None, generic_mes_config=None):
         trace("ENGINE_START_CHANNEL_BEGIN", cid, test_id=test_id, recipe_items=len(recipe_data or []), sn=sn_barcode)
         with self._lock:
             if self.workers:
                 return False
         recipe_data = single_channel_items(ensure_step_ids(recipe_data))
+        if generic_mes_config and not debug_run:
+            from core.generic_mes import validate_recipe
+            validate_recipe(generic_mes_config, recipe_data)
         from core.dbc_groups import plan_groups
         plan_groups(recipe_data)
         from core.can_periodic import validate_plan
@@ -2256,6 +2290,7 @@ class TestEngine(QObject):
         t = QThread(); w = ChannelWorker(cid, steps, self.device_manager, self.db_manager, engine=self)
         from copy import deepcopy
         w.app_flash_config = deepcopy(app_flash_config)
+        w.generic_mes_config = deepcopy(generic_mes_config) if not debug_run else {}
         w.debug_run = bool(debug_run)
         if operator_name is not None:
             w.operator_name = operator_name

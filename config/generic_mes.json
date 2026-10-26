@@ -1,0 +1,10 @@
+{
+    "generic_mes_query_enabled": true,
+    "generic_mes_upload_enabled": true,
+    "generic_mes_query_url": "http://192.168.5.65/api/mes/checkBmsSnInfo",
+    "generic_mes_upload_url": "http://192.168.5.65/api/mes/checkBmsProc",
+    "generic_mes_station_id": "1",
+    "generic_mes_timeout": 5.0,
+    "generic_mes_max_check_times": 3,
+    "generic_mes_upload_attempts": 2
+}

@@ -1,5 +1,5 @@
 
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel, QTabWidget, QStatusBar, QHBoxLayout, QPushButton, QSizePolicy
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel, QTabWidget, QStatusBar, QHBoxLayout, QPushButton, QSizePolicy, QMessageBox
 from PySide6.QtCore import Qt
 from core.app_version import versioned_title
 
@@ -203,7 +203,7 @@ class MainWindow(QMainWindow):
 
         # MES 过站接口配置与手动联调（用户名始终读取当前登录账户）
         self.tab_mes = MesTab(lambda: self.current_user, self, db_manager=self.db_manager)
-        self.tab_debug_center.add_debug_tab(self.tab_mes, "MES交互测试")
+        self.tab_debug_center.add_debug_tab(self.tab_mes, "精华MES交互测试")
 
         # APP 固件刷写独立调试 (LabVIEW 触发刷写与固件检索)
         self.tab_app_flash = AppFlashTab(self.device_manager)
@@ -219,6 +219,9 @@ class MainWindow(QMainWindow):
         self.tab_settings.start_mode.setCurrentIndex(self.tab_settings.start_mode.findData((self.db_manager.load_sys_config() or {}).get('test_start_mode','board_first')))
         self.tab_settings.start_mode_save_requested.connect(self._on_settings_start_mode_save)
         self.tab_settings.mes_save_requested.connect(self._on_settings_mes_save)
+        self.tab_settings.mes_switch_save_requested.connect(self._on_settings_mes_switch_save)
+        self.tab_settings.generic_mes_config_requested.connect(self._on_settings_generic_mes_config)
+        self.tab_settings.generic_mes_retry_requested.connect(self.tab_overview.retry_pending_mes_uploads)
         self.tab_settings.set_ng_alarm_settings(self.tab_overview.ng_alarm.enabled, self.tab_overview.ng_alarm.threshold)
         self.tab_settings.ng_alarm_save_requested.connect(self._on_settings_ng_alarm_save)
         self.tab_settings.dedup_changed.connect(self._on_settings_dedup_changed)
@@ -381,17 +384,56 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QMessageBox
         from core.mes_precheck import validate_settings
         try:
-            if self.tab_overview._run_busy():
+            if self.tab_overview._run_busy() or self.tab_overview._scan_pending:
                 raise ValueError('测试或准备中，不能修改MES设置')
-            validate_settings(settings)
-            if not self.db_manager.save_sys_config(settings):
+            parameters = {key: settings[key] for key in ('mes_url', 'mes_equipment_no', 'mes_order_no', 'mes_timeout') if key in settings}
+            validate_settings(dict(self.db_manager.load_sys_config() or {}, **parameters))
+            if not self.db_manager.save_sys_config(parameters):
                 raise ValueError('MES设置保存失败，请检查配置存储')
         except Exception as exc:
             QMessageBox.warning(self.tab_settings, 'MES设置未保存', str(exc))
             return
         if hasattr(self, 'tab_mes'):
             self.tab_mes.load_config()
-        QMessageBox.information(self.tab_settings, '保存成功', 'MES过站设置已保存，下次扫码启动时生效。')
+        QMessageBox.information(self.tab_settings, '保存成功', '精华MES参数已保存，下次扫码启动时生效。')
+
+    def _on_settings_generic_mes_config(self):
+        from core.generic_mes import config_path
+        from ui.dialogs.generic_mes_dialog import GenericMesDialog
+        if self.tab_overview._run_busy() or self.tab_overview._scan_pending:
+            QMessageBox.warning(self.tab_settings, '无法配置锐能MES', '请先结束扫码、测试或等待到位。')
+            return
+        GenericMesDialog(config_path(self.db_manager.db_path), self).exec()
+
+    def _on_settings_mes_switch_save(self, settings):
+        from core.mes_precheck import validate_settings
+        from core.generic_mes import load_runtime_settings
+        previous = dict(self.tab_settings._saved_mes_switches)
+        try:
+            if self.tab_overview._run_busy() or getattr(self.tab_overview, '_scan_pending', False):
+                raise ValueError('扫码、测试或等待到位期间不能切换MES方案')
+            current = self.db_manager.load_sys_config() or {}
+            previous = {key: current.get(key, False) is True for key in previous}
+            if len(settings) != 1 or next(iter(settings)) not in previous:
+                raise ValueError('MES使能设置无效')
+            key, enabled = next(iter(settings.items()))
+            if type(enabled) is not bool:
+                raise ValueError('MES使能状态必须是布尔值')
+            updated = {key: enabled}
+            if enabled:
+                updated['mes_precheck_enabled' if key == 'generic_mes_enabled' else 'generic_mes_enabled'] = False
+                candidate = dict(current, **updated)
+                validate_settings(candidate)
+                load_runtime_settings(candidate, self.db_manager.db_path)
+            if not self.db_manager.save_sys_config(updated):
+                raise ValueError('MES使能状态保存失败')
+        except Exception as exc:
+            self.tab_settings.set_mes_enabled_states(previous)
+            QMessageBox.warning(self.tab_settings, 'MES使能状态未保存', str(exc))
+            return
+        persisted = dict(current, **updated)
+        self.tab_settings.set_mes_enabled_states(persisted)
+        self.tab_overview.set_generic_mes_enabled(persisted.get('generic_mes_enabled', False))
 
     def _on_settings_start_mode_save(self,mode):
         from PySide6.QtWidgets import QMessageBox

@@ -135,7 +135,7 @@ def test_settings_emits_saved_gate_configuration():
         page.set_mes_settings(settings())
         page.mes_save_requested.connect(captured.append)
         page.btn_save_mes.click()
-        assert captured == [settings()]
+        assert captured == [{key: value for key, value in settings().items() if key != 'mes_precheck_enabled'}]
     finally:page.close()
 
 

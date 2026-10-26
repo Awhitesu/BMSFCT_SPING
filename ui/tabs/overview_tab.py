@@ -11,7 +11,7 @@ import re
 import time
 from typing import List, Dict, Any
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox, QMessageBox, QLabel, QTreeWidget, QTreeWidgetItem, QFrame, QHeaderView, QAbstractItemView, QLineEdit, QInputDialog, QSizePolicy, QCheckBox, QPlainTextEdit
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton, QComboBox, QMessageBox, QLabel, QTreeWidget, QTreeWidgetItem, QFrame, QHeaderView, QAbstractItemView, QLineEdit, QInputDialog, QSizePolicy, QCheckBox, QPlainTextEdit
 from PySide6.QtCore import Qt, Slot, Signal, QTimer, QCoreApplication
 from PySide6.QtGui import QColor
 
@@ -68,6 +68,10 @@ class OverviewTab(QWidget):
         self._prepare_task = DeviceTask(self)
         self._plc_task = DeviceTask(self)
         self._recipe_match_task=DeviceTask(self)
+        self._mes_upload_task = DeviceTask(self)
+        self._mes_upload_queue = []
+        self._mes_upload_active_path = None
+        self._mes_upload_task.finished.connect(self._start_next_mes_upload)
         self._pending_plc_recipe = None
         self._plc_config_error = ""
         self._recipe_can_error = ''
@@ -134,6 +138,7 @@ class OverviewTab(QWidget):
         self.plc_signal_timer.start()
 
         self._init_ui()
+        self.set_generic_mes_enabled((cfg or {}).get('generic_mes_enabled', False))
         from ui.layout_safety import protect_form_layout
         protect_form_layout(self)
         if self.engine and hasattr(self.engine, "flash_status_changed"):
@@ -231,6 +236,74 @@ class OverviewTab(QWidget):
         return (self.is_testing or self.preparing or self._stats_reset_busy
                 or self._ng_alarm_box is not None or bool(getattr(self.engine, 'workers', {})))
 
+    def set_generic_mes_enabled(self, enabled):
+        self.ruineng_panel.setVisible(enabled is True)
+        self._clear_mes_info()
+
+    def _clear_mes_info(self):
+        for field in self.mes_info_fields.values():
+            field.setText('—')
+            field.setToolTip('')
+
+    def _show_mes_query_result(self, snapshot):
+        result = snapshot.get('_generic_mes_result') or {}
+        response = result.get('response')
+        data = response.get('data') if isinstance(response, dict) else None
+        if result:
+            self.lbl_mes_upload_status.setText('查询通过' if result.get('passed') else '查询未通过')
+            self.lbl_mes_upload_status.setToolTip(result.get('message', ''))
+        if isinstance(data, dict) and str(data.get('uniqueId', '')).strip() == result.get('sn'):
+            for key, field in self.mes_info_fields.items():
+                field.setText(str(data.get(key, '—')))
+                field.setToolTip(field.text())
+
+    def enqueue_mes_upload(self, path):
+        if path and path != self._mes_upload_active_path and path not in self._mes_upload_queue:
+            self._mes_upload_queue.append(str(path))
+        self._start_next_mes_upload()
+
+    @Slot()
+    def _start_next_mes_upload(self):
+        if self._closing or self._mes_upload_task.isRunning() or not self._mes_upload_queue:
+            return
+        from core.mes_outbox import send_job
+        path = self._mes_upload_queue.pop(0)
+        self._mes_upload_active_path = path
+        self.lbl_mes_upload_status.setText('MES上传中（不影响检测判定）')
+        def completed(ok, value):
+            self._mes_upload_active_path = None
+            if self._closing:
+                return
+            passed = ok and value['passed']
+            reason = value['message'] if ok else str(value)
+            self.lbl_mes_upload_status.setText('MES上传成功' if passed else 'MES上传失败，待补传')
+            self._log_test_event(f'[锐能MES上传] {"成功" if passed else "失败"} | {reason} | 文件：{path}')
+            if not passed:
+                self._show_mes_upload_error(reason, path)
+        self._mes_upload_task.run(lambda: send_job(path, lambda: self._closing), completed)
+
+    def _show_mes_upload_error(self, reason, path=None):
+        detail = (f'原始数据已保留，可在软件设置中补传。\n文件：{path}' if path else
+                  '数据文件未能保存，请检查磁盘空间及目录权限；无法保证重启后补传。')
+        box = QMessageBox(QMessageBox.Warning, '锐能MES上传失败',
+            f'{reason}\n\n检测PASS/FAIL保持不变。{detail}', QMessageBox.Ok, self)
+        box.setAttribute(Qt.WA_DeleteOnClose)
+        box.setModal(False)
+        box.show()
+        self._mes_upload_error_box = box
+
+    def retry_pending_mes_uploads(self):
+        from core.mes_outbox import pending_jobs
+        if self._run_busy() or self._scan_pending or self._closing:
+            QMessageBox.warning(self, '暂不能补传', '请先结束扫码、测试或等待到位。')
+            return
+        paths = pending_jobs(getattr(self.db_manager, 'db_path', None))
+        if not paths:
+            QMessageBox.information(self, '锐能MES补传', '没有待补传文件。')
+            return
+        for path in paths:
+            self.enqueue_mes_upload(str(path))
+
     def _on_run_retired(self, channel):
         if channel != self.channel_id:
             return
@@ -261,6 +334,7 @@ class OverviewTab(QWidget):
         self._prepare_task.begin_shutdown()
         self._plc_task.begin_shutdown()
         self._recipe_match_task.begin_shutdown()
+        self._mes_upload_task.begin_shutdown()
 
     def closeEvent(self, event):
         if not self._closing:
@@ -509,6 +583,35 @@ class OverviewTab(QWidget):
 
         right_layout.addStretch()
 
+        self.ruineng_panel = QFrame()
+        self.ruineng_panel.setObjectName('ruineng_mes_info')
+        self.ruineng_panel.setStyleSheet('''
+            QFrame#ruineng_mes_info { background: #16213E; border: 1px solid #334155; border-radius: 5px; padding: 0; }
+            QFrame#ruineng_mes_info QLabel { background: transparent; border: none; border-radius: 0; padding: 0; font-size: 12px; }
+            QFrame#ruineng_mes_info QLineEdit { min-height: 20px; padding: 2px 4px; font-size: 12px; }
+        ''')
+        mes_grid = QGridLayout(self.ruineng_panel)
+        mes_grid.setContentsMargins(8, 6, 8, 6)
+        mes_grid.setHorizontalSpacing(6)
+        title = QLabel('锐能MES')
+        self.lbl_mes_upload_status = QLabel('等待扫码查询')
+        self.lbl_mes_upload_status.setWordWrap(True)
+        mes_grid.addWidget(title, 0, 0)
+        mes_grid.addWidget(self.lbl_mes_upload_status, 0, 1, 1, 3)
+        self.mes_info_fields = {}
+        for index, (key, label) in enumerate((('checkTimes', '检测次数'), ('orderId', '工单号'),
+                                               ('totalNum', '计划数量'), ('procNum', '已加工数量'))):
+            row, column = index // 2 + 1, (index % 2) * 2
+            field = QLineEdit('—')
+            field.setReadOnly(True)
+            field.setMinimumWidth(0)
+            self.mes_info_fields[key] = field
+            mes_grid.addWidget(QLabel(label), row, column)
+            mes_grid.addWidget(field, row, column + 1)
+        mes_grid.setColumnStretch(1, 1)
+        mes_grid.setColumnStretch(3, 1)
+        right_layout.addWidget(self.ruineng_panel)
+
         # 4. SN 码扫码输入框
         sn_layout = QHBoxLayout()
         lbl_sn = QLabel("SN")
@@ -528,6 +631,7 @@ class OverviewTab(QWidget):
             }
         """)
         self.txt_sn.textChanged.connect(self._validate_sn_with_ai_rule)
+        self.txt_sn.textChanged.connect(lambda _: self._clear_mes_info())
         sn_layout.addWidget(lbl_sn)
         sn_layout.addWidget(self.txt_sn)
         right_layout.addLayout(sn_layout)
@@ -1363,6 +1467,10 @@ class OverviewTab(QWidget):
                 if not plc or not plc.is_connected:raise ValueError('先扫码模式需要先连接PLC，才能等待板子到位信号')
             from core.mes_precheck import validate_settings
             validate_settings(config)
+            from core.generic_mes import load_runtime_settings, validate_recipe
+            snapshot['_generic_mes'] = load_runtime_settings(config, getattr(self.db_manager, 'db_path', None))
+            if snapshot['_generic_mes']:
+                validate_recipe(snapshot['_generic_mes'], snapshot['items'])
             snapshot['_mes_precheck'] = {key: config[key] for key in (
                 'mes_precheck_enabled', 'mes_url', 'mes_equipment_no', 'mes_order_no', 'mes_timeout') if key in config}
         except Exception as exc:
@@ -1372,13 +1480,17 @@ class OverviewTab(QWidget):
         self.run_activity_changed.emit(True)
         self._prepare_cancel.clear()
         self.combo_recipe.setEnabled(False)
-        self.lbl_big_status.setText("MES CHECK" if snapshot['_mes_precheck'].get('mes_precheck_enabled') else "PREPARING")
+        self._clear_mes_info()
+        if snapshot['_generic_mes']:
+            self.lbl_mes_upload_status.setText('正在查询条码')
+        self.lbl_big_status.setText("MES CHECK" if snapshot['_mes_precheck'].get('mes_precheck_enabled') or snapshot['_generic_mes'] else "PREPARING")
         def prepared(ok, result):
             self.preparing = False
             if self._prepare_cancel.is_set() or self._closing:
                 self._abort_prepared_record()
                 self._on_run_retired(self.channel_id)
                 return
+            self._show_mes_query_result(snapshot)
             if not ok or not result[0]:
                 self.combo_recipe.setEnabled(True)
                 self.run_activity_changed.emit(False)
@@ -1422,6 +1534,14 @@ class OverviewTab(QWidget):
             snapshot['_mes_precheck_result'] = dict(passed=passed, message=reason, sn=sn_barcode)
         if not passed:
             return False, 'MES过站检查未通过，禁止测试：\n' + reason
+        if not snapshot.get('_mes_already_checked') and not snapshot.get('_debug_run', False) and snapshot.get('_generic_mes'):
+            from core.generic_mes import check_before_test as check_ruineng
+            result = check_ruineng(snapshot['_generic_mes'], sn_barcode,
+                self._prepare_cancel.is_set, self.preparation_log.emit)
+            snapshot['_generic_mes_result'] = dict(passed=result.passed, message=result.message,
+                                                    response=result.response, sn=sn_barcode)
+            if not result.passed:
+                return False, '锐能MES检查未通过，禁止测试：\n' + result.message
         if self._prepare_cancel.is_set():
             return False, '已取消'
         if snapshot.get('_wait_board'):
@@ -1522,6 +1642,7 @@ class OverviewTab(QWidget):
                 self.channel_id, items, test_id=self._prepared_test_id, sn_barcode=sn_barcode,
                 recipe_name=recipe_dict.get("name", self.current_recipe_name), operator_name=recipe_dict["operator_name"],
                 app_flash_config=recipe_dict.get('app_flash'),
+                **({'generic_mes_config': recipe_dict['_generic_mes']} if recipe_dict.get('_generic_mes') else {}),
                 **({'debug_run': True} if self._active_debug_run else {}))
         except Exception as exc:
             success = False
@@ -1861,6 +1982,10 @@ class OverviewTab(QWidget):
 
         # 更新生产统计
         worker = self.engine.workers.get(channel_id) if self.engine else None
+        if worker and getattr(worker, 'mes_upload_job', None):
+            self.enqueue_mes_upload(worker.mes_upload_job)
+        elif worker and getattr(worker, 'mes_upload_error', ''):
+            self._show_mes_upload_error(worker.mes_upload_error)
         barcode = worker.sn_barcode if worker else self._active_stats_barcode
         run_id = worker.execution_id if worker else None
         if worker and getattr(worker, 'record_error', ''):

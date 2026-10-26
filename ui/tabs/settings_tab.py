@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """软件设置页：条码去重统计、数据清零等生产统计相关配置。"""
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QSignalBlocker
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
@@ -29,6 +29,9 @@ class SettingsTab(QWidget):
     range_requested = Signal()
     titles_save_requested = Signal(str, str)
     mes_save_requested = Signal(dict)
+    mes_switch_save_requested = Signal(dict)
+    generic_mes_config_requested = Signal()
+    generic_mes_retry_requested = Signal()
     ng_alarm_save_requested = Signal(bool, int)
     report_save_requested = Signal(dict)
     start_mode_save_requested = Signal(str)
@@ -135,7 +138,7 @@ class SettingsTab(QWidget):
         self.set_report_settings({})
 
         from PySide6.QtWidgets import QFormLayout, QDoubleSpinBox
-        mes_group = QGroupBox('测试前MES过站检查')
+        mes_group = QGroupBox('精华MES — 测试前过站检查')
         mes_layout = QFormLayout(mes_group)
         self.chk_mes_precheck = QCheckBox('启用：扫码后先检查MES，通过后才允许测试')
         self.edit_mes_url = QLineEdit()
@@ -148,15 +151,34 @@ class SettingsTab(QWidget):
         mes_layout.addRow('设备/工站编号 equipmentNo', self.edit_mes_equipment)
         mes_layout.addRow('工单号 orderNo（可选）', self.edit_mes_order)
         mes_layout.addRow('请求超时', self.spin_mes_timeout)
-        hint = QLabel('失败、超时或返回异常均禁止启动测试，并向员工显示原因；用户名使用当前登录账号。保存后生效。')
+        hint = QLabel('使能开关切换后自动保存；接口参数单独保存。失败、超时或返回异常均禁止启动测试，并显示原因；用户名使用当前登录账号。')
         hint.setWordWrap(True); mes_layout.addRow(hint)
-        self.btn_save_mes = QPushButton('保存MES过站设置')
+        self.btn_save_mes = QPushButton('保存精华MES参数')
         self.btn_save_mes.clicked.connect(lambda: self.mes_save_requested.emit(dict(
-            mes_precheck_enabled=self.chk_mes_precheck.isChecked(), mes_url=self.edit_mes_url.text().strip(),
+            mes_url=self.edit_mes_url.text().strip(),
             mes_equipment_no=self.edit_mes_equipment.text().strip(), mes_order_no=self.edit_mes_order.text().strip(),
             mes_timeout=self.spin_mes_timeout.value())))
         mes_layout.addRow(self.btn_save_mes)
         layout.addWidget(mes_group)
+        ruineng_group = QGroupBox('锐能MES')
+        ruineng_layout = QVBoxLayout(ruineng_group)
+        self.chk_generic_mes = QCheckBox('启用锐能MES：扫码查询、检测次数限制及测试完成上传')
+        ruineng_layout.addWidget(self.chk_generic_mes)
+        self.chk_generic_mes.toggled.connect(lambda checked: self.mes_switch_save_requested.emit({'generic_mes_enabled': checked}))
+        self.chk_mes_precheck.toggled.connect(lambda checked: self.mes_switch_save_requested.emit({'mes_precheck_enabled': checked}))
+        buttons = QHBoxLayout()
+        self.btn_config_generic_mes = QPushButton('配置锐能MES…')
+        self.btn_retry_generic_mes = QPushButton('补传待上传数据')
+        self.btn_config_generic_mes.clicked.connect(self.generic_mes_config_requested)
+        self.btn_retry_generic_mes.clicked.connect(self.generic_mes_retry_requested)
+        for button in (self.btn_config_generic_mes, self.btn_retry_generic_mes):
+            buttons.addWidget(button)
+        ruineng_layout.addLayout(buttons)
+        hint = QLabel('使能开关切换后自动保存，精华与锐能互斥启用；参数单独配置保存。上传与检测判定独立，上传失败不改变PASS/FAIL。'
+                      '失败数据保存在程序目录 data/mes_uploads/ruineng/pending；网络恢复后点击补传，成功后移入sent归档。')
+        hint.setWordWrap(True)
+        ruineng_layout.addWidget(hint)
+        layout.addWidget(ruineng_group)
         self.set_mes_settings({})
 
         from PySide6.QtWidgets import QSpinBox
@@ -262,11 +284,21 @@ class SettingsTab(QWidget):
 
     def set_mes_settings(self, config):
         from core.mes_client import DEFAULT_MES_URL
-        self.chk_mes_precheck.setChecked(config.get('mes_precheck_enabled', False) is True)
         self.edit_mes_url.setText(config.get('mes_url', DEFAULT_MES_URL))
         self.edit_mes_equipment.setText(config.get('mes_equipment_no', ''))
         self.edit_mes_order.setText(config.get('mes_order_no', ''))
         self.spin_mes_timeout.setValue(float(config.get('mes_timeout', 10)))
+        self.set_mes_enabled_states(config)
+
+    def set_mes_enabled_states(self, config):
+        """Refresh persisted switches without saving recursively or discarding parameter edits."""
+        self._saved_mes_switches = {
+            'mes_precheck_enabled': config.get('mes_precheck_enabled', False) is True,
+            'generic_mes_enabled': config.get('generic_mes_enabled', False) is True,
+        }
+        with QSignalBlocker(self.chk_mes_precheck), QSignalBlocker(self.chk_generic_mes):
+            self.chk_mes_precheck.setChecked(self._saved_mes_switches['mes_precheck_enabled'])
+            self.chk_generic_mes.setChecked(self._saved_mes_switches['generic_mes_enabled'])
 
     def set_report_settings(self,config):
         from core.report_settings import settings_from
